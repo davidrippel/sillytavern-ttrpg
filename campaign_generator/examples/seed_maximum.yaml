@@ -1,0 +1,65 @@
+# Fully worked reference seed for the Symbaroum pack.
+# Copy this when you want to see every supported field filled in before
+# writing your own more specific campaign.
+
+genre: symbaroum_dark_fantasy
+
+campaign_pitch: >
+  A witch-marked courier returns to the Ambrian frontier after years in hiding
+  when a sealed satchel once entrusted to their dead sibling is found in the
+  hands of grave robbers. The satchel contains maps to a ruin the Church says
+  never existed and a ledger proving someone powerful has been feeding
+  corruption into nearby settlements on purpose.
+
+themes_include:
+  - family_loyalty_under_rot
+  - truth_that_demands_a_cost
+  - civilization_feeding_on_the_forest
+
+themes_exclude:
+  - romance
+  - child_endangerment
+
+protagonist_archetype: >
+  A haunted courier, scavenger, or witch-taught outrider who knows the roads,
+  trusts very few institutions, and has one practical reason to keep moving
+  even when caution says stop.
+
+protagonist_known_facts:
+  - Their sibling Elira died carrying a sealed satchel no one else was meant to open.
+  - The satchel bears marks once used by an Ordo Magica survey team.
+  - A local priest publicly called the protagonist tainted years ago.
+
+setting_anchors:
+  - thistle_hold
+  - davokar_forest
+  - sunken_watchtower_ruin
+  - abandoned_waystation
+
+antagonist_archetypes_preferred:
+  - cult_leader
+  - ancient_sorcerer
+
+opening_hook_seed: >
+  The protagonist reaches an isolated toll bridge at dusk and finds the
+  ferryman hanging dead from his own signal-post, while the satchel they came
+  to reclaim is still warm from someone else's hands.
+
+tone_modifiers:
+  - investigative_with_sudden_violence
+  - a_touch_more_tragic_than_default
+  - patient_horror_in_the_first_half
+
+num_acts: 4
+num_npcs: 11
+num_locations: 9
+clue_chain_density: heavy
+branch_points: 8
+random_seed: 44119
+model: anthropic/claude-sonnet-4.5
+temperature: 0.7
+
+strictness:
+  clue_graph_connectivity: strict
+  npc_voice_diversity: strict
+  canon_consistency: strict

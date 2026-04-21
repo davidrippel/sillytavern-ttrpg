@@ -1,0 +1,60 @@
+{
+  "factions": [
+    {
+      "name": "Lantern Carters Guild",
+      "description": "Road-haulers and ferrymen who keep the frontier supplied, while quietly moving sealed goods for anyone who pays enough.",
+      "goals": [
+        "Keep the trade road open",
+        "Protect their hidden income stream",
+        "Prevent church seizure of guild records"
+      ],
+      "methods": [
+        "Bribery",
+        "Threats disguised as favors",
+        "Quiet disposal of witnesses"
+      ],
+      "internal_tensions": [
+        "Some members want to stop dealing with ruin cargo",
+        "Others think the Church is a greater threat than corruption"
+      ],
+      "relationship_to_plot": "They move the satchel, obscure evidence, and can become allies if exposed carefully.",
+      "moral_alignment": "morally ambiguous"
+    },
+    {
+      "name": "Sun Choir of Prios",
+      "description": "A frontier missionary cell that claims to protect the road from taint but also sees political opportunity in every emergency.",
+      "goals": [
+        "Contain corruption",
+        "Expand church authority over the frontier"
+      ],
+      "methods": [
+        "Public sermons",
+        "Interrogation",
+        "Seizure of suspect relics"
+      ],
+      "internal_tensions": [
+        "Sincere priests clash with ambitious witch-hunters"
+      ],
+      "relationship_to_plot": "They pursue the same evidence as the protagonist and can help or ruin the investigation depending on trust.",
+      "moral_alignment": "rigid but potentially helpful"
+    },
+    {
+      "name": "Root-Glass Circle",
+      "description": "A secretive cult of surveyors, binders, and locals who believe the ruin can be made useful if fed correctly.",
+      "goals": [
+        "Open the buried chamber beneath the watchtower",
+        "Control the ledger linking donors to the ruin"
+      ],
+      "methods": [
+        "Blood rites",
+        "Coercion",
+        "Selective prophecy"
+      ],
+      "internal_tensions": [
+        "Some members want profit while others want revelation at any cost"
+      ],
+      "relationship_to_plot": "They are the core antagonistic engine behind the ferryman's death and the opening ritual.",
+      "moral_alignment": "dangerously zealous"
+    }
+  ]
+}

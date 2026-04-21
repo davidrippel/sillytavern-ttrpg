@@ -1,0 +1,22 @@
+{
+  "name": "Sister Orsa",
+  "role": "Frontier priest and investigator",
+  "faction_affiliation": "Sun Choir of Prios",
+  "physical_description": "Broad-shouldered and mud-stained, with a travel icon of Prios wrapped in worn yellow cloth around one wrist.",
+  "speaking_style": "Plain, severe sentences that turn unexpectedly gentle with the grieving.",
+  "motivation": "Stop the ruin from claiming more lives without handing the frontier entirely to corrupt hunters.",
+  "secret": "She falsified one church report to keep the Sun Choir from burning an innocent family.",
+  "relationships": [
+    {
+      "name": "Archivist Serel",
+      "description": "Distrusts Serel's scholarship but keeps returning for answers."
+    }
+  ],
+  "abilities": [
+    "Iron Will"
+  ],
+  "act_presence": [
+    "Ashes Beneath the Ledger",
+    "Dawn at the Open Stone"
+  ]
+}

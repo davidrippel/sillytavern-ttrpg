@@ -1,0 +1,26 @@
+{
+  "name": "Sunken Watchtower",
+  "type": "buried ruin",
+  "sensory_description": {
+    "sight": "A collapsed stone tower sinking into roots and marsh, its lower stair breathing pale light through cracks.",
+    "sound": "A low humming vibration beneath the mud whenever someone speaks near the sealed door.",
+    "smell": "Cold iron and stagnant water."
+  },
+  "notable_features": [
+    "The lower vault door is etched with survey numbers and prayer cuts.",
+    "The ruin distorts divination and spoken names."
+  ],
+  "hidden_elements": [
+    "A ledger shelf concealed behind a broken saint relief.",
+    "Fresh ritual chalk showing the Circle is preparing an opening."
+  ],
+  "npc_names": [
+    "Ivara Kelm",
+    "Archivist Serel"
+  ],
+  "plot_beats": [
+    "Enter the sunken watchtower",
+    "Stop the midnight opening beneath the tower",
+    "Survive the ruin's answer"
+  ]
+}

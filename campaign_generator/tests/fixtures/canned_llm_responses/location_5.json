@@ -1,0 +1,26 @@
+{
+  "name": "Root-Glass Chapel",
+  "type": "hidden cult shrine",
+  "sensory_description": {
+    "sight": "Roots fused through old masonry around a shrine of polished black fragments and stolen candles.",
+    "sound": "Whispering drafts moving through cracked hymn pipes.",
+    "smell": null
+  },
+  "notable_features": [
+    "The Circle stores donor names here in coded liturgy.",
+    "A side chamber serves as a preparation room for sacrifices."
+  ],
+  "hidden_elements": [
+    "Elira's final annotations scratched into the back of a pew.",
+    "A blood ledger linking the guild and the Circle."
+  ],
+  "npc_names": [
+    "Ivara Kelm",
+    "Sister Orsa"
+  ],
+  "plot_beats": [
+    "Learn what Elira died carrying",
+    "Break the cult's pact with the ruin",
+    "Decide who carries the ledger into dawn"
+  ]
+}

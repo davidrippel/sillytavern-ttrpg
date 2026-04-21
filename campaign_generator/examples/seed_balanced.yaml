@@ -1,0 +1,24 @@
+# Recommended starting seed for the Symbaroum pack.
+# Copy this first when you want a good campaign with a few strong constraints
+# but still want the generator to surprise you.
+
+genre: symbaroum_dark_fantasy
+
+campaign_pitch: >
+  A disgraced scholar is called to Thistle Hold after their former mentor
+  vanishes while investigating a noble family's private excavations in
+  Davokar. The deeper truth points toward both church scrutiny and something
+  old that has begun answering back.
+
+themes_include:
+  - the_cost_of_inheritance
+  - knowledge_that_makes_you_complicit
+  - pity_for_the_monstrous
+
+protagonist_archetype: >
+  A lore-seeker or hedge mystic who solves problems by noticing patterns,
+  reading old signs, and knowing which truths to leave unsaid.
+
+antagonist_archetypes_preferred:
+  - tainted_noble
+  - corrupt_inquisitor

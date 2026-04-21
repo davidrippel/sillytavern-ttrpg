@@ -1,0 +1,49 @@
+{
+  "acts": [
+    {
+      "title": "The Bridge Keeps Its Dead",
+      "goal": "Recover the satchel and learn who reached the bridge first.",
+      "beats": [
+        "Recover the ferryman's satchel",
+        "Identify who reached the bridge first",
+        "Follow the hidden survey marks"
+      ]
+    },
+    {
+      "title": "Ashes Beneath the Ledger",
+      "goal": "Trace the satchel through the smugglers and church agents using the frontier road.",
+      "beats": [
+        "Expose the waystation smuggling ring",
+        "Win or survive the attention of the Sun Choir",
+        "Enter the sunken watchtower"
+      ]
+    },
+    {
+      "title": "What Elira Carried",
+      "goal": "Learn what the satchel was protecting and who profits from keeping the ruin active.",
+      "beats": [
+        "Learn what Elira died carrying",
+        "Break the cult's pact with the ruin",
+        "Choose which ally to betray or save"
+      ]
+    },
+    {
+      "title": "Dawn at the Open Stone",
+      "goal": "Stop the midnight opening beneath the tower and decide who survives the truth.",
+      "beats": [
+        "Stop the midnight opening beneath the tower",
+        "Survive the ruin's answer",
+        "Decide who carries the ledger into dawn"
+      ]
+    }
+  ],
+  "main_antagonist": {
+    "name": "Ivara Kelm",
+    "motivation": "She wants to open the buried chamber fully and weaponize the ruin's prophetic residue before the Church can seize it.",
+    "secret": "Ivara arranged Elira's death only after Elira tried to destroy the ledger instead of delivering it.",
+    "relationship_to_protagonist": "She studied under the same survey master who once taught the protagonist's sibling."
+  },
+  "driving_mystery": "Who has been feeding the ruin with bodies, coin, and silence, and what did Elira die trying to keep contained?",
+  "hook": "A dead ferryman, a recovered satchel, and survey marks leading away from the bridge force the protagonist to choose whether to walk away or follow the conspiracy immediately.",
+  "escalation_arc": "The campaign rises from a local murder on a rain-soaked road into a conflict between smugglers, zealots, and ruin-cultists, ending with a public choice about what truth the frontier deserves."
+}

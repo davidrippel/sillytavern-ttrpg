@@ -1,0 +1,25 @@
+{
+  "name": "Saint's Rest Waystation",
+  "type": "frontier inn and stable",
+  "sensory_description": {
+    "sight": "Lantern-lit rafters sagging over wet cloaks, prayer ribbons, and muddy cart tracks.",
+    "sound": "Stable chains clinking behind thin walls and muted arguments over ale.",
+    "smell": "Old smoke, wet leather, and onion broth."
+  },
+  "notable_features": [
+    "Guild ledgers pass through the back office.",
+    "A locked prayer niche doubles as a document cache."
+  ],
+  "hidden_elements": [
+    "Burned paper ash from destroyed route manifests.",
+    "A cellar latch marked with the Root-Glass sigil."
+  ],
+  "npc_names": [
+    "Maelin Voss",
+    "Sister Orsa"
+  ],
+  "plot_beats": [
+    "Expose the waystation smuggling ring",
+    "Win or survive the attention of the Sun Choir"
+  ]
+}

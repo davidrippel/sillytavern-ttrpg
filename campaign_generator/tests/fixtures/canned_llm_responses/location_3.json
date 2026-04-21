@@ -1,0 +1,25 @@
+{
+  "name": "Lantern Hall Cellar",
+  "type": "guild cellar",
+  "sensory_description": {
+    "sight": "Stacked crates, guttering oil lamps, and chalked route symbols over damp stone.",
+    "sound": "Dripping water and the occasional thunk of cargo settling in the dark.",
+    "smell": "Lamp oil and spoiled grain."
+  },
+  "notable_features": [
+    "Smuggled relics are sorted here before dawn shipments.",
+    "A hidden shelf contains route permits signed by Maelin."
+  ],
+  "hidden_elements": [
+    "A narrow tunnel leading toward the road ditch.",
+    "A splinter of black glass wrapped in ferryman's cloth."
+  ],
+  "npc_names": [
+    "Maelin Voss",
+    "Dren Halvek"
+  ],
+  "plot_beats": [
+    "Expose the waystation smuggling ring",
+    "Follow the hidden survey marks"
+  ]
+}

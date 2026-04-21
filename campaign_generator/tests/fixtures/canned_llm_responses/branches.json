@@ -1,0 +1,56 @@
+{
+  "branches": [
+    {
+      "name": "Guild Bargain",
+      "if_condition": "the protagonist cuts Maelin Voss into the investigation instead of exposing him publicly",
+      "then_outcome": "the guild opens smugglers' routes and hidden ledgers but starts shaping which names can be safely revealed",
+      "later_act_consequences": [
+        "The guild can evacuate civilians before the finale",
+        "Maelin may erase evidence tying himself to the deaths"
+      ],
+      "references": [
+        "Maelin Voss",
+        "Lantern Carters Guild"
+      ]
+    },
+    {
+      "name": "Church Custody",
+      "if_condition": "the protagonist hands the satchel to Sister Orsa",
+      "then_outcome": "the Sun Choir grants manpower and legitimacy but narrows the acceptable targets of blame",
+      "later_act_consequences": [
+        "The Church can secure the bridge and waystation",
+        "Archivist Serel may flee rather than testify"
+      ],
+      "references": [
+        "Sister Orsa",
+        "Sun Choir of Prios"
+      ]
+    },
+    {
+      "name": "Witness Lost",
+      "if_condition": "Dren Halvek dies before naming his buyers",
+      "then_outcome": "the investigation must pivot to route permits and hidden shrine records instead of a living witness",
+      "later_act_consequences": [
+        "Act 2 becomes slower and more dangerous",
+        "Maelin gains time to prepare a false account"
+      ],
+      "references": [
+        "Dren Halvek",
+        "c_ledger"
+      ]
+    },
+    {
+      "name": "Ritual Missed",
+      "if_condition": "the protagonist reaches the watchtower after the midnight rite has already begun",
+      "then_outcome": "the ruin answers more violently and some civilians become collateral to the opening",
+      "later_act_consequences": [
+        "The finale starts in chaos rather than secrecy",
+        "Sister Orsa is more willing to choose fire over mercy"
+      ],
+      "references": [
+        "Sunken Watchtower",
+        "Ivara Kelm"
+      ]
+    }
+  ]
+}

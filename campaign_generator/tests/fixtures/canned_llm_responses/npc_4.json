@@ -1,0 +1,23 @@
+{
+  "name": "Ivara Kelm",
+  "role": "Cult binder and false surveyor",
+  "faction_affiliation": "Root-Glass Circle",
+  "physical_description": "Tall, ash-pale, and always carrying a lacquered case of maps that smell faintly of metal and sap.",
+  "speaking_style": "Cultured and patient, treating every conversation as if she is already hearing its ending.",
+  "motivation": "Complete the opening beneath the watchtower before her rivals can steal or ruin it.",
+  "secret": "She ordered Elira killed when persuasion failed.",
+  "relationships": [
+    {
+      "name": "Archivist Serel",
+      "description": "Once traded notes with Serel before turning to the Circle."
+    }
+  ],
+  "abilities": [
+    "Witchsight",
+    "Divination Ritual"
+  ],
+  "act_presence": [
+    "What Elira Carried",
+    "Dawn at the Open Stone"
+  ]
+}

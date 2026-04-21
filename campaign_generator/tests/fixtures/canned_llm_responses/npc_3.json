@@ -1,0 +1,22 @@
+{
+  "name": "Dren Halvek",
+  "role": "Grave robber turned witness",
+  "faction_affiliation": "Lantern Carters Guild",
+  "physical_description": "Thin as a fence rail, with dirt under every nail and a jaw that clicks when he lies.",
+  "speaking_style": "Fast, defensive, and too eager to bargain away other people's names.",
+  "motivation": "Survive long enough to sell what he knows to the right side.",
+  "secret": "He took the satchel from Elira's corpse before realizing other people were already hunting it.",
+  "relationships": [
+    {
+      "name": "Maelin Voss",
+      "description": "Maelin keeps him close as a deniable tool."
+    }
+  ],
+  "abilities": [
+    "Stealth"
+  ],
+  "act_presence": [
+    "The Bridge Keeps Its Dead",
+    "Ashes Beneath the Ledger"
+  ]
+}

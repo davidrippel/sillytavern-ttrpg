@@ -1,0 +1,195 @@
+{
+  "entry_clue_ids": [
+    "c_bridge"
+  ],
+  "clues": [
+    {
+      "id": "c_bridge",
+      "found_at_type": "location",
+      "found_at": "Gloam Bridge",
+      "reveals": "The ferryman died protecting a satchel tied to guild transport marks, and at least one trained surveyor came here after the killing.",
+      "points_to": [
+        {
+          "type": "clue",
+          "value": "c_ledger"
+        },
+        {
+          "type": "location",
+          "value": "Saint's Rest Waystation"
+        },
+        {
+          "type": "beat",
+          "value": "Recover the ferryman's satchel"
+        },
+        {
+          "type": "beat",
+          "value": "Identify who reached the bridge first"
+        },
+        {
+          "type": "beat",
+          "value": "Follow the hidden survey marks"
+        },
+        {
+          "type": "beat",
+          "value": "Expose the waystation smuggling ring"
+        },
+        {
+          "type": "beat",
+          "value": "Win or survive the attention of the Sun Choir"
+        },
+        {
+          "type": "beat",
+          "value": "Enter the sunken watchtower"
+        },
+        {
+          "type": "beat",
+          "value": "Learn what Elira died carrying"
+        },
+        {
+          "type": "beat",
+          "value": "Break the cult's pact with the ruin"
+        },
+        {
+          "type": "beat",
+          "value": "Choose which ally to betray or save"
+        },
+        {
+          "type": "beat",
+          "value": "Stop the midnight opening beneath the tower"
+        },
+        {
+          "type": "beat",
+          "value": "Survive the ruin's answer"
+        },
+        {
+          "type": "beat",
+          "value": "Decide who carries the ledger into dawn"
+        }
+      ],
+      "supports_beats": [
+        "Recover the ferryman's satchel",
+        "Identify who reached the bridge first",
+        "Follow the hidden survey marks"
+      ]
+    },
+    {
+      "id": "c_ledger",
+      "found_at_type": "npc",
+      "found_at": "Dren Halvek",
+      "reveals": "The satchel carries route permits, donor names, and a coded ledger tying the guild to the watchtower excavation.",
+      "points_to": [
+        {
+          "type": "clue",
+          "value": "c_bell"
+        },
+        {
+          "type": "clue",
+          "value": "c_shard"
+        },
+        {
+          "type": "npc",
+          "value": "Maelin Voss"
+        },
+        {
+          "type": "beat",
+          "value": "Recover the ferryman's satchel"
+        },
+        {
+          "type": "beat",
+          "value": "Identify who reached the bridge first"
+        },
+        {
+          "type": "beat",
+          "value": "Follow the hidden survey marks"
+        },
+        {
+          "type": "beat",
+          "value": "Expose the waystation smuggling ring"
+        },
+        {
+          "type": "beat",
+          "value": "Win or survive the attention of the Sun Choir"
+        },
+        {
+          "type": "beat",
+          "value": "Enter the sunken watchtower"
+        },
+        {
+          "type": "beat",
+          "value": "Learn what Elira died carrying"
+        },
+        {
+          "type": "beat",
+          "value": "Break the cult's pact with the ruin"
+        },
+        {
+          "type": "beat",
+          "value": "Choose which ally to betray or save"
+        },
+        {
+          "type": "beat",
+          "value": "Stop the midnight opening beneath the tower"
+        },
+        {
+          "type": "beat",
+          "value": "Survive the ruin's answer"
+        },
+        {
+          "type": "beat",
+          "value": "Decide who carries the ledger into dawn"
+        }
+      ],
+      "supports_beats": [
+        "Expose the waystation smuggling ring",
+        "Win or survive the attention of the Sun Choir",
+        "Learn what Elira died carrying"
+      ]
+    },
+    {
+      "id": "c_bell",
+      "found_at_type": "location",
+      "found_at": "Sunken Watchtower",
+      "reveals": "The watchtower hums because the sealed chamber is partly open already, and the Circle plans to finish the rite at midnight.",
+      "points_to": [
+        {
+          "type": "location",
+          "value": "Root-Glass Chapel"
+        },
+        {
+          "type": "beat",
+          "value": "Stop the midnight opening beneath the tower"
+        }
+      ],
+      "supports_beats": [
+        "Enter the sunken watchtower",
+        "Stop the midnight opening beneath the tower",
+        "Survive the ruin's answer"
+      ]
+    },
+    {
+      "id": "c_shard",
+      "found_at_type": "location",
+      "found_at": "Root-Glass Chapel",
+      "reveals": "Elira left proof that donors from the guild and church both fed the ruin, and destroying the ledger will save reputations but not lives.",
+      "points_to": [
+        {
+          "type": "npc",
+          "value": "Sister Orsa"
+        },
+        {
+          "type": "beat",
+          "value": "Choose which ally to betray or save"
+        },
+        {
+          "type": "beat",
+          "value": "Decide who carries the ledger into dawn"
+        }
+      ],
+      "supports_beats": [
+        "Learn what Elira died carrying",
+        "Choose which ally to betray or save",
+        "Decide who carries the ledger into dawn"
+      ]
+    }
+  ]
+}

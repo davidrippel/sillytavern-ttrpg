@@ -1,0 +1,22 @@
+# Environment and secrets
+.env
+.venv/
+
+# Python cache and tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Packaging and build outputs
+build/
+dist/
+*.egg-info/
+
+# Coverage and test artifacts
+.coverage
+htmlcov/
+
+# OS/editor noise
+.DS_Store

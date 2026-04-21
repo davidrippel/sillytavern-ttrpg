@@ -1,0 +1,22 @@
+{
+  "name": "Odel Fen",
+  "role": "Ferryman's brother and reluctant guide",
+  "faction_affiliation": null,
+  "physical_description": "Heavy boots, a patched river cloak, and eyes red from grief and too little sleep.",
+  "speaking_style": "Blunt, suspicious, and liable to fall silent the moment emotion catches up with him.",
+  "motivation": "Learn why his brother died and keep the same road from killing anyone else.",
+  "secret": "He once ferried ruin cargo for Maelin and never told his brother.",
+  "relationships": [
+    {
+      "name": "Maelin Voss",
+      "description": "Hates Maelin and knows he is lying."
+    }
+  ],
+  "abilities": [
+    "Lore of the Forest"
+  ],
+  "act_presence": [
+    "The Bridge Keeps Its Dead",
+    "What Elira Carried"
+  ]
+}

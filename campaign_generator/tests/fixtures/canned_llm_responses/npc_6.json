@@ -1,0 +1,28 @@
+{
+  "name": "Archivist Serel",
+  "role": "Defected Ordo scholar",
+  "faction_affiliation": null,
+  "physical_description": "Ink-stained sleeves, a burn scar along the throat, and spectacles always sliding down a narrow nose.",
+  "speaking_style": "Dense, precise language that speeds up whenever forbidden history comes into reach.",
+  "motivation": "Decode Elira's ledger before the Church or the Circle can bury it.",
+  "secret": "Serel helped draft the first survey that marked the watchtower as a viable excavation site.",
+  "relationships": [
+    {
+      "name": "Sister Orsa",
+      "description": "Feeds Orsa half-truths to stay under church protection."
+    },
+    {
+      "name": "Ivara Kelm",
+      "description": "Former collaborator now turned ideological enemy."
+    }
+  ],
+  "abilities": [
+    "Loremaster",
+    "Witchsight"
+  ],
+  "act_presence": [
+    "Ashes Beneath the Ledger",
+    "What Elira Carried",
+    "Dawn at the Open Stone"
+  ]
+}

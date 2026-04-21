@@ -1,0 +1,22 @@
+{
+  "name": "Maelin Voss",
+  "role": "Guild factor at the waystation",
+  "faction_affiliation": "Lantern Carters Guild",
+  "physical_description": "Lean, rain-dark hair tied in a cord, with lamp soot permanently settled in the creases of his hands.",
+  "speaking_style": "Measured and practical, with every promise framed as a trade.",
+  "motivation": "Keep the guild solvent and himself alive by controlling what the satchel exposes.",
+  "secret": "He signed the road permits that moved bodies to the watchtower cellar.",
+  "relationships": [
+    {
+      "name": "Odel Fen",
+      "description": "Owes Odel money and fears what the ferryman's family knows."
+    }
+  ],
+  "abilities": [
+    "Contacts"
+  ],
+  "act_presence": [
+    "The Bridge Keeps Its Dead",
+    "Ashes Beneath the Ledger"
+  ]
+}

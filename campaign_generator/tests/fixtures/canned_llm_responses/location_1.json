@@ -1,0 +1,25 @@
+{
+  "name": "Gloam Bridge",
+  "type": "river crossing",
+  "sensory_description": {
+    "sight": "Black water sliding under a rope bridge hung with rain and funeral knots.",
+    "sound": "Creaking planks and the dull slap of current against rotting pilings.",
+    "smell": null
+  },
+  "notable_features": [
+    "The ferryman's post can hide a hand-sized satchel.",
+    "Old survey marks are carved into the downstream railing."
+  ],
+  "hidden_elements": [
+    "A bloodied seal-ring wedged beneath the signal post.",
+    "Fresh boot-scrapes where someone climbed below the bridge."
+  ],
+  "npc_names": [
+    "Odel Fen",
+    "Dren Halvek"
+  ],
+  "plot_beats": [
+    "Recover the ferryman's satchel",
+    "Identify who reached the bridge first"
+  ]
+}

@@ -1,0 +1,26 @@
+# OS/editor noise
+.DS_Store
+
+# Python environments and secrets
+.env
+.venv/
+
+# Python caches and tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Packaging and build outputs
+build/
+dist/
+*.egg-info/
+
+# Coverage and test artifacts
+.coverage
+htmlcov/
+
+# Project-local environment and cache files
+campaign_generator/.env
+campaign_generator/.venv/
