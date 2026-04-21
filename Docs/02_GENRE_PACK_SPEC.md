@@ -27,6 +27,35 @@ All files must be present for a pack to validate.
 
 ---
 
+## Who reads what
+
+The pack is consumed by different systems, each reading only what it needs. Files left unread by a consumer are ignored — they're not wasted; they serve other consumers or humans.
+
+| File | Campaign generator | Pack generator | Extension (browser) | GM (at runtime) |
+|---|---|---|---|---|
+| `pack.yaml` | ✅ metadata | ✅ writes | ✅ name + version | — |
+| `attributes.yaml` | ✅ NPC & char creation | ✅ writes | ✅ dice + sheet UI | via overlay |
+| `resources.yaml` | ✅ NPC consequences | ✅ writes | ✅ sheet state UI, STATUS_UPDATE whitelist, threshold logic | via overlay |
+| `abilities.yaml` | ✅ NPC abilities | ✅ writes | ✅ ability catalog browser | via overlay |
+| `character_template.json` | ✅ char creation guidance | ✅ writes | ✅ initialize new sheet | — |
+| `gm_prompt_overlay.md` | ✅ tone calibration | ✅ writes | ❌ | ✅ embedded in lorebook |
+| `tone.md` | ✅ hook style | ✅ writes | ❌ | ❌ |
+| `failure_moves.md` | — | ✅ writes | ❌ | ✅ embedded in lorebook |
+| `example_hooks.md` | ✅ hook calibration | ✅ writes | ❌ | ❌ |
+| `generator_seed.yaml` | ✅ defaults | ✅ writes | ❌ | ❌ |
+| `REVIEW_CHECKLIST.md` | ❌ | ✅ writes | ❌ | ❌ |
+
+Key points:
+
+- **The extension only reads 5 files** (`pack.yaml`, `attributes.yaml`, `resources.yaml`, `abilities.yaml`, `character_template.json`). Everything else is either for the Python tools, for humans, or reaches the GM via the campaign lorebook rather than through the extension.
+- **The GM never reads pack files directly.** Pack content reaches the GM through (a) the `gm_prompt_overlay.md` embedded by the campaign generator as a constant lorebook entry, and (b) the attribute/resource/ability names that appear naturally in the character sheet injection (done by the extension) and in lorebook entries.
+- **The campaign generator is the only consumer of tone/hooks reference files** (`tone.md`, `example_hooks.md`). These calibrate its own generation; they don't run at play time.
+- **`failure_moves.md` reaches the GM** through the lorebook too — the campaign generator embeds its content as a constant lorebook entry alongside the GM overlay.
+
+This separation is why the extension doesn't need a bundling step: it reads the pack directory directly via the browser's `webkitdirectory` file picker and pulls only the 5 files it needs. See `04_EXTENSION_BRIEF.md` § Pack loading for the mechanism.
+
+---
+
 ## `pack.yaml`
 
 Pack metadata. Example:

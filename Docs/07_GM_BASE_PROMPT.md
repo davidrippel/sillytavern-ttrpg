@@ -255,11 +255,19 @@ or heavy exposition moments; most messages should be shorter.
 
 ## How the overlay attaches
 
-The SillyTavern character card's system prompt holds the base prompt above. The genre pack's `gm_prompt_overlay.md` is loaded into a constant lorebook entry labeled "Genre Overlay" with highest-priority order. This places the overlay right after the base prompt in context, before campaign-specific lorebook entries.
+The SillyTavern character card's system prompt holds the base prompt above — and only the base prompt. The same character card is used across all genres.
 
-Alternative: concatenate base + overlay at chat creation and put the combined text directly in the character card. Less flexible for pack-switching but simpler to reason about.
+The genre pack's `gm_prompt_overlay.md` reaches the GM through the campaign lorebook: the campaign generator embeds the overlay's full text as a constant lorebook entry named `__pack_gm_overlay` with the highest `order` value, so it sits right after the base prompt in context, before any campaign-specific lorebook entries fire.
 
-The extension's settings panel lets the user pick either approach.
+The pack's `failure_moves.md` reaches the GM the same way — as a constant lorebook entry named `__pack_failure_moves`.
+
+This design has three benefits:
+
+1. **The character card is reused across genres.** Switching campaigns from dark fantasy to space opera doesn't require a new GM card — the new campaign's lorebook brings its own overlay.
+2. **The extension can remain pack-unaware for prompt assembly.** The overlay reaches the GM through SillyTavern's native lorebook system; the extension doesn't need to intercept prompt construction.
+3. **Graceful degradation.** If the extension fails to load, the overlay still reaches the GM through the lorebook. The genre doesn't silently drift because a JavaScript error broke pack loading.
+
+The `__` prefix on these entries is a hard convention — the extension uses it to identify pack-derived content during lorebook hygiene and backup operations.
 
 ---
 

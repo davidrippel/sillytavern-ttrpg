@@ -14,6 +14,8 @@ Input: a genre brief YAML (small, human-written, see below).
 
 Output: a complete pack directory with all files required by the spec, plus the review checklist.
 
+**No bundling step.** The output is a directory of individual files, as specified in `02_GENRE_PACK_SPEC.md`. Python tools (campaign generator) read the directory directly. The SillyTavern extension reads the directory via its browser directory picker (see `04_EXTENSION_BRIEF.md` § Pack loading). There is no `pack.json` bundle; there is no import step; the pack is always the directory on disk.
+
 ---
 
 ## Tech stack

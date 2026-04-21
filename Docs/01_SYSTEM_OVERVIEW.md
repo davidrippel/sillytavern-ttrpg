@@ -75,7 +75,7 @@ Managed by SillyTavern and the custom extension (see `04_EXTENSION_BRIEF.md`).
 | Campaign lorebook JSON | File | Imported into SillyTavern | Once per campaign |
 | Opening hook text | File | Read once, then set aside | Once per campaign |
 | Initial Author's Note | File | Pasted into SillyTavern | Once per campaign |
-| GM character card | SillyTavern object | Inside SillyTavern | Once per genre (uses overlay) |
+| GM character card | SillyTavern object | Inside SillyTavern | Once, reused across genres (overlay arrives via lorebook) |
 | Lorebook entries | SillyTavern World Info | Inside SillyTavern | From campaign generator output |
 | Built-in extensions | SillyTavern features | Inside SillyTavern | Once, configured per campaign |
 | Custom extension | JavaScript package | SillyTavern extensions folder | Built once, used always |
@@ -92,15 +92,26 @@ Managed by SillyTavern and the custom extension (see `04_EXTENSION_BRIEF.md`).
 3. Review the output using the pack's auto-generated `REVIEW_CHECKLIST.md`. Edit files as needed — especially the GM prompt overlay and ability catalog, which benefit most from human taste.
 4. The pack is now a first-class artifact on disk, ready to be used for any number of campaigns.
 
+### Pack loading into SillyTavern (once per pack)
+
+1. Open SillyTavern. In the custom extension's settings panel, click "Load pack".
+2. The browser opens a directory picker. Select the pack directory (e.g., `genres/my_genre/`).
+3. The extension reads the 5 files it needs (`pack.yaml`, `attributes.yaml`, `resources.yaml`, `abilities.yaml`, `character_template.json`) directly from the directory. It ignores the rest — those are used by the Python generators and by humans, or reach the GM via the campaign lorebook.
+4. The pack persists in the extension's settings across SillyTavern sessions. You only load it once per pack.
+5. Multiple packs can be loaded and cached; one is active. Switch via the settings dropdown.
+
+No bundling, no conversion, no companion server. The pack on disk is the pack the extension uses.
+
 ### Campaign creation (per campaign)
 
 1. Write a campaign seed YAML — specific themes, regions, antagonist archetypes, content to include/exclude. This is campaign-level choice, not genre-level.
 2. Run `python -m campaign_generator --genre genres/my_genre/ --seed my_seed.yaml --output my_campaign/`. The generator reads the pack for attribute names, tone, and GM overlay, then produces:
    - `opening_hook.txt` (the only file you read)
-   - `campaign_lorebook.json` (imported into SillyTavern)
+   - `campaign_lorebook.json` (imported into SillyTavern — includes the pack's GM overlay and failure moves as constant entries, plus a `__pack_reference` metadata entry)
    - `initial_authors_note.txt` (pasted into SillyTavern)
    - `spoilers/full_campaign.md` (for after-the-fact reference)
-3. Create a new SillyTavern chat with the genre's GM card. Import the lorebook. Paste the initial Author's Note. Create your character using the pack's attribute and ability structure.
+3. Create a new SillyTavern chat with the GM character card (the base GM prompt from `07_GM_BASE_PROMPT.md`; the pack's overlay reaches the GM via the lorebook, so the same character card works across genres). Import the campaign lorebook. Paste the initial Author's Note. Create your character using the pack's attribute and ability structure.
+4. On chat open, the extension reads `__pack_reference` from the lorebook and checks it matches the currently-loaded pack. If they match, proceed. If not, a warning prompts you to load the correct pack.
 
 ### Play loop (continuous)
 

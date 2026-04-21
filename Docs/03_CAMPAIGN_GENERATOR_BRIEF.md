@@ -187,24 +187,35 @@ MUST NOT contain: antagonist identity, clue chain, plot beats beyond Act 1 opene
 
 ### 10. `lorebook_assembly`
 
-Input: all prior.
+Input: all prior, plus the full pack contents.
 
 Convert everything into SillyTavern lorebook entry objects. Each entry:
 - `key`: array of trigger keywords (name, aliases, short forms). Include common misspellings.
 - `content`: GM-facing notes written in the pack's tone. "Use this NPC's verbal tic. Their secret is X — reveal only if Y happens."
-- `constant`: true for campaign bible and current-act entries
-- `order`: priority (campaign bible highest, current act high, NPCs middle, locations lower)
+- `constant`: true for campaign bible, current-act, and pack-derived entries
+- `order`: priority (pack overlay highest, campaign bible high, current act high, NPCs middle, locations lower)
 - `comment`: human-readable label
 
 Generate these entry types:
-- Campaign bible (constant) — premise, themes, tone, GM overlay reference
-- Current Act (constant) — Act 1 goals and beats
+
+**Pack-derived constant entries** (inserted by the generator from pack files; these let the extension remain pack-unaware at runtime and let the GM see pack content without the extension):
+
+- `__pack_gm_overlay` (constant, highest order) — full verbatim text of the pack's `gm_prompt_overlay.md`. This is how the genre overlay reaches the GM. The `__` prefix marks this as machinery, not campaign content. Keyword-triggered matching should not fire on this entry's content.
+- `__pack_failure_moves` (constant, high order) — full verbatim text of the pack's `failure_moves.md`. Lets the GM select from genre-flavored moves on 2-6 rolls.
+- `__pack_reference` (metadata-only, not injected into prompts) — a machine-readable entry containing `pack_name`, `pack_version`, `display_name` from `pack.yaml`. The extension reads this on chat open to perform the compatibility check (see `04_EXTENSION_BRIEF.md`). Its content is a JSON blob. It must have `constant: false` and no trigger keywords so it never fires into the GM's context — the extension reads it directly from the lorebook via SillyTavern's World Info API, not through prompt injection.
+
+**Campaign-specific entries**:
+
+- Campaign bible (constant, high order) — premise, themes, campaign-specific tone calibrations (not the pack's tone — those are in the overlay)
+- Current Act (constant, high order) — Act 1 goals and beats
 - One entry per NPC (keyword-triggered)
 - One entry per location (keyword-triggered)
 - One entry per faction (keyword-triggered)
 - One entry per major clue or plot device (keyword-triggered)
 
 Output the final structure as a valid SillyTavern World Info JSON file. The schema moves — verify against live SillyTavern docs during development.
+
+The `__pack_*` naming convention is a hard requirement: the extension uses this prefix to identify pack-derived entries (for the compatibility check, and to distinguish them from campaign content in any hygiene dashboards).
 
 ### 11. `spoilers`
 
