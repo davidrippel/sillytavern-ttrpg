@@ -7,6 +7,13 @@ from .pack import GenrePack
 from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton
 
 
+def _token_aliases(value: str) -> set[str]:
+    aliases = {value}
+    if value.startswith("The "):
+        aliases.add(value[4:])
+    return aliases
+
+
 class ValidationLog:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -123,7 +130,13 @@ def validate_cross_stage(
 
     errors.extend(validate_clue_graph(plot, npcs, locations, clue_graph))
 
-    known_tokens = faction_names | npc_names | location_names | {clue.id for clue in clue_graph.clues}
+    beat_ids = set(plot.beat_id_to_text())
+    beat_texts = set(plot.beat_text_to_id())
+    known_tokens = set().union(
+        *( _token_aliases(name) for name in faction_names | npc_names | location_names )
+    )
+    known_tokens |= {clue.id for clue in clue_graph.clues}
+    known_tokens |= beat_ids | beat_texts
     for branch in branches.branches:
         for reference in branch.references:
             if reference not in known_tokens:

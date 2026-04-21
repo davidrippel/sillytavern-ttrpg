@@ -4,6 +4,7 @@ from pathlib import Path
 from campaign_generator.lorebook import assemble_lorebook
 from campaign_generator.pack import load_pack
 from campaign_generator.schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
+from campaign_generator.stages.branches import _build_reference_token_map
 from campaign_generator.validation import validate_cross_stage
 
 
@@ -58,3 +59,23 @@ def test_cross_stage_validation_allows_user_relationship_placeholder():
     )
 
     assert not any("{{user}}" in error for error in errors)
+
+
+def test_branch_reference_token_map_accepts_faction_aliases_and_beats():
+    plot = PlotSkeleton.model_validate(_load_fixture("plot_skeleton"))
+    factions = FactionSet.model_validate(_load_fixture("factions"))
+    npcs = NPCRoster.model_validate({"npcs": [_load_fixture(f"npc_{index}") for index in range(1, 7)]})
+    locations = LocationCatalog.model_validate({"locations": [_load_fixture(f"location_{index}") for index in range(1, 6)]})
+    clues = ClueGraph.model_validate(_load_fixture("clue_chains"))
+
+    token_map = _build_reference_token_map(
+        plot=plot,
+        factions=factions,
+        npcs=npcs,
+        locations=locations,
+        clue_graph=clues,
+    )
+
+    assert token_map["Lantern Carters Guild"] == "Lantern Carters Guild"
+    assert token_map["act1_beat1"] == "act1_beat1"
+    assert token_map["Recover the ferryman's satchel"] == "act1_beat1"
