@@ -1,0 +1,51 @@
+resources:
+  - key: hp_current
+    display: Hit Points
+    kind: pool
+    description: >
+      Physical injury pool. At 0, the character is dying — they will die
+      without intervention within a scene.
+    starting_value: 10
+    max_value_field: hp_max
+
+  - key: hp_max
+    display: Max HP
+    kind: static_value
+    description: Upper bound for hp_current. Rises with permanent advancement.
+    starting_value: 10
+
+  - key: corruption_temporary
+    display: Corruption (Temporary)
+    kind: pool_with_threshold
+    description: >
+      Corruption accumulated during play. Gained from using Shadow-tagged
+      abilities, drinking from tainted sources, or moral compromise.
+      Cleared by rest in a cleansed place or a cleansing ritual.
+      When temporary corruption reaches corruption_threshold, 1 permanent
+      corruption is inflicted and temporary resets to 0.
+    starting_value: 0
+    threshold_field: corruption_threshold
+    threshold_consequence:
+      field: corruption_permanent
+      delta: +1
+      then_reset: true
+
+  - key: corruption_permanent
+    display: Corruption (Permanent)
+    kind: counter
+    description: >
+      Lifetime corruption. At high values the character is physically changing.
+      At 10, they become an NPC abomination — the end of the campaign.
+    starting_value: 0
+    threshold: 5
+    threshold_effect: physical_transformation_begins
+    endgame_value: 10
+    endgame_effect: character_becomes_npc_abomination
+
+  - key: corruption_threshold
+    display: Corruption Threshold
+    kind: static_value
+    description: >
+      When corruption_temporary reaches this value, 1 permanent corruption
+      is inflicted and temporary resets.
+    starting_value: 5

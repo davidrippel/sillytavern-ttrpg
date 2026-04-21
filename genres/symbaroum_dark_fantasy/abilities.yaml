@@ -1,0 +1,256 @@
+categories:
+  - key: mystical_powers
+    display: Mystical Powers
+    description: >
+      Active occult abilities drawn from the old lore and the forest's taint.
+      Using one requires a Will roll. Failure inflicts 1 temporary corruption.
+      Partial success: the power works but with a complication or at reduced effect.
+    activation: active
+    roll_attribute: will
+    consequence_on_failure: "corruption_temporary: +1"
+    consequence_on_partial: "corruption_temporary: +1 OR effect reduced / complication"
+    has_levels: true
+    level_names: [novice, adept, master]
+
+  - key: abilities_general
+    display: General Abilities
+    description: >
+      Learned skills, martial training, professional expertise. No corruption
+      cost. When activating, the GM calls for a roll against the most
+      appropriate attribute for the situation.
+    activation: passive_or_triggered
+    has_levels: true
+    level_names: [novice, adept, master]
+
+  - key: rituals
+    display: Rituals
+    description: >
+      Slow magic requiring time (minutes to hours), components, and often a
+      safe location. Not usable in combat or under direct threat. Rituals
+      produce larger effects than Mystical Powers but cost more corruption.
+    activation: ritual
+    roll_attribute: shadow
+    consequence_on_failure: "corruption_temporary: +2"
+    consequence_on_partial: "corruption_temporary: +1 AND complication"
+    has_levels: true
+    level_names: [novice, adept, master]
+
+  - key: traits
+    display: Traits
+    description: >
+      Permanent features of the character — lineage, supernatural heritage,
+      physical characteristics. Passive; the GM applies their effect where
+      relevant.
+    activation: passive
+    has_levels: false
+
+catalog:
+  - name: Witchsight
+    category: mystical_powers
+    prerequisite: shadow >= 1
+    description: >
+      Perceive the spiritual and corrupt nature of things, places, and
+      people. Auras, recent magic use, presence of the taint, lingering
+      emotional residue.
+    effect: >
+      On Will success, the GM reveals one significant spiritual truth
+      about the target (what they hide, what taints them, what they fear).
+      On partial, reveals something but with ambiguity — the player must
+      interpret. On failure: 1 corruption, no insight, and sometimes
+      the thing you were trying to see notices you.
+
+  - name: Shapeshifter
+    category: mystical_powers
+    prerequisite: shadow >= 2
+    description: Assume the form of an animal you have studied closely.
+    effect: >
+      Will roll to transform. Duration: one scene or until dispelled.
+      Novice: small mundane animals (raven, rat, cat). Adept: larger or
+      humanoid forms (wolf, bear, a recognizable person). Master: any
+      animal including mythical. Corruption on failure; on partial, the
+      form is unstable or carries a telltale feature.
+
+  - name: Mind Throw
+    category: mystical_powers
+    prerequisite: will >= 1
+    description: Hurl an object or a person short distances with will alone.
+    effect: >
+      Will roll, contested by target's Might if a person. Damage equivalent
+      to thrown object's weight. Partial success: the throw lands but
+      something nearby breaks or falls with it. Failure: 1 corruption,
+      the thing thrown snaps back toward you.
+
+  - name: Bend Will
+    category: mystical_powers
+    prerequisite: shadow >= 2, presence >= 1
+    description: Implant a simple suggestion in a target's mind.
+    effect: >
+      Will roll, contested by target's Will. Suggestion must be short and
+      plausible — "you didn't see me" works, "give me all your money" does
+      not. Duration: minutes. On partial, suggestion works but target has
+      a vague unease afterward. On failure: 2 corruption, and the target
+      senses the attempt.
+
+  - name: Flame Lash
+    category: mystical_powers
+    prerequisite: will >= 2
+    description: A short whip of mystic flame that leaps from hand to target.
+    effect: >
+      Will roll. Range: across a room. Damage: significant physical injury.
+      Partial: hits but sets something else alight too. Failure: 1 corruption
+      and the flame recoils, burning the caster.
+
+  - name: Staff Fighting
+    category: abilities_general
+    prerequisite: none
+    description: Trained use of quarterstaff as both weapon and walking stick.
+    effect: >
+      +1 to Might or Finesse rolls while wielding a staff. Adept: parry
+      bonus against a single attacker per scene. Master: disarm an opponent
+      on a full success in melee.
+
+  - name: Sword Fighting
+    category: abilities_general
+    prerequisite: might >= 1
+    description: Formal training with one-handed blades.
+    effect: >
+      +1 to Might rolls when attacking with a one-handed sword. Adept:
+      riposte on parry. Master: threaten multiple opponents at once.
+
+  - name: Stealth
+    category: abilities_general
+    prerequisite: none
+    description: Moving unseen and unheard.
+    effect: >
+      +1 to Finesse rolls when sneaking, hiding, or tailing. Adept:
+      vanish in a crowd or shadows even when observed briefly. Master:
+      move stealthily in full armor or at speed.
+
+  - name: Lore of the Forest
+    category: abilities_general
+    prerequisite: wits >= 1
+    description: Deep knowledge of Davokar, its plants, beasts, and dangers.
+    effect: >
+      +1 to Wits rolls regarding the forest — tracking, foraging, identifying
+      creatures, predicting weather, finding old paths. Adept: can find
+      shelter in the deep forest. Master: can navigate the heart of Davokar
+      without getting lost.
+
+  - name: Physician
+    category: abilities_general
+    prerequisite: wits >= 1
+    description: Trained in healing wounds and treating illness.
+    effect: >
+      Wits roll to tend a wound; success restores 1d6 HP and stops
+      bleeding. Adept: can treat poison and disease. Master: can stabilize
+      even mortally wounded patients.
+
+  - name: Loremaster
+    category: abilities_general
+    prerequisite: wits >= 2
+    description: Encyclopedic knowledge of history, religion, and old lore.
+    effect: >
+      When the player asks a lore question, the GM answers generously
+      (drawing from lorebook). Adept: knowledge extends to forbidden lore
+      without corruption. Master: can recognize occult symbols and the
+      signatures of specific ancient powers.
+
+  - name: Iron Will
+    category: abilities_general
+    prerequisite: will >= 1
+    description: Disciplined mind, hard to sway or break.
+    effect: >
+      +1 to Will rolls resisting fear, compulsion, or mental intrusion.
+      Adept: immune to ordinary fear. Master: can resist even supernatural
+      mind-effects on a partial roll.
+
+  - name: Contacts
+    category: abilities_general
+    prerequisite: presence >= 1
+    description: A network of useful acquaintances across the region.
+    effect: >
+      Once per session, the player declares a previously-unmentioned contact
+      who happens to be here. GM integrates them into the scene. The contact
+      is reasonably disposed but not infinitely useful.
+
+  - name: Cleansing Ritual
+    category: rituals
+    prerequisite: shadow >= 1
+    description: Purge temporary corruption through ritual meditation.
+    effect: >
+      Requires 1 hour in a place free of taint. Shadow roll: full success
+      removes all temporary corruption. Partial: removes all but one.
+      Failure: removes nothing and inflicts 2 corruption.
+
+  - name: Divination Ritual
+    category: rituals
+    prerequisite: shadow >= 2
+    description: Cast runes, read entrails, or gaze into water to seek an answer.
+    effect: >
+      Requires 30 minutes and components. Shadow roll: full success yields
+      a clear true answer to one specific question. Partial: yields an
+      answer but it is metaphorical or ambiguous. Failure: 2 corruption,
+      the divination reveals something you did not want to see.
+
+  - name: Ward
+    category: rituals
+    prerequisite: shadow >= 2
+    description: Inscribe protective runes around a place or object.
+    effect: >
+      Requires 1 hour. Shadow roll: success creates a ward that deters
+      one category of supernatural threat for 24 hours. Partial: ward
+      works but is visible or broadcasts the protected place's importance.
+      Failure: 2 corruption, the ward attracts what it was meant to
+      repel.
+
+  - name: Summoning Ritual
+    category: rituals
+    prerequisite: shadow >= 3
+    description: Call a bound spirit or lesser entity to serve briefly.
+    effect: >
+      Requires 1 hour and specific components. Shadow roll: success
+      summons and binds the entity for one task. Partial: the entity
+      arrives but is recalcitrant or incomplete. Failure: 3 corruption,
+      and the entity that arrives is not the one you called.
+
+  - name: Elf-Touched
+    category: traits
+    prerequisite: none
+    description: >
+      You carry the old blood — visible in subtle features (ear shape,
+      eye color, inhuman grace). Not immediately obvious but noticed
+      by the observant and the hostile.
+    effect: >
+      +1 to Shadow starting value. NPCs with strong reason to hate
+      elves (some inquisitors, frontier settlers) are predisposed
+      hostile. Some forest spirits grant you respect.
+
+  - name: Scarred
+    category: traits
+    prerequisite: none
+    description: A visible wound or marking from past violence.
+    effect: >
+      +1 to Presence in intimidating contexts. -1 to Presence in
+      contexts requiring a low profile. NPCs may remember you
+      specifically by the scar.
+
+  - name: Witch-Taught
+    category: traits
+    prerequisite: none
+    description: >
+      You were trained by a witch — usually an outlawed one. You know
+      the old ways from the inside.
+    effect: >
+      You may learn Mystical Powers without an explicit teacher. You
+      start the game with 1 permanent corruption. The Church of Prios
+      hunts those they find out.
+
+  - name: Animal Companion
+    category: traits
+    prerequisite: none
+    description: A bonded animal familiar — usually a raven, dog, wolf, or cat.
+    effect: >
+      The companion is present in most scenes unless the fiction says
+      otherwise. It acts in its nature but can be directed with a minor
+      effort. It has its own small HP pool and can be harmed or killed,
+      which causes grief but not mechanical loss.

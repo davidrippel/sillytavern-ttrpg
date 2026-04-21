@@ -1,0 +1,32 @@
+genre: symbaroum_dark_fantasy
+setting_anchors:
+  - davokar_forest
+  - thistle_hold
+  - ambrian_frontier
+  - ancient_ruins
+  - church_of_prios_tension
+themes_include:
+  - betrayal
+  - legacy
+  - the_cost_of_knowledge
+  - small_lights_in_dark_places
+themes_exclude:
+  - romance
+  - child_endangerment
+  - modern_anachronism
+tone:
+  - grim
+  - mysterious
+  - morally_ambiguous
+  - patient
+num_acts: 4
+num_npcs: 10
+num_locations: 8
+antagonist_archetypes_preferred:
+  - corrupt_inquisitor
+  - ancient_sorcerer
+  - cult_leader
+  - tainted_noble
+  - forest_spirit
+clue_chain_density: medium
+branch_points: 7

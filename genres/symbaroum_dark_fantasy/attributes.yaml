@@ -1,0 +1,57 @@
+attributes:
+  - key: might
+    display: Might
+    description: Physical force, endurance, melee strength, sheer bodily power.
+    examples:
+      - smashing a locked door
+      - wrestling an attacker to the ground
+      - enduring cold, hunger, or wounds
+      - swinging a heavy weapon
+
+  - key: finesse
+    display: Finesse
+    description: Agility, stealth, precision, reflexes, delicate work.
+    examples:
+      - moving silently
+      - picking a lock or a pocket
+      - striking a vital point
+      - threading a needle under pressure
+
+  - key: wits
+    display: Wits
+    description: Reasoning, perception, recall of lore, problem-solving.
+    examples:
+      - solving a cipher or puzzle
+      - noticing an inconsistency
+      - recalling history or forbidden knowledge
+      - piecing together a deception
+
+  - key: will
+    display: Will
+    description: Resolve, mystic focus, resistance to fear, control, or corruption.
+    examples:
+      - resisting a mind-effect or compulsion
+      - channeling a mystical power
+      - staring down something monstrous
+      - keeping composure in horror
+
+  - key: presence
+    display: Presence
+    description: Persuasion, deception, command, social force, bearing.
+    examples:
+      - negotiating a price or a favor
+      - intimidating a rival
+      - inspiring allies to hold the line
+      - convincingly lying
+
+  - key: shadow
+    display: Shadow
+    description: >
+      Witchsight, occult intuition, perception of the unnatural, corruption-touched
+      actions. Not only for witches — anyone with Shadow can sense the wrongness
+      of things.
+    examples:
+      - reading auras and spiritual taint
+      - sensing the presence of the unnatural
+      - performing or disrupting occult rituals
+      - navigating the symbolic logic of curses

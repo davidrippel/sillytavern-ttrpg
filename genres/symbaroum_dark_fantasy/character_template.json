@@ -1,0 +1,23 @@
+{
+  "name": "",
+  "concept": "",
+  "attributes": {
+    "might": 0,
+    "finesse": 0,
+    "wits": 0,
+    "will": 0,
+    "presence": 0,
+    "shadow": 0
+  },
+  "abilities": [],
+  "equipment": [],
+  "state": {
+    "hp_current": 10,
+    "hp_max": 10,
+    "corruption_temporary": 0,
+    "corruption_permanent": 0,
+    "corruption_threshold": 5,
+    "conditions": []
+  },
+  "notes": ""
+}
