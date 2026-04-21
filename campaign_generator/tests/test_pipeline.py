@@ -3,14 +3,17 @@ from pathlib import Path
 import json
 import yaml
 
+from campaign_generator.llm import UsageStats
 from campaign_generator.llm import ReplayLLMClient
 from campaign_generator.paths import build_auto_campaign_dir_name, resolve_output_path
 from campaign_generator.pipeline import run_pipeline
 from campaign_generator.pipeline import _format_duration
 from campaign_generator.pipeline import _format_usage_summary
 from campaign_generator.placeholders import sanitize_text
-from campaign_generator.schemas import PlotSkeleton
+from campaign_generator.schemas import Clue, ClueGraph, ClueTarget, LocationCatalog, NPCRoster, PlotSkeleton
 from campaign_generator.stages.npcs import _extract_required_npc_names
+from campaign_generator.stages.clue_chains import _build_hybrid_fallback_clue_graph
+from campaign_generator.validation import validate_clue_graph
 
 
 def test_pipeline_replay_writes_outputs(tmp_path):
@@ -205,6 +208,229 @@ def test_replay_client_tracks_call_counts_without_usage_data():
 
 
 def test_usage_summary_formatter_includes_calls_tokens_and_cost():
-    client = ReplayLLMClient({})
-    client._record_usage({"prompt_tokens": 120, "completion_tokens": 30, "total_tokens": 150, "cost": 0.0125})
-    assert _format_usage_summary(client.usage_snapshot()) == "1 call, 150 tokens, 0.0125 credits"
+    assert _format_usage_summary(
+        UsageStats(calls=1, prompt_tokens=120, completion_tokens=30, total_tokens=150, cost=0.0125)
+    ) == "1 call, 150 tokens, 0.0125 credits"
+
+
+def test_hybrid_clue_fallback_preserves_valid_clues_and_synthesizes_missing_slots():
+    plot = PlotSkeleton.model_validate(
+        {
+            "acts": [
+                {
+                    "title": "Act One",
+                    "goal": "Start the investigation.",
+                    "beats": [
+                        "Find the hidden ledger.",
+                        "Reach the ruined tower.",
+                        "Confront the keeper.",
+                    ],
+                },
+                {
+                    "title": "Act Two",
+                    "goal": "Push deeper.",
+                    "beats": [
+                        "Follow the ritual marks.",
+                        "Break the sealed door.",
+                        "Learn the patron's bargain.",
+                    ],
+                },
+                {
+                    "title": "Act Three",
+                    "goal": "End the threat.",
+                    "beats": [
+                        "Survive the awakening.",
+                        "Choose who takes the relic.",
+                        "Escape the collapse.",
+                    ],
+                },
+            ],
+            "main_antagonist": {
+                "name": "Ivara Kelm",
+                "motivation": "Open the ruin.",
+                "secret": "She killed the courier.",
+                "relationship_to_protagonist": "{{user}} is an obstacle.",
+            },
+            "driving_mystery": "Who is feeding the ruin and why?",
+            "hook": "A dead courier leaves a trail.",
+            "escalation_arc": "A murder becomes a frontier conspiracy.",
+        }
+    )
+    npcs = NPCRoster.model_validate(
+        {
+            "npcs": [
+                {
+                    "name": "Maelin Voss",
+                    "role": "Factor",
+                    "physical_description": "Lean and watchful.",
+                    "speaking_style": "Measured.",
+                    "motivation": "Protect the guild.",
+                    "secret": "He signed false ledgers.",
+                    "relationships": [],
+                    "abilities": [],
+                    "act_presence": [],
+                },
+                {
+                    "name": "Sister Orsa",
+                    "role": "Priest",
+                    "physical_description": "Mud-stained robes.",
+                    "speaking_style": "Blunt.",
+                    "motivation": "Contain the ruin.",
+                    "secret": "She hid an old report.",
+                    "relationships": [],
+                    "abilities": [],
+                    "act_presence": [],
+                },
+                {
+                    "name": "Dren Halvek",
+                    "role": "Witness",
+                    "physical_description": "Thin and anxious.",
+                    "speaking_style": "Fast.",
+                    "motivation": "Stay alive.",
+                    "secret": "He touched the relic first.",
+                    "relationships": [],
+                    "abilities": [],
+                    "act_presence": [],
+                },
+                {
+                    "name": "Ivara Kelm",
+                    "role": "Surveyor",
+                    "physical_description": "Tall and pale.",
+                    "speaking_style": "Patient.",
+                    "motivation": "Open the ruin.",
+                    "secret": "She ordered the killing.",
+                    "relationships": [],
+                    "abilities": [],
+                    "act_presence": [],
+                },
+                {
+                    "name": "Odel Fen",
+                    "role": "Guide",
+                    "physical_description": "Heavy boots and a patched cloak.",
+                    "speaking_style": "Suspicious.",
+                    "motivation": "Protect the road.",
+                    "secret": "He once ferried contraband.",
+                    "relationships": [],
+                    "abilities": [],
+                    "act_presence": [],
+                },
+                {
+                    "name": "Archivist Serel",
+                    "role": "Scholar",
+                    "physical_description": "Ink-stained sleeves.",
+                    "speaking_style": "Precise.",
+                    "motivation": "Decode the ledger.",
+                    "secret": "Serel marked the dig site.",
+                    "relationships": [],
+                    "abilities": [],
+                    "act_presence": [],
+                },
+            ]
+        }
+    )
+    locations = LocationCatalog.model_validate(
+        {
+            "locations": [
+                {
+                    "name": "Sunken Watchtower",
+                    "type": "Ruin",
+                    "sensory_description": {"sight": "Black stone.", "sound": "Wind in broken arches."},
+                    "notable_features": ["Collapsed stairs."],
+                    "hidden_elements": ["A sealed crawlspace."],
+                    "npc_names": ["Maelin Voss"],
+                    "plot_beats": ["act1_beat1"],
+                },
+                {
+                    "name": "Frontier Waystation",
+                    "type": "Roadhouse",
+                    "sensory_description": {"sight": "Mud and lanternlight.", "smell": "Wet wool and ash."},
+                    "notable_features": ["A locked office."],
+                    "hidden_elements": ["Smuggler marks under the eaves."],
+                    "npc_names": ["Maelin Voss"],
+                    "plot_beats": ["act1_beat2"],
+                },
+                {
+                    "name": "Old Quarry",
+                    "type": "Excavation",
+                    "sensory_description": {"sight": "Broken cranes.", "sound": "Loose stone rattling."},
+                    "notable_features": ["A flooded trench."],
+                    "hidden_elements": ["An idol beneath the silt."],
+                    "npc_names": ["Maelin Voss"],
+                    "plot_beats": ["act1_beat3"],
+                },
+                {
+                    "name": "Ritual Cellar",
+                    "type": "Vault",
+                    "sensory_description": {"sight": "Rune-scratched walls.", "smell": "Wax and damp clay."},
+                    "notable_features": ["A black altar."],
+                    "hidden_elements": ["A hidden trapdoor."],
+                    "npc_names": ["Maelin Voss"],
+                    "plot_beats": ["act2_beat1"],
+                },
+                {
+                    "name": "Collapsed Shrine",
+                    "type": "Shrine",
+                    "sensory_description": {"sight": "Fractured idols.", "sound": "Dripping water."},
+                    "notable_features": ["A cracked bell."],
+                    "hidden_elements": ["A blood-marked niche."],
+                    "npc_names": ["Maelin Voss"],
+                    "plot_beats": ["act2_beat2"],
+                },
+            ]
+        }
+    )
+    candidate_graph = ClueGraph.model_validate(
+        {
+            "entry_clue_ids": ["kept_clue", "bad_clue"],
+            "clues": [
+                {
+                    "id": "kept_clue",
+                    "found_at_type": "location",
+                    "found_at": "Sunken Watchtower",
+                    "reveals": "A waterlogged page names the missing courier.",
+                    "points_to": [{"type": "beat", "value": "act1_beat1"}],
+                    "supports_beats": ["act1_beat1"],
+                },
+                {
+                    "id": "bad_clue",
+                    "found_at_type": "npc",
+                    "found_at": "Invented Smuggler",
+                    "reveals": "This clue should be dropped.",
+                    "points_to": [{"type": "beat", "value": "act1_beat2"}],
+                    "supports_beats": ["act1_beat2"],
+                },
+                {
+                    "id": "bad_clue_2",
+                    "found_at_type": "location",
+                    "found_at": "Invented Hideout",
+                    "reveals": "This clue should also be dropped.",
+                    "points_to": [{"type": "beat", "value": "act1_beat3"}],
+                    "supports_beats": ["act1_beat3"],
+                },
+                {
+                    "id": "bad_clue_3",
+                    "found_at_type": "npc",
+                    "found_at": "Invented Priest",
+                    "reveals": "Another invalid clue.",
+                    "points_to": [{"type": "beat", "value": "act2_beat1"}],
+                    "supports_beats": ["act2_beat1"],
+                },
+            ],
+        }
+    )
+
+    repaired_graph, preserved_count, synthetic_count = _build_hybrid_fallback_clue_graph(
+        plot=plot,
+        npcs=npcs,
+        locations=locations,
+        candidate_graph=candidate_graph,
+    )
+
+    errors = validate_clue_graph(plot, npcs, locations, repaired_graph)
+
+    assert preserved_count == 1
+    assert synthetic_count >= 1
+    assert not errors
+    kept = next(clue for clue in repaired_graph.clues if clue.id == "kept_clue")
+    assert kept.reveals == "A waterlogged page names the missing courier."
+    assert all(clue.id != "bad_clue" for clue in repaired_graph.clues)
