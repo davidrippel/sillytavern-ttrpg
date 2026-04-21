@@ -102,6 +102,19 @@ Managed by SillyTavern and the custom extension (see `04_EXTENSION_BRIEF.md`).
 
 No bundling, no conversion, no companion server. The pack on disk is the pack the extension uses.
 
+### GM character card setup (once, reused across all genres and campaigns)
+
+The GM is a regular SillyTavern character card you create manually, once. You never generate it from any tool; you never recreate it per campaign.
+
+1. In SillyTavern, create a new character. Name it something neutral like "GM" or "Narrator".
+2. Paste the base GM prompt (from `07_GM_BASE_PROMPT.md`, the prompt block) into the character card's system prompt field.
+3. Leave other fields minimal (optional: a simple first message like "What kind of character are you playing?").
+4. Save.
+
+That's it. The same card is used for every campaign and every genre. The pack-specific tone and mechanics reach the GM through the campaign lorebook (as the `__pack_gm_overlay` and `__pack_failure_moves` constant entries), not through the card itself — so the card never needs editing when you switch genres.
+
+See `07_GM_BASE_PROMPT.md` § "Creating the GM character card" for detail.
+
 ### Campaign creation (per campaign)
 
 1. Write a campaign seed YAML — specific themes, regions, antagonist archetypes, content to include/exclude. This is campaign-level choice, not genre-level.

@@ -40,3 +40,18 @@ Don't build everything upfront. Priority:
 5. **Pack generator** — when you want a second genre
 
 This gets you playing in days, and every piece of tooling is built against real friction.
+
+## First-time setup checklist
+
+The minimum path to actually playing a campaign, in order. Each item links to where the details live.
+
+- [ ] **Build the extension** (at minimum tiers 1.1 and 1.2). See `04_EXTENSION_BRIEF.md`. Install it into your SillyTavern instance.
+- [ ] **Create a pack directory.** Either hand-write one using `08_EXAMPLE_PACK_SYMBAROUM.md` as a template and `06_PACK_AUTHORING_GUIDE.md` as reference, or build the pack generator (`05_PACK_GENERATOR_BRIEF.md`) and run it. Either way, end state is a directory like `genres/symbaroum_dark_fantasy/` with the files listed in `02_GENRE_PACK_SPEC.md`.
+- [ ] **Load the pack into the extension.** In SillyTavern, open the extension's settings panel, click "Load pack", pick the pack directory. Verify the confirmation shows the expected display name and version.
+- [ ] **Create the GM character card.** In SillyTavern, create a new character, paste the base prompt from `07_GM_BASE_PROMPT.md` into its system prompt field, save. This is done once; the same card is reused across every genre and campaign. See `07_GM_BASE_PROMPT.md` § "Creating the GM character card".
+- [ ] **Generate a campaign** (or hand-build one). Build the campaign generator (`03_CAMPAIGN_GENERATOR_BRIEF.md`) and run it against your pack, or hand-build a minimal lorebook for your first session. Either way, end state is a `campaign_lorebook.json`, an `opening_hook.txt`, and an `initial_authors_note.txt`.
+- [ ] **Start a chat.** Create a new chat with the GM character. Import the campaign lorebook and attach it to the chat. Paste the initial Author's Note. Create your player character via the extension's sheet UI.
+- [ ] **Play.** Read the opening hook. Respond in character. The GM reads the base prompt from its card, the genre overlay and failure moves from the lorebook, the campaign bible and current act from the lorebook, the Author's Note, and your character sheet — all automatically.
+
+Everything else (canon detection, Author's Note automation, backup bundles, the pack generator, a second genre) can be built later, as friction appears.
+
