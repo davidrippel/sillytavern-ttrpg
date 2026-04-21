@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from .env import load_project_dotenv
 
@@ -16,6 +17,14 @@ STAGE_MAX_RETRIES_FALLBACK = 3
 def _get_env_str(name: str, fallback: str) -> str:
     load_project_dotenv()
     return os.getenv(name, fallback)
+
+
+def _get_env_optional_str(name: str) -> str | None:
+    load_project_dotenv()
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return None
+    return value
 
 
 def _get_env_int(name: str, fallback: int) -> int:
@@ -60,3 +69,13 @@ def get_openrouter_max_retries() -> int:
 
 def get_stage_max_retries() -> int:
     return _get_env_int("CAMPAIGN_GENERATOR_STAGE_MAX_RETRIES", STAGE_MAX_RETRIES_FALLBACK)
+
+
+def get_genres_base_dir() -> Path | None:
+    value = _get_env_optional_str("CAMPAIGN_GENERATOR_GENRES_BASE_DIR")
+    return Path(value).expanduser().resolve() if value else None
+
+
+def get_campaigns_base_dir() -> Path | None:
+    value = _get_env_optional_str("CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR")
+    return Path(value).expanduser().resolve() if value else None

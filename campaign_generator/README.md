@@ -37,6 +37,14 @@ python -m campaign_generator \
 
 6. Read `opening_hook.txt` and `initial_authors_note.txt`. Keep `spoilers/full_campaign.md` closed until after play.
 
+If `CAMPAIGN_GENERATOR_GENRES_BASE_DIR` is set in `.env`, `--genre` can also be just the pack name:
+
+```bash
+python -m campaign_generator \
+    --genre symbaroum_dark_fantasy \
+    --seed my_seed.yaml
+```
+
 ## Seed Template
 
 Generate a blank annotated seed file:
@@ -59,12 +67,22 @@ Successful runs write:
 - `stages/calls.jsonl`
 - `stages/validation_log.txt`
 
+If `--output` is omitted and `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set, the generator creates a campaign directory automatically using:
+
+- current timestamp
+- pack name
+- seed filename stem
+
+Example: `20260421_153000_symbaroum_dark_fantasy_my_seed`
+
 ## Environment
 
 - `OPENROUTER_API_KEY` is read automatically from `.env` if present.
 - Default model comes from `CAMPAIGN_GENERATOR_DEFAULT_MODEL` in `.env`.
 - `--dry-run` uses `CAMPAIGN_GENERATOR_DRY_RUN_MODEL` from `.env`.
 - Default temperature comes from `CAMPAIGN_GENERATOR_DEFAULT_TEMPERATURE`.
+- `CAMPAIGN_GENERATOR_GENRES_BASE_DIR` can provide the default root for `--genre`.
+- `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` can provide the default root for generated campaign outputs.
 - Optional transport/retry settings can also come from `.env`: `OPENROUTER_API_URL`, `OPENROUTER_TIMEOUT_SECONDS`, `OPENROUTER_MAX_RETRIES`, and `CAMPAIGN_GENERATOR_STAGE_MAX_RETRIES`.
 
 ## Model Precedence

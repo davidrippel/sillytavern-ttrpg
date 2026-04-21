@@ -3,6 +3,7 @@ from pathlib import Path
 import yaml
 
 from campaign_generator.llm import ReplayLLMClient
+from campaign_generator.paths import build_auto_campaign_dir_name, resolve_output_path
 from campaign_generator.pipeline import run_pipeline
 
 
@@ -39,3 +40,27 @@ def test_pipeline_replay_writes_outputs(tmp_path):
     assert (output_dir / "stages" / "branches.json").exists()
     assert (output_dir / "stages" / "calls.jsonl").exists()
     assert (output_dir / "stages" / "validation_log.txt").exists()
+
+
+def test_auto_campaign_dir_name_is_predictable():
+    from datetime import datetime
+
+    actual = build_auto_campaign_dir_name(
+        pack_name="symbaroum_dark_fantasy",
+        seed_path="my_seed.yaml",
+        now=datetime(2026, 4, 21, 15, 30, 0),
+    )
+    assert actual == "20260421_153000_symbaroum_dark_fantasy_my_seed"
+
+
+def test_output_defaults_to_campaigns_base_dir(monkeypatch, tmp_path):
+    from datetime import datetime
+
+    monkeypatch.setenv("CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR", str(tmp_path / "campaigns"))
+    resolved = resolve_output_path(
+        output=None,
+        pack_name="symbaroum_dark_fantasy",
+        seed_path="my_seed.yaml",
+        now=datetime(2026, 4, 21, 15, 30, 0),
+    )
+    assert resolved == (tmp_path / "campaigns" / "20260421_153000_symbaroum_dark_fantasy_my_seed").resolve()
