@@ -7,3 +7,4 @@ Requirements:
 - cite only abilities that exist in the supplied ability catalog
 - give the NPC a distinct voice, motivation, secret, and relationships
 - vary demographics, role, and agenda from existing NPCs
+- whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name

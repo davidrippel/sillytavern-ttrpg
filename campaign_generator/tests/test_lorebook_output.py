@@ -14,10 +14,11 @@ def _load_fixture(name: str):
 
 def test_lorebook_contains_pack_entries():
     pack = load_pack("genres/symbaroum_dark_fantasy")
+    plot = PlotSkeleton.model_validate(_load_fixture("plot_skeleton"))
     lorebook = assemble_lorebook(
         pack=pack,
         premise=PremiseDocument.model_validate(_load_fixture("premise")),
-        plot=PlotSkeleton.model_validate(_load_fixture("plot_skeleton")),
+        plot=plot,
         factions=FactionSet.model_validate(_load_fixture("factions")),
         npcs=NPCRoster.model_validate({"npcs": [_load_fixture(f"npc_{index}") for index in range(1, 7)]}),
         locations=LocationCatalog.model_validate({"locations": [_load_fixture(f"location_{index}") for index in range(1, 6)]}),
@@ -28,3 +29,7 @@ def test_lorebook_contains_pack_entries():
     assert "__pack_gm_overlay" in comments
     assert "__pack_failure_moves" in comments
     assert "__pack_reference" in comments
+    current_act = next(entry for entry in lorebook["entries"] if entry["comment"] == "Current Act")
+    assert "Act 1:" in current_act["content"]
+    assert "1.1 Recover the ferryman's satchel" in current_act["content"]
+    assert plot.acts[0].beats[0].id == "act1_beat1"

@@ -7,3 +7,4 @@ Requirements:
 - no clue graph details
 - no later-act spoilers
 - read like the only pre-play document the player sees
+- whenever referring to the player character, use second person or the exact placeholder `{{user}}`; never invent a protagonist name

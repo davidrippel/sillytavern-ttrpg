@@ -1,10 +1,12 @@
 from pathlib import Path
 
+import json
 import yaml
 
 from campaign_generator.llm import ReplayLLMClient
 from campaign_generator.paths import build_auto_campaign_dir_name, resolve_output_path
 from campaign_generator.pipeline import run_pipeline
+from campaign_generator.placeholders import sanitize_text
 
 
 def test_pipeline_replay_writes_outputs(tmp_path):
@@ -45,6 +47,19 @@ def test_pipeline_replay_writes_outputs(tmp_path):
     assert (output_dir / "partials" / "npcs.partial.json").exists()
     assert (output_dir / "partials" / "locations.partial.json").exists()
     assert (output_dir / "partials" / "clue_chains.partial.json").exists()
+    plot_payload = json.loads((output_dir / "stages" / "plot_skeleton.json").read_text(encoding="utf-8"))
+    locations_payload = json.loads((output_dir / "stages" / "locations.json").read_text(encoding="utf-8"))
+    clues_payload = json.loads((output_dir / "stages" / "clue_chains.json").read_text(encoding="utf-8"))
+    assert plot_payload["acts"][0]["beats"][0]["id"] == "act1_beat1"
+    assert plot_payload["acts"][0]["beats"][0]["rendered"] == "1.1 Recover the ferryman's satchel"
+    assert "plot_beats_detail" in locations_payload["locations"][0]
+    assert clues_payload["clues"][0]["supports_beats_detail"][0]["id"] == "act1_beat1"
+
+
+def test_protagonist_name_sanitizer_uses_user_placeholder():
+    text = "Valeria meets the protagonist. Valeria's mentor warns the player character."
+    sanitized = sanitize_text(text, protagonist_names={"Valeria"})
+    assert sanitized == "{{user}} meets {{user}}. {{user}}'s mentor warns {{user}}."
 
 
 def test_auto_campaign_dir_name_is_predictable():

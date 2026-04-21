@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -21,10 +23,37 @@ class Antagonist(BaseModel):
     relationship_to_protagonist: str
 
 
+class Beat(BaseModel):
+    id: str | None = None
+    text: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_string(cls, value):
+        if isinstance(value, str):
+            return {"text": value}
+        return value
+
+    @property
+    def label(self) -> str | None:
+        if not self.id:
+            return None
+        match = re.fullmatch(r"act(\d+)_beat(\d+)", self.id)
+        if not match:
+            return self.id
+        return f"{match.group(1)}.{match.group(2)}"
+
+    @property
+    def rendered(self) -> str:
+        label = self.label
+        return f"{label} {self.text}" if label else self.text
+
+
 class ActOutline(BaseModel):
+    act_number: int | None = None
     title: str
     goal: str
-    beats: list[str] = Field(min_length=3, max_length=5)
+    beats: list[Beat] = Field(min_length=3, max_length=5)
 
 
 class PlotSkeleton(BaseModel):
@@ -33,6 +62,35 @@ class PlotSkeleton(BaseModel):
     driving_mystery: str
     hook: str
     escalation_arc: str
+
+    @model_validator(mode="after")
+    def assign_beat_ids(self) -> "PlotSkeleton":
+        for act_index, act in enumerate(self.acts, start=1):
+            act.act_number = act_index
+            for beat_index, beat in enumerate(act.beats, start=1):
+                beat.id = f"act{act_index}_beat{beat_index}"
+        return self
+
+    def all_beats(self) -> list[Beat]:
+        return [beat for act in self.acts for beat in act.beats]
+
+    def beat_id_to_text(self) -> dict[str, str]:
+        return {beat.id: beat.text for beat in self.all_beats() if beat.id is not None}
+
+    def beat_text_to_id(self) -> dict[str, str]:
+        return {beat.text: beat.id for beat in self.all_beats() if beat.id is not None}
+
+    def format_beat_reference(self, value: str) -> str:
+        id_to_text = self.beat_id_to_text()
+        text_to_id = self.beat_text_to_id()
+        if value in id_to_text:
+            beat = Beat(id=value, text=id_to_text[value])
+            return beat.rendered
+        if value in text_to_id:
+            beat_id = text_to_id[value]
+            beat = Beat(id=beat_id, text=value)
+            return beat.rendered
+        return value
 
 
 class Faction(BaseModel):

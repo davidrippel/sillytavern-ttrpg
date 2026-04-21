@@ -7,3 +7,4 @@ Requirements:
 - each branch follows an if-then form
 - later-act consequences must be explicit
 - references must resolve to existing factions, NPCs, clues, or locations
+- whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name

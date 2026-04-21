@@ -8,9 +8,11 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from .artifacts import serialize_clue_graph, serialize_location_catalog, serialize_plot_skeleton
 from .llm import LLMClient, OpenRouterClient
 from .lorebook import assemble_lorebook
 from .pack import GenrePack, load_pack
+from .placeholders import infer_protagonist_name_candidates, sanitize_model
 from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
 from .seed import LoadedSeed, load_seed
 from .validation import ValidationLog, validate_cross_stage
@@ -189,6 +191,8 @@ def run_pipeline(
             validation_log=validation_log,
         ),
     )
+    premise = sanitize_model(premise)
+    _write_json(_stage_cache_path(stages_dir, "premise"), premise.model_dump())
 
     plot = _run_or_load_stage(
         name="plot_skeleton",
@@ -207,6 +211,9 @@ def run_pipeline(
             validation_log=validation_log,
         ),
     )
+    protagonist_names = infer_protagonist_name_candidates(plot.hook, *premise.paragraphs)
+    plot = sanitize_model(plot, protagonist_names=protagonist_names)
+    _write_json(_stage_cache_path(stages_dir, "plot_skeleton"), serialize_plot_skeleton(plot))
 
     opening_hook_draft = opening_hook_stage.render(pack, premise, plot, loaded_seed.resolved)
     _write_text(partials_dir / "opening_hook.partial.txt", opening_hook_draft.render())
@@ -235,6 +242,8 @@ def run_pipeline(
             validation_log=validation_log,
         ),
     )
+    factions = sanitize_model(factions, protagonist_names=protagonist_names)
+    _write_json(_stage_cache_path(stages_dir, "factions"), factions.model_dump())
 
     npcs = _run_or_load_stage(
         name="npcs",
@@ -257,6 +266,8 @@ def run_pipeline(
             snapshot_path=partials_dir / "npcs.partial.json",
         ),
     )
+    npcs = sanitize_model(npcs, protagonist_names=protagonist_names)
+    _write_json(_stage_cache_path(stages_dir, "npcs"), npcs.model_dump())
 
     locations = _run_or_load_stage(
         name="locations",
@@ -279,6 +290,8 @@ def run_pipeline(
             snapshot_path=partials_dir / "locations.partial.json",
         ),
     )
+    locations = sanitize_model(locations, protagonist_names=protagonist_names)
+    _write_json(_stage_cache_path(stages_dir, "locations"), serialize_location_catalog(locations, plot))
 
     clue_graph = _run_or_load_stage(
         name="clue_chains",
@@ -299,8 +312,11 @@ def run_pipeline(
             temperature=temperature,
             validation_log=validation_log,
             snapshot_path=partials_dir / "clue_chains.partial.json",
+            progress_callback=progress_callback,
         ),
     )
+    clue_graph = sanitize_model(clue_graph, protagonist_names=protagonist_names)
+    _write_json(_stage_cache_path(stages_dir, "clue_chains"), serialize_clue_graph(clue_graph, plot))
 
     branches = _run_or_load_stage(
         name="branches",
@@ -323,6 +339,8 @@ def run_pipeline(
             validation_log=validation_log,
         ),
     )
+    branches = sanitize_model(branches, protagonist_names=protagonist_names)
+    _write_json(_stage_cache_path(stages_dir, "branches"), branches.model_dump())
 
     cross_stage_errors = validate_cross_stage(pack, plot, factions, npcs, locations, clue_graph, branches)
     if cross_stage_errors:

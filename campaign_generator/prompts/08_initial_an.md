@@ -6,3 +6,4 @@ Requirements:
 - include current act, pending beats, active threads, recent beats, reminders
 - recent beats should be empty at campaign start
 - do not reveal later-act secrets
+- whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name

@@ -22,7 +22,9 @@ def validate_clue_graph(plot: PlotSkeleton, npcs: NPCRoster, locations: Location
     clue_ids = {clue.id for clue in clue_graph.clues}
     npc_names = {npc.name for npc in npcs.npcs}
     location_names = {location.name for location in locations.locations}
-    beat_names = {beat for act in plot.acts for beat in act.beats}
+    beat_ids = set(plot.beat_id_to_text())
+    beat_text_to_id = plot.beat_text_to_id()
+    beat_names = beat_ids | set(beat_text_to_id)
 
     for entry_id in clue_graph.entry_clue_ids:
         if entry_id not in clue_ids:
@@ -72,11 +74,14 @@ def validate_clue_graph(plot: PlotSkeleton, npcs: NPCRoster, locations: Location
     for clue in clue_graph.clues:
         for target in clue.points_to:
             if target.type == "beat":
-                beat_path_counts[target.value] += 1
+                beat_path_counts[beat_text_to_id.get(target.value, target.value)] += 1
 
-    weak_beats = sorted(beat for beat in beat_names if beat_path_counts[beat] < 2)
+    weak_beats = sorted(beat_id for beat_id in beat_ids if beat_path_counts[beat_id] < 2)
     if weak_beats:
-        errors.append(f"major beats missing two clue paths: {weak_beats}")
+        errors.append(
+            "major beats missing two clue paths: "
+            + str([plot.format_beat_reference(beat_id) for beat_id in weak_beats])
+        )
 
     return errors
 
@@ -105,7 +110,9 @@ def validate_cross_stage(
             if relationship.name not in npc_names and relationship.name != npc.name:
                 errors.append(f"NPC {npc.name} references unknown related NPC {relationship.name!r}")
 
-    all_beats = {beat for act in plot.acts for beat in act.beats}
+    beat_ids = set(plot.beat_id_to_text())
+    beat_text_to_id = plot.beat_text_to_id()
+    all_beats = beat_ids | set(beat_text_to_id)
     for location in locations.locations:
         for npc_name in location.npc_names:
             if npc_name not in npc_names:

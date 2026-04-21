@@ -102,7 +102,14 @@ def assemble_lorebook(
     uid += 1
 
     act_one = plot.acts[0]
-    current_act = "\n".join([f"Act 1: {act_one.title}", f"Goal: {act_one.goal}", "Beats:", *(f"- {beat}" for beat in act_one.beats)])
+    current_act = "\n".join(
+        [
+            f"Act {act_one.act_number}: {act_one.title}",
+            f"Goal: {act_one.goal}",
+            "Beats:",
+            *(f"- {beat.rendered}" for beat in act_one.beats),
+        ]
+    )
     entries.append(_entry(uid, comment="Current Act", content=current_act, keys=[], constant=True, order=850))
     uid += 1
 
@@ -180,12 +187,16 @@ def assemble_lorebook(
         uid += 1
 
     for clue in clue_graph.clues:
+        rendered_targets = []
+        for target in clue.points_to:
+            value = plot.format_beat_reference(target.value) if target.type == "beat" else target.value
+            rendered_targets.append(f"- {target.type}: {value}")
         content = "\n".join(
             [
                 f"Found at: {clue.found_at_type} {clue.found_at}",
                 f"Reveals: {clue.reveals}",
                 "Points to:",
-                *(f"- {target.type}: {target.value}" for target in clue.points_to),
+                *rendered_targets,
             ]
         )
         entries.append(

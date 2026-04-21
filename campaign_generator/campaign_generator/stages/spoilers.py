@@ -30,7 +30,7 @@ def render(
                 f"### Act {index}: {act.title}",
                 f"Goal: {act.goal}",
                 "Beats:",
-                *(f"- {beat}" for beat in act.beats),
+                *(f"- {beat.rendered}" for beat in act.beats),
                 "",
             ]
         )
@@ -76,7 +76,10 @@ def render(
         lines.append(f"Found at: {clue.found_at_type} {clue.found_at}")
         lines.append(f"Reveals: {clue.reveals}")
         lines.append("Points to:")
-        lines.extend(f"- {target.type}: {target.value}" for target in clue.points_to)
+        lines.extend(
+            f"- {target.type}: {plot.format_beat_reference(target.value) if target.type == 'beat' else target.value}"
+            for target in clue.points_to
+        )
         lines.append("")
 
     lines.append("## Branches")

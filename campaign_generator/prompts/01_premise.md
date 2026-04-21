@@ -8,3 +8,4 @@ Requirements:
 - tone statement specialized for this campaign
 - 3-5 thematic pillars
 - no plot spoilers beyond broad setup
+- whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name
