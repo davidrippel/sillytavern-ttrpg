@@ -33,6 +33,20 @@ def build_auto_campaign_dir_name(*, pack_name: str, seed_path: str | Path, now: 
     return f"{timestamp}_{pack_slug}_{seed_stem}"
 
 
+def _next_available_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+
+    parent = path.parent
+    stem = path.name
+    counter = 1
+    while True:
+        candidate = parent / f"{stem}_{counter}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
 def resolve_output_path(
     *,
     output: str | Path | None,
@@ -41,7 +55,15 @@ def resolve_output_path(
     now: datetime | None = None,
 ) -> Path:
     if output is not None:
-        return Path(output).resolve()
+        output_path = Path(output)
+        if output_path.is_absolute():
+            return _next_available_path(output_path.resolve())
+
+        base_dir = get_campaigns_base_dir()
+        if base_dir is not None:
+            return _next_available_path((base_dir / output_path).resolve())
+
+        return _next_available_path(output_path.resolve())
 
     base_dir = get_campaigns_base_dir()
     if base_dir is None:
@@ -49,4 +71,5 @@ def resolve_output_path(
             "--output was not provided and CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR is not set"
         )
 
-    return (base_dir / build_auto_campaign_dir_name(pack_name=pack_name, seed_path=seed_path, now=now)).resolve()
+    auto_name = build_auto_campaign_dir_name(pack_name=pack_name, seed_path=seed_path, now=now)
+    return _next_available_path((base_dir / auto_name).resolve())

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+from pathlib import Path
 
 from ..llm import LLMClient, generate_structured
 from ..schemas import FactionSet, Location, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
@@ -9,6 +11,11 @@ from ..validation import ValidationLog
 
 
 PROMPT_FILE = "05_location.md"
+
+
+def _write_snapshot(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def run(
@@ -23,11 +30,15 @@ def run(
     model: str,
     temperature: float,
     validation_log: ValidationLog,
+    progress_callback: Callable[[str], None] | None = None,
+    snapshot_path: Path | None = None,
 ) -> LocationCatalog:
     target_count = seed.num_locations or 8
     catalog: list[Location] = []
     all_beats = [beat for act in plot.acts for beat in act.beats]
     for index in range(target_count):
+        if progress_callback is not None:
+            progress_callback(f"Generating location {index + 1}/{target_count}")
         context = {
             "premise": premise.model_dump(),
             "plot": plot.model_dump(),
@@ -49,4 +60,8 @@ def run(
             validation_log=validation_log,
         )
         catalog.append(location)
+        if snapshot_path is not None:
+            _write_snapshot(snapshot_path, {"locations": [item.model_dump() for item in catalog]})
+        if progress_callback is not None:
+            progress_callback(f"Completed location {index + 1}/{target_count}: {location.name}")
     return LocationCatalog.model_validate({"locations": [location.model_dump() for location in catalog]})

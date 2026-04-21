@@ -32,7 +32,7 @@ cp .env.example .env
 python -m campaign_generator \
     --genre genres/symbaroum_dark_fantasy/ \
     --seed my_seed.yaml \
-    --output ../campaigns/my_first_campaign/
+    --output ./campaigns/my_first_campaign/
 ```
 
 6. Read `opening_hook.txt` and `initial_authors_note.txt`. Keep `spoilers/full_campaign.md` closed until after play.

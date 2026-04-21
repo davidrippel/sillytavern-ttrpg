@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -16,6 +17,11 @@ load_project_dotenv()
 
 app = typer.Typer(add_completion=False)
 console = Console()
+
+
+def _progress(message: str) -> None:
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    console.print(f"[{timestamp}] {message}")
 
 
 @app.callback(invoke_without_command=True)
@@ -56,6 +62,7 @@ def main(
         dry_run=dry_run,
         random_seed=random_seed,
         stages=stages,
+        progress_callback=_progress,
     )
     console.print(f"Campaign written to {result.output_dir}")
 

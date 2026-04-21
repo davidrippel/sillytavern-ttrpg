@@ -40,6 +40,11 @@ def test_pipeline_replay_writes_outputs(tmp_path):
     assert (output_dir / "stages" / "branches.json").exists()
     assert (output_dir / "stages" / "calls.jsonl").exists()
     assert (output_dir / "stages" / "validation_log.txt").exists()
+    assert (output_dir / "partials" / "opening_hook.partial.txt").exists()
+    assert (output_dir / "partials" / "initial_authors_note.partial.txt").exists()
+    assert (output_dir / "partials" / "npcs.partial.json").exists()
+    assert (output_dir / "partials" / "locations.partial.json").exists()
+    assert (output_dir / "partials" / "clue_chains.partial.json").exists()
 
 
 def test_auto_campaign_dir_name_is_predictable():
@@ -64,3 +69,42 @@ def test_output_defaults_to_campaigns_base_dir(monkeypatch, tmp_path):
         now=datetime(2026, 4, 21, 15, 30, 0),
     )
     assert resolved == (tmp_path / "campaigns" / "20260421_153000_symbaroum_dark_fantasy_my_seed").resolve()
+
+
+def test_relative_output_uses_campaigns_base_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv("CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR", str(tmp_path / "campaigns"))
+    resolved = resolve_output_path(
+        output="my_first_campaign",
+        pack_name="symbaroum_dark_fantasy",
+        seed_path="my_seed.yaml",
+    )
+    assert resolved == (tmp_path / "campaigns" / "my_first_campaign").resolve()
+
+
+def test_output_name_gets_incremented_when_taken(monkeypatch, tmp_path):
+    campaigns_dir = tmp_path / "campaigns"
+    existing = campaigns_dir / "my_first_campaign"
+    existing.mkdir(parents=True)
+    monkeypatch.setenv("CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR", str(campaigns_dir))
+    resolved = resolve_output_path(
+        output="my_first_campaign",
+        pack_name="symbaroum_dark_fantasy",
+        seed_path="my_seed.yaml",
+    )
+    assert resolved == (campaigns_dir / "my_first_campaign_1").resolve()
+
+
+def test_auto_output_gets_incremented_when_taken(monkeypatch, tmp_path):
+    from datetime import datetime
+
+    campaigns_dir = tmp_path / "campaigns"
+    existing = campaigns_dir / "20260421_153000_symbaroum_dark_fantasy_my_seed"
+    existing.mkdir(parents=True)
+    monkeypatch.setenv("CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR", str(campaigns_dir))
+    resolved = resolve_output_path(
+        output=None,
+        pack_name="symbaroum_dark_fantasy",
+        seed_path="my_seed.yaml",
+        now=datetime(2026, 4, 21, 15, 30, 0),
+    )
+    assert resolved == (campaigns_dir / "20260421_153000_symbaroum_dark_fantasy_my_seed_1").resolve()

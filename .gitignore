@@ -24,3 +24,4 @@ htmlcov/
 # Project-local environment and cache files
 campaign_generator/.env
 campaign_generator/.venv/
+campaign_generator/campaigns/
