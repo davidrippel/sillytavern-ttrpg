@@ -83,6 +83,12 @@ def _write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _format_duration(duration_seconds: float) -> str:
+    if duration_seconds >= 60:
+        return f"{duration_seconds / 60:.1f}m"
+    return f"{duration_seconds:.1f}s"
+
+
 def _normalize_stage_selection(stage_arg: str) -> set[str]:
     if stage_arg == "all":
         return set(STAGE_MODELS)
@@ -122,7 +128,7 @@ def _run_or_load_stage(
     _write_json(cache_path, result.model_dump())
     if progress_callback is not None:
         duration = time.monotonic() - started_at
-        progress_callback(f"Completed stage: {name} ({duration:.1f}s)")
+        progress_callback(f"Completed stage: {name} ({_format_duration(duration)})")
     return result
 
 
@@ -386,6 +392,6 @@ def run_pipeline(
     _write_text(spoilers_dir / "full_campaign.md", spoilers)
     if progress_callback is not None:
         total_duration = time.monotonic() - started_at
-        progress_callback(f"Campaign generation finished ({total_duration:.1f}s)")
+        progress_callback(f"Campaign generation finished ({_format_duration(total_duration)})")
 
     return PipelineResult(output_dir=output_dir, pack=pack, seed=loaded_seed)

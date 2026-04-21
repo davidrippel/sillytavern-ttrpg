@@ -6,6 +6,7 @@ import yaml
 from campaign_generator.llm import ReplayLLMClient
 from campaign_generator.paths import build_auto_campaign_dir_name, resolve_output_path
 from campaign_generator.pipeline import run_pipeline
+from campaign_generator.pipeline import _format_duration
 from campaign_generator.placeholders import sanitize_text
 from campaign_generator.schemas import PlotSkeleton
 from campaign_generator.stages.npcs import _extract_required_npc_names
@@ -177,3 +178,9 @@ def test_required_npc_names_include_plot_critical_named_characters():
     assert "Sister Anya" in required_names
     assert "Foreman Borin" in required_names
     assert "Brother Tarvos" in required_names
+
+
+def test_duration_formatter_uses_minutes_after_sixty_seconds():
+    assert _format_duration(59.9) == "59.9s"
+    assert _format_duration(60.0) == "1.0m"
+    assert _format_duration(125.2) == "2.1m"
