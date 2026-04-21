@@ -18,6 +18,7 @@ A design and build bundle for running endless solo tabletop RPG campaigns in Sil
 6. **`06_PACK_AUTHORING_GUIDE.md`** — reference for humans (or LLMs) writing packs by hand.
 7. **`07_GM_BASE_PROMPT.md`** — the engine-level GM system prompt.
 8. **`08_EXAMPLE_PACK_SYMBAROUM.md`** — a complete, illustrative Symbaroum-flavored dark fantasy pack.
+9. **`09_SEED_FORMAT.md`** — the campaign seed format reference (what you write to generate a campaign).
 
 ## Recommended reading order
 
@@ -49,7 +50,7 @@ The minimum path to actually playing a campaign, in order. Each item links to wh
 - [ ] **Create a pack directory.** Either hand-write one using `08_EXAMPLE_PACK_SYMBAROUM.md` as a template and `06_PACK_AUTHORING_GUIDE.md` as reference, or build the pack generator (`05_PACK_GENERATOR_BRIEF.md`) and run it. Either way, end state is a directory like `genres/symbaroum_dark_fantasy/` with the files listed in `02_GENRE_PACK_SPEC.md`.
 - [ ] **Load the pack into the extension.** In SillyTavern, open the extension's settings panel, click "Load pack", pick the pack directory. Verify the confirmation shows the expected display name and version.
 - [ ] **Create the GM character card.** In SillyTavern, create a new character, paste the base prompt from `07_GM_BASE_PROMPT.md` into its system prompt field, save. This is done once; the same card is reused across every genre and campaign. See `07_GM_BASE_PROMPT.md` § "Creating the GM character card".
-- [ ] **Generate a campaign** (or hand-build one). Build the campaign generator (`03_CAMPAIGN_GENERATOR_BRIEF.md`) and run it against your pack, or hand-build a minimal lorebook for your first session. Either way, end state is a `campaign_lorebook.json`, an `opening_hook.txt`, and an `initial_authors_note.txt`.
+- [ ] **Generate a campaign** (or hand-build one). Build the campaign generator (`03_CAMPAIGN_GENERATOR_BRIEF.md`) and run it against your pack. Fastest first run: `cp examples/seed_balanced.yaml my_seed.yaml`, edit a few fields, then run the generator. If you want full control or are targeting a custom pack, use `python -m campaign_generator --init-seed my_seed.yaml --genre <your_pack>` to get an annotated blank template, and consult `09_SEED_FORMAT.md` for field documentation. Either way, end state is a `campaign_lorebook.json`, an `opening_hook.txt`, and an `initial_authors_note.txt`.
 - [ ] **Start a chat.** Create a new chat with the GM character. Import the campaign lorebook and attach it to the chat. Paste the initial Author's Note. Create your player character via the extension's sheet UI.
 - [ ] **Play.** Read the opening hook. Respond in character. The GM reads the base prompt from its card, the genre overlay and failure moves from the lorebook, the campaign bible and current act from the lorebook, the Author's Note, and your character sheet — all automatically.
 

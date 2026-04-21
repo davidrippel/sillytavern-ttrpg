@@ -40,6 +40,8 @@ Web search during development to confirm: current OpenRouter API shape, current 
 
 ## CLI interface
 
+### Primary mode: generate a campaign
+
 ```
 python -m campaign_generator \
     --genre genres/symbaroum_dark_fantasy/ \
@@ -58,7 +60,83 @@ Flags:
 - `--dry-run` — use a cheap model (e.g. `anthropic/claude-haiku-4.5`) for the whole pipeline
 - `--random-seed INT` — reproducibility seed
 
-Seed file (`my_seed.yaml`) extends the pack's `generator_seed.yaml`. Any fields specified here override the pack defaults. The user's seed is merged with the pack's seed, with user values winning.
+Seed file extends the pack's `generator_seed.yaml`. Any fields specified in the seed override the pack defaults, except `themes_exclude` (which merges) and `strictness` (which merges field-by-field). The full seed format is specified in `09_SEED_FORMAT.md`.
+
+### Secondary mode: generate a blank seed template
+
+```
+python -m campaign_generator \
+    --init-seed my_seed.yaml \
+    --genre genres/symbaroum_dark_fantasy/
+```
+
+Flags:
+- `--init-seed PATH` — output path for the generated seed template
+- `--genre PATH` (required) — path to a validated genre pack (used to populate pack-specific menus in comments)
+
+This mode produces a blank annotated YAML file with every seed field present, each commented out, each with inline documentation. The user uncomments and edits what they want to control; the rest falls through to pack defaults.
+
+The generated file must:
+- Include every field from the seed schema (see `09_SEED_FORMAT.md` for the complete list)
+- Have every optional field commented out (`# field: value`) with example values inline
+- Include the `genre` field uncommented and pre-filled with the target pack's `pack_name`
+- Include a comment at the top pointing to `09_SEED_FORMAT.md` for field documentation
+- For fields that reference pack-specific menus (`antagonist_archetypes_preferred`, possibly others), list the pack's available options as a comment pulled from that pack's `generator_seed.yaml`
+- Be a valid YAML file even when no fields are uncommented beyond `genre`
+
+Implementation: read the pack's `generator_seed.yaml` and `pack.yaml`, then write a templated YAML file with comments. Template structure lives in `campaign_generator/seed_template.py` or equivalent. Keep the template close to `09_SEED_FORMAT.md`'s structure so the documentation and the template stay synchronized.
+
+---
+
+## Shipped example seeds
+
+The repo must include a set of pre-written example seed files under `examples/`, targeting the Symbaroum example pack (`08_EXAMPLE_PACK_SYMBAROUM.md` rendered as a real pack directory). These are static files committed to the repo — not generated at runtime. Their purpose is to let a new user run the generator immediately, without having to understand the seed format first.
+
+Required example files, each a valid seed for the Symbaroum pack:
+
+### `examples/seed_minimal.yaml`
+
+Only the required `genre` field plus a single `campaign_pitch`. Demonstrates that most fields can be omitted and the generator still works, falling through to pack defaults. Target: 5-10 lines total.
+
+### `examples/seed_balanced.yaml`
+
+The recommended starting point for a user writing their first real seed. Includes `genre`, `campaign_pitch`, `themes_include`, `protagonist_archetype`, and `antagonist_archetypes_preferred`. Omits everything else. Target: 20-30 lines.
+
+This is the file most users will copy and edit. It should be the example most clearly documented and most carefully tuned — a user who copies this file, edits a few values, and runs the generator should get a good first campaign.
+
+### `examples/seed_maximum.yaml`
+
+A fully-specified seed covering every field documented in `09_SEED_FORMAT.md`. Includes specific `setting_anchors`, `protagonist_known_facts`, `opening_hook_seed`, `tone_modifiers`, structural fields (`num_acts`, `num_npcs`, etc.), and a worked `strictness` block. Target: 60-80 lines.
+
+This example is less for copying and more for reference — it shows what every field looks like filled in, so a user can see how a particular field is meant to be used before writing their own.
+
+### Content requirements for all three
+
+All three examples must:
+- Target the Symbaroum pack specifically (`genre: symbaroum_dark_fantasy`)
+- Be different campaigns — not minimal/balanced/maximum versions of the *same* campaign, which would make the maximum example redundant. Three distinct premises showcase the pack's range.
+- Pass seed validation against the example Symbaroum pack
+- Run end-to-end through the generator pipeline without errors (verified in tests)
+- Include a comment block at the top explaining what the example is, which tier of specificity it represents, and when to copy it
+
+### README integration
+
+The main `README.md` must include a "Quickstart" section using these examples. The flow shown should be:
+
+```
+cp examples/seed_balanced.yaml my_seed.yaml
+# edit my_seed.yaml
+python -m campaign_generator \
+    --genre genres/symbaroum_dark_fantasy/ \
+    --seed my_seed.yaml \
+    --output ./my_first_campaign/
+```
+
+Five steps from fresh clone to generated campaign. This is the priority user experience — the `--init-seed` mode is for users working with new/custom packs once they understand the format.
+
+### Tests
+
+A test must exist for each example file: load the example, validate against the example Symbaroum pack, assert validation passes. This prevents regressions where a schema change silently breaks a shipped example.
 
 ---
 
@@ -281,7 +359,9 @@ campaign_generator/
 ├── pyproject.toml
 ├── README.md
 ├── examples/
-│   └── seed.yaml                # example campaign seed
+│   ├── seed_minimal.yaml        # tier 1: genre + pitch only, ~5-10 lines
+│   ├── seed_balanced.yaml       # tier 2: recommended starting point, ~20-30 lines
+│   └── seed_maximum.yaml        # tier 3: every field worked, ~60-80 lines
 ├── prompts/
 │   ├── 01_premise.md
 │   ├── 02_plot_skeleton.md
@@ -296,9 +376,11 @@ campaign_generator/
 │   └── 11_spoilers.md
 ├── campaign_generator/
 │   ├── __init__.py
-│   ├── __main__.py              # CLI entry
+│   ├── __main__.py              # CLI entry (both --seed and --init-seed modes)
 │   ├── pack.py                  # pack loading and validation (importable by pack generator too)
 │   ├── schemas.py               # pydantic models for all stages
+│   ├── seed.py                  # seed loading, validation, pack-default merging
+│   ├── seed_template.py         # blank annotated seed file generation (--init-seed)
 │   ├── llm.py                   # OpenRouter client
 │   ├── pipeline.py              # stage orchestration
 │   ├── stages/                  # one module per stage
@@ -317,6 +399,8 @@ campaign_generator/
 └── tests/
     ├── test_pack_validation.py
     ├── test_schemas.py
+    ├── test_seed.py             # seed loading + pack merging tests
+    ├── test_seed_template.py    # blank-template generation tests
     ├── test_pipeline.py
     ├── fixtures/
     │   └── canned_llm_responses/  # for replay tests
@@ -349,3 +433,9 @@ Also include:
 - [ ] All cross-stage references resolve (no dangling NPC/location/ability names)
 - [ ] Tests pass with replay fixtures
 - [ ] `--dry-run` mode completes in reasonable time on a cheap model
+- [ ] `--init-seed` produces a valid YAML file against the example Symbaroum pack
+- [ ] The generated blank seed, after uncommenting only the `genre` field, runs through the full pipeline without validation errors (smoke test for pack-default fall-through)
+- [ ] Seed validation errors are clear: invalid `genre`, unknown `antagonist_archetypes_preferred`, contradictory themes include/exclude — each produces a specific message naming the field
+- [ ] All three shipped examples (`seed_minimal.yaml`, `seed_balanced.yaml`, `seed_maximum.yaml`) exist, validate against the Symbaroum pack, and describe three distinct campaigns
+- [ ] At least one of the three examples has been run through the full pipeline end-to-end with real LLM calls to confirm the resulting campaign is coherent (this is a manual check, not an automated test — the output gets eyeball-reviewed for tone, clue graph sanity, and NPC distinctness)
+- [ ] README quickstart section exists and demonstrates the `cp examples/seed_balanced.yaml` flow

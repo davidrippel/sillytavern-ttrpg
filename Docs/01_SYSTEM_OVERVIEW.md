@@ -117,7 +117,7 @@ See `07_GM_BASE_PROMPT.md` § "Creating the GM character card" for detail.
 
 ### Campaign creation (per campaign)
 
-1. Write a campaign seed YAML — specific themes, regions, antagonist archetypes, content to include/exclude. This is campaign-level choice, not genre-level.
+1. Write a campaign seed YAML — specific themes, regions, antagonist archetypes, content to include/exclude. This is campaign-level choice, not genre-level. See `09_SEED_FORMAT.md` for the full seed format; use `python -m campaign_generator --init-seed my_seed.yaml --genre genres/my_genre/` to get a blank annotated template.
 2. Run `python -m campaign_generator --genre genres/my_genre/ --seed my_seed.yaml --output my_campaign/`. The generator reads the pack for attribute names, tone, and GM overlay, then produces:
    - `opening_hook.txt` (the only file you read)
    - `campaign_lorebook.json` (imported into SillyTavern — includes the pack's GM overlay and failure moves as constant entries, plus a `__pack_reference` metadata entry)
@@ -195,11 +195,13 @@ The extension's job is to reduce maintenance load, not eliminate it. Silent auto
 6. `06_PACK_AUTHORING_GUIDE.md` — reference for humans (or LLMs) writing packs by hand
 7. `07_GM_BASE_PROMPT.md` — the engine-level GM system prompt
 8. `08_EXAMPLE_PACK_SYMBAROUM.md` — a complete illustrative pack, the Symbaroum-flavored dark fantasy pack
+9. `09_SEED_FORMAT.md` — the campaign seed format reference (what you write to generate a campaign)
 
 Read 01 and 02 first. Then, depending on what you're building next:
 - Building the extension? Read 04 and 07.
-- Building the campaign generator? Read 03 and 02 (for pack schema).
+- Building the campaign generator? Read 03, 02 (for pack schema), and 09 (for seed schema).
 - Building the pack generator? Read 05 and 06.
+- About to generate a campaign? Read 09 to know what to put in your seed.
 - Starting a campaign right now without any tooling? Read 07 and 08, use them as the basis for a hand-built first campaign.
 
 ---
