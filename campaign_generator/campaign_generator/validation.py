@@ -107,7 +107,7 @@ def validate_cross_stage(
             if ability not in pack.ability_names:
                 errors.append(f"NPC {npc.name} references unknown ability {ability!r}")
         for relationship in npc.relationships:
-            if relationship.name not in npc_names and relationship.name != npc.name:
+            if relationship.name not in npc_names and relationship.name not in {npc.name, "{{user}}"}:
                 errors.append(f"NPC {npc.name} references unknown related NPC {relationship.name!r}")
 
     beat_ids = set(plot.beat_id_to_text())

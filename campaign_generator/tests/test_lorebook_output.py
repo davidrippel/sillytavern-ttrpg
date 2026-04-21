@@ -4,6 +4,7 @@ from pathlib import Path
 from campaign_generator.lorebook import assemble_lorebook
 from campaign_generator.pack import load_pack
 from campaign_generator.schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
+from campaign_generator.validation import validate_cross_stage
 
 
 def _load_fixture(name: str):
@@ -33,3 +34,27 @@ def test_lorebook_contains_pack_entries():
     assert "Act 1:" in current_act["content"]
     assert "1.1 Recover the ferryman's satchel" in current_act["content"]
     assert plot.acts[0].beats[0].id == "act1_beat1"
+
+
+def test_cross_stage_validation_allows_user_relationship_placeholder():
+    pack = load_pack("genres/symbaroum_dark_fantasy")
+    plot = PlotSkeleton.model_validate(_load_fixture("plot_skeleton"))
+    factions = FactionSet.model_validate(_load_fixture("factions"))
+    npc_payloads = [_load_fixture(f"npc_{index}") for index in range(1, 7)]
+    npc_payloads[0]["relationships"].append(
+        {
+            "name": "{{user}}",
+            "description": "The player character is directly entangled in the conspiracy.",
+        }
+    )
+    errors = validate_cross_stage(
+        pack=pack,
+        plot=plot,
+        factions=factions,
+        npcs=NPCRoster.model_validate({"npcs": npc_payloads}),
+        locations=LocationCatalog.model_validate({"locations": [_load_fixture(f"location_{index}") for index in range(1, 6)]}),
+        clue_graph=ClueGraph.model_validate(_load_fixture("clue_chains")),
+        branches=BranchPlan.model_validate(_load_fixture("branches")),
+    )
+
+    assert not any("{{user}}" in error for error in errors)

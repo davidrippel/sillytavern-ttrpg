@@ -7,6 +7,8 @@ from campaign_generator.llm import ReplayLLMClient
 from campaign_generator.paths import build_auto_campaign_dir_name, resolve_output_path
 from campaign_generator.pipeline import run_pipeline
 from campaign_generator.placeholders import sanitize_text
+from campaign_generator.schemas import PlotSkeleton
+from campaign_generator.stages.npcs import _extract_required_npc_names
 
 
 def test_pipeline_replay_writes_outputs(tmp_path):
@@ -123,3 +125,55 @@ def test_auto_output_gets_incremented_when_taken(monkeypatch, tmp_path):
         now=datetime(2026, 4, 21, 15, 30, 0),
     )
     assert resolved == (campaigns_dir / "20260421_153000_symbaroum_dark_fantasy_my_seed_1").resolve()
+
+
+def test_required_npc_names_include_plot_critical_named_characters():
+    plot = PlotSkeleton.model_validate(
+        {
+            "acts": [
+                {
+                    "title": "Act One",
+                    "goal": "Reach the excavation.",
+                    "beats": [
+                        "{{user}} meets Sister Anya in town.",
+                        "{{user}} is hired by Lady Valeria Orsin.",
+                        "{{user}} clashes with Foreman Borin at the dig.",
+                    ],
+                },
+                {
+                    "title": "Act Two",
+                    "goal": "Uncover the truth.",
+                    "beats": [
+                        "Kaelen's notes point deeper underground.",
+                        "The corruption spreads through camp.",
+                        "Brother Tarvos guards the vault.",
+                    ],
+                },
+                {
+                    "title": "Act Three",
+                    "goal": "Survive the awakening.",
+                    "beats": [
+                        "The chamber opens.",
+                        "The Church intervenes.",
+                        "The forest answers.",
+                    ],
+                },
+            ],
+            "main_antagonist": {
+                "name": "Lady Valeria Orsin",
+                "motivation": "Claim the Heartwood Seed.",
+                "secret": "She ordered Foreman Borin to keep digging.",
+                "relationship_to_protagonist": "{{user}} is a useful outsider.",
+            },
+            "driving_mystery": "Why did Kaelen vanish beneath the dig?",
+            "hook": "A missing mentor and a sealed vault pull {{user}} into the frontier.",
+            "escalation_arc": "What begins as a local disappearance becomes a struggle over a buried intelligence.",
+        }
+    )
+
+    required_names = _extract_required_npc_names(plot)
+
+    assert "Lady Valeria Orsin" in required_names
+    assert "Sister Anya" in required_names
+    assert "Foreman Borin" in required_names
+    assert "Brother Tarvos" in required_names
