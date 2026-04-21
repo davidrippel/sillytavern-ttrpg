@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from .artifacts import serialize_clue_graph, serialize_location_catalog, serialize_plot_skeleton
-from .llm import LLMClient, OpenRouterClient
+from .llm import LLMClient, OpenRouterClient, UsageStats
 from .lorebook import assemble_lorebook
 from .pack import GenrePack, load_pack
 from .placeholders import infer_protagonist_name_candidates, sanitize_model
@@ -89,6 +89,11 @@ def _format_duration(duration_seconds: float) -> str:
     return f"{duration_seconds:.1f}s"
 
 
+def _format_usage_summary(usage: UsageStats) -> str:
+    call_label = "call" if usage.calls == 1 else "calls"
+    return f"{usage.calls} {call_label}, {usage.total_tokens} tokens, {usage.cost:.4f} credits"
+
+
 def _normalize_stage_selection(stage_arg: str) -> set[str]:
     if stage_arg == "all":
         return set(STAGE_MODELS)
@@ -114,6 +119,7 @@ def _run_or_load_stage(
     stages_dir: Path,
     runner,
     model_cls: type[BaseModel],
+    client: LLMClient,
     progress_callback: ProgressCallback | None = None,
 ) -> BaseModel:
     cache_path = _stage_cache_path(stages_dir, name)
@@ -124,11 +130,15 @@ def _run_or_load_stage(
     if progress_callback is not None:
         progress_callback(f"Starting stage: {name}")
     started_at = time.monotonic()
+    usage_started_at = client.usage_snapshot()
     result = runner()
     _write_json(cache_path, result.model_dump())
     if progress_callback is not None:
         duration = time.monotonic() - started_at
-        progress_callback(f"Completed stage: {name} ({_format_duration(duration)})")
+        stage_usage = client.usage_snapshot() - usage_started_at
+        progress_callback(
+            f"Completed stage: {name} ({_format_duration(duration)}, {_format_usage_summary(stage_usage)})"
+        )
     return result
 
 
@@ -186,6 +196,7 @@ def run_pipeline(
         selected=selected,
         stages_dir=stages_dir,
         model_cls=PremiseDocument,
+        client=client,
         progress_callback=progress_callback,
         runner=lambda: premise_stage.run(
             client=client,
@@ -205,6 +216,7 @@ def run_pipeline(
         selected=selected,
         stages_dir=stages_dir,
         model_cls=PlotSkeleton,
+        client=client,
         progress_callback=progress_callback,
         runner=lambda: plot_stage.run(
             client=client,
@@ -236,6 +248,7 @@ def run_pipeline(
         selected=selected,
         stages_dir=stages_dir,
         model_cls=FactionSet,
+        client=client,
         progress_callback=progress_callback,
         runner=lambda: factions_stage.run(
             client=client,
@@ -256,6 +269,7 @@ def run_pipeline(
         selected=selected,
         stages_dir=stages_dir,
         model_cls=NPCRoster,
+        client=client,
         progress_callback=progress_callback,
         runner=lambda: npcs_stage.run(
             client=client,
@@ -280,6 +294,7 @@ def run_pipeline(
         selected=selected,
         stages_dir=stages_dir,
         model_cls=LocationCatalog,
+        client=client,
         progress_callback=progress_callback,
         runner=lambda: locations_stage.run(
             client=client,
@@ -304,6 +319,7 @@ def run_pipeline(
         selected=selected,
         stages_dir=stages_dir,
         model_cls=ClueGraph,
+        client=client,
         progress_callback=progress_callback,
         runner=lambda: clue_chains_stage.run(
             client=client,
@@ -329,6 +345,7 @@ def run_pipeline(
         selected=selected,
         stages_dir=stages_dir,
         model_cls=BranchPlan,
+        client=client,
         progress_callback=progress_callback,
         runner=lambda: branches_stage.run(
             client=client,
@@ -392,6 +409,9 @@ def run_pipeline(
     _write_text(spoilers_dir / "full_campaign.md", spoilers)
     if progress_callback is not None:
         total_duration = time.monotonic() - started_at
-        progress_callback(f"Campaign generation finished ({_format_duration(total_duration)})")
+        progress_callback(
+            f"Campaign generation finished ({_format_duration(total_duration)}, "
+            f"{_format_usage_summary(client.usage_snapshot())})"
+        )
 
     return PipelineResult(output_dir=output_dir, pack=pack, seed=loaded_seed)

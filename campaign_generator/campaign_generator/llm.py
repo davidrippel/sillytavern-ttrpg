@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,24 @@ class LLMError(RuntimeError):
     pass
 
 
+@dataclass(frozen=True)
+class UsageStats:
+    calls: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cost: float = 0.0
+
+    def __sub__(self, other: "UsageStats") -> "UsageStats":
+        return UsageStats(
+            calls=self.calls - other.calls,
+            prompt_tokens=self.prompt_tokens - other.prompt_tokens,
+            completion_tokens=self.completion_tokens - other.completion_tokens,
+            total_tokens=self.total_tokens - other.total_tokens,
+            cost=self.cost - other.cost,
+        )
+
+
 def _extract_json(raw: str) -> Any:
     text = raw.strip()
     if text.startswith("```"):
@@ -37,6 +56,26 @@ def _extract_json(raw: str) -> Any:
 
 
 class LLMClient:
+    def __init__(self) -> None:
+        self._usage_totals = UsageStats()
+
+    def usage_snapshot(self) -> UsageStats:
+        return self._usage_totals
+
+    def _record_usage(self, usage: dict[str, Any] | None) -> None:
+        usage = usage or {}
+        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+        completion_tokens = int(usage.get("completion_tokens") or 0)
+        total_tokens = int(usage.get("total_tokens") or (prompt_tokens + completion_tokens))
+        cost = float(usage.get("cost") or 0.0)
+        self._usage_totals = UsageStats(
+            calls=self._usage_totals.calls + 1,
+            prompt_tokens=self._usage_totals.prompt_tokens + prompt_tokens,
+            completion_tokens=self._usage_totals.completion_tokens + completion_tokens,
+            total_tokens=self._usage_totals.total_tokens + total_tokens,
+            cost=self._usage_totals.cost + cost,
+        )
+
     def complete(
         self,
         *,
@@ -51,6 +90,7 @@ class LLMClient:
 
 class OpenRouterClient(LLMClient):
     def __init__(self, *, api_key: str | None = None, call_log_path: Path | None = None) -> None:
+        super().__init__()
         load_project_dotenv()
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         self.api_url = get_openrouter_api_url()
@@ -94,6 +134,7 @@ class OpenRouterClient(LLMClient):
             ],
         }
         response = self._call_api(payload)
+        self._record_usage(response.get("usage"))
         try:
             content = response["choices"][0]["message"]["content"]
         except (KeyError, IndexError) as exc:  # pragma: no cover - depends on provider error shape.
@@ -107,6 +148,7 @@ class OpenRouterClient(LLMClient):
                 "temperature": temperature,
                 "request_hash": hashlib.sha256((system_prompt + user_prompt).encode("utf-8")).hexdigest(),
                 "response": content,
+                "usage": response.get("usage"),
             }
             with self.call_log_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(log_line) + "\n")
@@ -115,6 +157,7 @@ class OpenRouterClient(LLMClient):
 
 class ReplayLLMClient(LLMClient):
     def __init__(self, responses: dict[str, Any]) -> None:
+        super().__init__()
         self.responses = {key: list(value) if isinstance(value, list) else [value] for key, value in responses.items()}
 
     @classmethod
@@ -139,6 +182,11 @@ class ReplayLLMClient(LLMClient):
         if not queue:
             raise LLMError(f"no replay response available for stage {stage_name!r}")
         next_response = queue.pop(0)
+        if isinstance(next_response, dict) and "usage" in next_response and "response" in next_response:
+            self._record_usage(next_response.get("usage"))
+            payload = next_response["response"]
+            return json.dumps(payload) if not isinstance(payload, str) else payload
+        self._record_usage(None)
         return json.dumps(next_response) if not isinstance(next_response, str) else next_response
 
 

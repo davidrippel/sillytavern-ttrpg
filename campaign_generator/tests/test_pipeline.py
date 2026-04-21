@@ -7,6 +7,7 @@ from campaign_generator.llm import ReplayLLMClient
 from campaign_generator.paths import build_auto_campaign_dir_name, resolve_output_path
 from campaign_generator.pipeline import run_pipeline
 from campaign_generator.pipeline import _format_duration
+from campaign_generator.pipeline import _format_usage_summary
 from campaign_generator.placeholders import sanitize_text
 from campaign_generator.schemas import PlotSkeleton
 from campaign_generator.stages.npcs import _extract_required_npc_names
@@ -184,3 +185,26 @@ def test_duration_formatter_uses_minutes_after_sixty_seconds():
     assert _format_duration(59.9) == "59.9s"
     assert _format_duration(60.0) == "1.0m"
     assert _format_duration(125.2) == "2.1m"
+
+
+def test_replay_client_tracks_call_counts_without_usage_data():
+    client = ReplayLLMClient({"premise": [{"paragraphs": ["a", "b"], "central_conflict": "x", "tone_statement": "y", "thematic_pillars": ["1", "2", "3"]}]})
+
+    client.complete(
+        stage_name="premise",
+        system_prompt="system",
+        user_prompt="user",
+        model="test-model",
+        temperature=0.0,
+    )
+
+    usage = client.usage_snapshot()
+    assert usage.calls == 1
+    assert usage.total_tokens == 0
+    assert usage.cost == 0.0
+
+
+def test_usage_summary_formatter_includes_calls_tokens_and_cost():
+    client = ReplayLLMClient({})
+    client._record_usage({"prompt_tokens": 120, "completion_tokens": 30, "total_tokens": 150, "cost": 0.0125})
+    assert _format_usage_summary(client.usage_snapshot()) == "1 call, 150 tokens, 0.0125 credits"
