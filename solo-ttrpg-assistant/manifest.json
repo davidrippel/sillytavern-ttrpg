@@ -1,0 +1,13 @@
+{
+  "display_name": "Solo TTRPG Assistant",
+  "loading_order": 25,
+  "dependencies": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "OpenAI Codex",
+  "version": "0.1.0",
+  "homePage": "https://github.com/openai",
+  "auto_update": false,
+  "minimum_client_version": "1.13.4",
+  "generate_interceptor": "soloTtrpgGenerateInterceptor"
+}
