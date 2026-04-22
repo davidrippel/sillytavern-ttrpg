@@ -40,9 +40,11 @@ export function getCharacter() {
     return settings.character;
 }
 
-export function saveCharacter() {
+export function saveCharacter({ rerender = true } = {}) {
     saveSettings();
-    emitSheetChanged();
+    if (rerender) {
+        emitSheetChanged();
+    }
 }
 
 export function ensureCharacter() {
@@ -186,11 +188,11 @@ function renderDegradedSheet($root) {
     const $concept = $(`<label class="solo-stack"><span>Concept</span><input type="text" value="${escapeHtml(character.concept ?? '')}" /></label>`);
     $name.find('input').on('input', (event) => {
         character.name = event.target.value;
-        saveCharacter();
+        saveCharacter({ rerender: false });
     });
     $concept.find('input').on('input', (event) => {
         character.concept = event.target.value;
-        saveCharacter();
+        saveCharacter({ rerender: false });
     });
     $base.append($name, $concept);
 
@@ -218,7 +220,7 @@ function renderDegradedSheet($root) {
     });
     $notes.find('textarea').on('input', (event) => {
         character.notes = event.target.value;
-        saveCharacter();
+        saveCharacter({ rerender: false });
     });
 
     $root.append($base, $attributes, $state, $notes);
@@ -235,11 +237,11 @@ function renderPackSheet($root) {
     const $concept = $(`<label class="solo-stack"><span>Concept</span><input type="text" value="${escapeHtml(character.concept ?? '')}" /></label>`);
     $name.find('input').on('input', (event) => {
         character.name = event.target.value;
-        saveCharacter();
+        saveCharacter({ rerender: false });
     });
     $concept.find('input').on('input', (event) => {
         character.concept = event.target.value;
-        saveCharacter();
+        saveCharacter({ rerender: false });
     });
     $base.append($name, $concept);
     $root.append($base);
@@ -253,7 +255,7 @@ function renderPackSheet($root) {
         const $input = $(`<input type="number" value="${currentValue}" step="1" />`);
         $input.on('input', (event) => {
             character.attributes[attribute.key] = Number(event.target.value || 0);
-            saveCharacter();
+            saveCharacter({ rerender: false });
         });
         $attrGrid.append($input);
     }
@@ -271,7 +273,7 @@ function renderPackSheet($root) {
             const $input = $(`<input type="number" value="${Number(currentValue) || 0}" step="1" />`);
             $input.on('input', (event) => {
                 character.state[resource.key] = Number(event.target.value || 0);
-                saveCharacter();
+                saveCharacter({ rerender: false });
             });
             $row.append($input);
         } else if (resource.kind === 'toggle') {
@@ -279,7 +281,7 @@ function renderPackSheet($root) {
             const $input = $(`<label class="solo-row"><input type="checkbox" ${checked ? 'checked' : ''} /><span>Enabled</span></label>`);
             $input.find('input').on('input', (event) => {
                 character.state[resource.key] = Boolean(event.target.checked);
-                saveCharacter();
+                saveCharacter({ rerender: false });
             });
             $row.append($input);
         }
@@ -314,27 +316,32 @@ function renderPackSheet($root) {
             saveCharacter();
         },
     );
-    const $catalogButton = $('<button class="menu_button">Add From Catalog</button>');
-    $catalogButton.on('click', async () => {
-        const context = getContext();
-        const options = pack.abilityCatalog.map((ability) => `<option value="${escapeHtml(ability.name)}">${escapeHtml(ability.name)} (${escapeHtml(pack.abilityCategoryMap[ability.category]?.display ?? ability.category)})</option>`).join('');
-        const html = `<label class="solo-stack"><span>Ability</span><select id="solo-catalog-select">${options}</select></label>`;
-        const popup = new context.Popup(html, context.POPUP_TYPE.TEXT, 'Add Ability', { okButton: 'Add' });
-        const result = await popup.show();
-        if (result === context.POPUP_RESULT.AFFIRMATIVE) {
-            const selected = popup.dom?.querySelector?.('#solo-catalog-select')?.value;
-            if (selected) {
-                const definition = findAbilityDefinition(selected, pack);
-                abilities.push(definition ? {
-                    name: definition.name,
-                    category: definition.category,
-                    level: pack.abilityCategoryMap[definition.category]?.has_levels ? pack.abilityCategoryMap[definition.category]?.level_names?.[0] ?? '' : '',
-                } : { name: selected });
-                saveCharacter();
-            }
+    const $catalogRow = $('<div class="solo-row wrap"></div>');
+    const $catalogSelect = $('<select></select>');
+    const catalogOptions = pack.abilityCatalog
+        .map((ability) => `<option value="${escapeHtml(ability.name)}">${escapeHtml(ability.name)} (${escapeHtml(pack.abilityCategoryMap[ability.category]?.display ?? ability.category)})</option>`)
+        .join('');
+    $catalogSelect.append(catalogOptions);
+
+    const $catalogButton = $('<button class="menu_button">Add Selected</button>');
+    $catalogButton.on('click', () => {
+        const selected = $catalogSelect.val();
+        if (!selected) {
+            return;
         }
+
+        const definition = findAbilityDefinition(selected, pack);
+        abilities.push(definition ? {
+            name: definition.name,
+            category: definition.category,
+            level: pack.abilityCategoryMap[definition.category]?.has_levels ? pack.abilityCategoryMap[definition.category]?.level_names?.[0] ?? '' : '',
+        } : { name: String(selected) });
+        saveCharacter();
     });
-    $abilities.append($catalogButton);
+
+    $catalogRow.append($catalogSelect, $catalogButton);
+    $abilities.append('<div class="solo-muted">Catalog</div>');
+    $abilities.append($catalogRow);
     $root.append($abilities);
 
     const equipment = character.equipment ?? (character.equipment = []);
@@ -360,7 +367,7 @@ function renderPackSheet($root) {
     const $notes = $(`<section class="solo-section solo-stack"><div class="solo-row spread"><h5>Notes</h5></div><textarea>${escapeHtml(character.notes ?? '')}</textarea></section>`);
     $notes.find('textarea').on('input', (event) => {
         character.notes = event.target.value;
-        saveCharacter();
+        saveCharacter({ rerender: false });
     });
     $root.append($notes);
 
