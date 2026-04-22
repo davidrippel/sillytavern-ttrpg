@@ -13,6 +13,14 @@ const sheetSubscribers = new Set();
 let rootElement = null;
 let modeElement = null;
 
+function setModeLabel(text) {
+    if (!modeElement) {
+        return;
+    }
+
+    modeElement.textContent = text;
+}
+
 function emitSheetChanged() {
     for (const listener of sheetSubscribers) {
         listener();
@@ -170,7 +178,7 @@ function createListEditor(title, items, onAdd, onRemove) {
 
 function renderDegradedSheet($root) {
     const character = ensureCharacter();
-    modeElement?.text('Unknown pack mode');
+    setModeLabel('Unknown pack mode');
 
     const $base = $('<section class="solo-section solo-stack"></section>');
     $base.append('<div class="solo-row spread"><h5>Core</h5></div>');
@@ -219,7 +227,7 @@ function renderDegradedSheet($root) {
 function renderPackSheet($root) {
     const pack = getActivePack();
     const character = ensureCharacter();
-    modeElement?.text(pack.displayName);
+    setModeLabel(pack.displayName);
 
     const $base = $('<section class="solo-section solo-stack"></section>');
     $base.append('<div class="solo-row spread"><h5>Core</h5></div>');
