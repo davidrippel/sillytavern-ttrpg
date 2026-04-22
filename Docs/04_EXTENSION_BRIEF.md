@@ -108,18 +108,36 @@ Note: changes to `gm_prompt_overlay.md` or `failure_moves.md` do NOT propagate t
 
 #### 1.1 Character sheet module
 
-Maintain a structured character sheet in `extension_settings[extensionName].character`.
+Maintain a collection of structured character sheets in `extension_settings[extensionName].characters` (map keyed by generated id) with `extension_settings[extensionName].activeCharacterId` naming the currently-edited/injected character. A single character is the normal case; the collection model is what enables multiple characters across campaigns and the persona link described below.
 
-Schema is defined by the active pack's `character_template.json`. The extension does not assume specific field names beyond `name`, `concept`, `attributes`, `abilities`, `equipment`, `state`, `notes`.
+Per-character record extends the pack-defined shape with three extension-owned fields:
+
+- `id` — generated via `crypto.randomUUID()` at creation
+- `packName` — the pack this character was built against. Switching to a character whose `packName` differs from `activePackName` switches the active pack (with the existing compatibility check).
+- `personaKey` — optional SillyTavern persona avatar filename (the key in `power_user.personas`). `null` when unlinked.
+
+Other fields (`name`, `concept`, `attributes`, `abilities`, `equipment`, `state`, `notes`) come from the active pack's `character_template.json`. The extension does not assume specific field names beyond those.
+
+**Migration:** legacy saves that stored a single character under `extension_settings[extensionName].character` are wrapped into the collection on first load — an id is generated, `packName` is stamped from `activePackName`, the record is marked active, and the old key is removed. No user intervention.
 
 **UI panel** (sidebar):
+- **Character picker row** above the sheet: `<select>` of all characters + buttons New / Duplicate / Rename / Delete. Deleting the last character is refused.
 - Renders all sections of the sheet based on pack schema
+- **Linked Persona row** in the Core section: dropdown populated from `power_user.personas` with a "— None —" option and a "Sync Now" button. If a character's `personaKey` no longer resolves (persona deleted in ST), the select shows "— None (missing: &lt;key&gt;) —" and leaves the stored key intact so the user can re-link or clear it.
 - Attribute section: six rows, one per attribute from `attributes.yaml`, showing display name + current value + edit controls
 - State section: one row per resource from `resources.yaml`, formatted according to `kind` (pool bar for `pool`, counter for `counter`, threshold indicator for `pool_with_threshold`)
 - Abilities section: list with add/remove/edit; "Add from catalog" button pulls from pack's `abilities.yaml`
 - Equipment: simple list with add/remove
 - Notes: free text
 - Auto-save on every change
+
+**Persona linkage (two-way auto-switch):**
+
+- **Character → persona:** `setActiveCharacter(id)` calls ST's `/persona` slash command (via `context.executeSlashCommandsWithOptions`) if the target character's `personaKey` differs from `globalThis.user_avatar`. A re-entrancy flag (`suppressPersonaSync`) prevents the resulting ST event from bouncing back.
+- **Persona → character:** the extension subscribes to ST's persona-change events (best-effort: checks `PERSONA_CHANGED`/`PERSONA_UPDATED` if exposed, else `SETTINGS_UPDATED` with a `user_avatar` diff). When `user_avatar` changes to a persona linked by any character, that character becomes active (and its pack is activated if different).
+- **Unlinked persona:** switching to a persona that no character points at does **not** change the active character. A non-blocking toast informs the user and suggests opening the sheet to link the current character or create a new one. No auto-create, no auto-clear.
+- **Persona renamed in ST:** transparent — linkage is by avatar filename (the stable key), not display name.
+- **Persona deleted in ST:** the character's stored `personaKey` is preserved; the sheet surfaces the missing linkage so the user can decide what to do.
 
 **Prompt injection:**
 At generation time, inject a compact formatted version of the sheet into the prompt. Configurable position (default: just before Author's Note). Format: plain text with clear section headers.
@@ -174,7 +192,8 @@ manifest.json                   # version info, timestamp, campaign name, checks
 chat.jsonl                      # full chat log in SillyTavern's native format
 lorebook.json                   # complete active lorebook
 authors_note.txt                # current AN
-character_sheet.json            # extension's stored sheet
+character_sheet.json            # active character (readable single-sheet export; kept for legacy compat)
+characters.json                 # { characters: {id: record}, activeCharacterId } — full multi-character state
 extension_settings.json         # full extension configuration
 summary.txt                     # current Summarize extension output
 vector_store_export.json        # vector storage export if feasible; else empty with flag
@@ -192,6 +211,7 @@ Settings option: auto-export on `/scene-end`, on session end (how? detect inacti
 3. If version mismatches: warn clearly, require explicit override confirmation
 4. Destructive confirmation modal: "This will replace current chat, lorebook, AN, and sheet. Proceed?"
 5. Atomically replace state. If any step fails, roll back.
+6. Character restore prefers `characters.json` when present. Legacy bundles (only `character_sheet.json`) go through the same migration path as first-load upgrade: the single character is wrapped into the collection and marked active.
 
 **Vector storage caveat:** SillyTavern's vector storage may not expose clean export/import. Fallback: if export fails, store a `rebuild_from_chat: true` flag in the bundle; on import, re-embed from chat after restore. Slower but correct. Document this behavior.
 
@@ -312,6 +332,7 @@ solo-ttrpg-assistant/
 ├── settings.js                 # settings panel
 ├── modules/
 │   ├── pack.js                 # pack loading and schema access
+│   ├── characters.js           # multi-character store + persona sync
 │   ├── sheet.js                # character sheet state + UI
 │   ├── dice.js                 # roll commands + Quick Reply registration
 │   ├── backup.js               # export/import bundle
@@ -349,6 +370,11 @@ Manual test checklist in `TESTING.md`:
 - **Compatibility check:** open a chat whose `__pack_reference` names a different pack than is currently active, verify the warning modal appears
 - **Malformed pack:** remove a required file from a pack directory, attempt load, verify specific error message naming the missing file; verify no partial load occurred
 - **Reload:** edit a pack file on disk, click "Reload pack", verify changes propagate to the extension's in-memory state
+- **Multi-character:** create, duplicate, rename, delete characters; switch between them and verify the sheet, pack, and (if linked) persona all follow. Confirm deleting the last character is refused.
+- **Legacy migration:** load a save that pre-dates multi-character (single `settings.character`) and verify it appears in the picker as the sole, active entry with `packName` stamped.
+- **Persona link (character → persona):** link two characters to two different ST personas; switching characters flips `user_avatar` and the ST persona UI updates.
+- **Persona link (persona → character):** change personas from ST's persona manager and verify the linked character activates; switching to an unlinked persona shows the hint toast but leaves the active character unchanged.
+- **Persona missing:** delete a linked persona in ST and confirm the sheet shows "— None (missing: &lt;key&gt;) —" without mutating character data.
 - Create a character, exercise all sheet fields
 - Roll every attribute via Quick Reply and slash command
 - Run `/backup-export`, verify ZIP contents include `__pack_reference` in the lorebook

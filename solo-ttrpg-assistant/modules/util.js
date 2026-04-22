@@ -20,12 +20,67 @@ export function getSettings() {
     target.authorsNote ??= structuredClone(DEFAULT_SETTINGS.authorsNote);
     target.statusUpdate ??= structuredClone(DEFAULT_SETTINGS.statusUpdate);
     target.canonDetection ??= structuredClone(DEFAULT_SETTINGS.canonDetection);
+    target.characters ??= {};
+    if (!('activeCharacterId' in target)) {
+        target.activeCharacterId = null;
+    }
 
     if (!target.activePack && target.activePackName && target.packs[target.activePackName]) {
         target.activePack = target.packs[target.activePackName];
     }
 
+    migrateLegacyCharacter(target);
+
     return target;
+}
+
+function migrateLegacyCharacter(target) {
+    if (!target.character || (target.characters && Object.keys(target.characters).length > 0)) {
+        if (target.character) {
+            delete target.character;
+        }
+        return;
+    }
+
+    const id = newCharacterId();
+    const migrated = { ...target.character };
+    migrated.id = id;
+    migrated.packName ??= target.activePackName ?? null;
+    migrated.personaKey ??= null;
+    target.characters[id] = migrated;
+    target.activeCharacterId = id;
+    delete target.character;
+}
+
+export function getPowerUser() {
+    return getContext().powerUserSettings ?? globalThis.power_user ?? null;
+}
+
+export function getPersonasMap() {
+    return getPowerUser()?.personas ?? {};
+}
+
+let _personasModulePromise = null;
+export async function getCurrentPersonaKey() {
+    if (globalThis.user_avatar) {
+        return globalThis.user_avatar;
+    }
+    if (!_personasModulePromise) {
+        _personasModulePromise = import('../../../../personas.js').catch(() => null);
+    }
+    const mod = await _personasModulePromise;
+    return mod?.user_avatar ?? null;
+}
+
+export function getCurrentPersonaKeySync() {
+    return globalThis.user_avatar ?? null;
+}
+
+export function newCharacterId() {
+    if (globalThis.crypto?.randomUUID) {
+        return globalThis.crypto.randomUUID();
+    }
+    return `char_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export function saveSettings() {

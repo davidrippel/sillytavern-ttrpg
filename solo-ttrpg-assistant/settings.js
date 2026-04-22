@@ -1,5 +1,16 @@
 import { exportBackupBundle, importBackupBundle } from './modules/backup.js';
 import { runActTransitionFlow, runSceneEndFlow } from './modules/authors_note.js';
+import {
+    createCharacter,
+    deleteCharacter,
+    duplicateCharacter,
+    getActiveCharacter,
+    getActiveCharacterId,
+    listCharacters,
+    setActiveCharacter,
+    subscribeCharacterMeta,
+    subscribeCharacters,
+} from './modules/characters.js';
 import { getLogs, subscribeLog } from './modules/logger.js';
 import { getActivePack, getLoadedPacks, parsePackFromFiles, runCompatibilityCheck, setActivePack, storeLoadedPack, subscribePack } from './modules/pack.js';
 import { mountSheet } from './modules/sheet.js';
@@ -239,6 +250,77 @@ async function handlePackLoadClick() {
     }
 }
 
+function renderCharacterPicker() {
+    if (!settingsRoot) {
+        return;
+    }
+
+    const $root = $(settingsRoot);
+    const $select = $root.find('#solo-character-select');
+    const characters = listCharacters();
+    const activeId = getActiveCharacterId();
+
+    if (characters.length === 0) {
+        $select.html('<option value="">No characters</option>');
+        return;
+    }
+
+    const options = characters
+        .map((character) => {
+            const label = character.name?.trim() || 'Unnamed character';
+            const selected = character.id === activeId ? ' selected' : '';
+            return `<option value="${escapeHtml(character.id)}"${selected}>${escapeHtml(label)}</option>`;
+        })
+        .join('');
+    $select.html(options);
+}
+
+async function handleCharacterSwitch(event) {
+    const id = event.target.value;
+    if (!id) {
+        return;
+    }
+
+    try {
+        await setActiveCharacter(id);
+    } catch (error) {
+        toastr.error(error.message);
+    }
+}
+
+function handleCharacterNew() {
+    const settings = getSettings();
+    createCharacter({ name: '', packName: settings.activePackName ?? null });
+}
+
+function handleCharacterDuplicate() {
+    const id = getActiveCharacterId();
+    if (!id) {
+        toastr.info('Create a character first.');
+        return;
+    }
+    duplicateCharacter(id);
+}
+
+async function handleCharacterDelete() {
+    const active = getActiveCharacter();
+    if (!active) {
+        return;
+    }
+
+    const context = getContext();
+    const confirmed = await context.Popup.show.confirm('Delete Character', `Delete "${active.name || 'Unnamed character'}"? This cannot be undone.`);
+    if (confirmed !== context.POPUP_RESULT.AFFIRMATIVE) {
+        return;
+    }
+
+    try {
+        deleteCharacter(active.id);
+    } catch (error) {
+        toastr.error(error.message);
+    }
+}
+
 async function handlePackSwitch(event) {
     const value = event.target.value;
     if (!value) {
@@ -286,6 +368,11 @@ export async function mountSettingsPanel() {
     $(settingsRoot).find('#solo-pack-select').on('change', handlePackSwitch);
     $(packInput).on('change', handlePackInput);
 
+    $(settingsRoot).find('#solo-character-select').on('change', handleCharacterSwitch);
+    $(settingsRoot).find('#solo-character-new').on('click', handleCharacterNew);
+    $(settingsRoot).find('#solo-character-duplicate').on('click', handleCharacterDuplicate);
+    $(settingsRoot).find('#solo-character-delete').on('click', handleCharacterDelete);
+
     $(settingsRoot).find('#solo-backup-export').on('click', () => exportBackupBundle().catch((error) => toastr.error(error.message)));
     $(settingsRoot).find('#solo-backup-import').on('click', () => backupInput.click());
     $(backupInput).on('change', handleBackupImport);
@@ -299,6 +386,9 @@ export async function mountSettingsPanel() {
 
     subscribeLog(renderLogs);
     subscribePack(renderPackSummary);
+    subscribeCharacters(renderCharacterPicker);
+    subscribeCharacterMeta(renderCharacterPicker);
     renderPackSummary();
+    renderCharacterPicker();
     renderLogs();
 }

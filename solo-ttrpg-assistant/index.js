@@ -3,8 +3,20 @@ import { initDiceModule } from './modules/dice.js';
 import { maybeHandleStatusUpdate } from './modules/status_update.js';
 import { runCompatibilityCheck } from './modules/pack.js';
 import { formatCharacterSheetForPrompt } from './modules/sheet.js';
+import {
+    findCharacterForPersona,
+    getActiveCharacter,
+    handleExternalPersonaChange,
+    isPersonaSyncSuppressed,
+} from './modules/characters.js';
 import { log } from './modules/logger.js';
-import { getNoteDepth, getNotePosition, getSettings } from './modules/util.js';
+import {
+    getCurrentPersonaKey,
+    getNoteDepth,
+    getNotePosition,
+    getPersonasMap,
+    getSettings,
+} from './modules/util.js';
 
 const context = globalThis.SillyTavern.getContext();
 let initialized = false;
@@ -61,3 +73,51 @@ context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, async (message) => {
         await maybeHandleStatusUpdate(message);
     }
 });
+
+let lastSeenUserAvatar = null;
+
+async function handlePersonaAvatarChange() {
+    const nextKey = await getCurrentPersonaKey();
+    if (!nextKey || nextKey === lastSeenUserAvatar) {
+        return;
+    }
+    lastSeenUserAvatar = nextKey;
+
+    if (isPersonaSyncSuppressed()) {
+        return;
+    }
+
+    const match = findCharacterForPersona(nextKey);
+    if (match) {
+        await handleExternalPersonaChange(nextKey);
+        return;
+    }
+
+    // Unlinked persona: offer to link the current character or create a new one.
+    const active = getActiveCharacter();
+    const personaName = getPersonasMap()[nextKey] ?? nextKey;
+    toastr.info(
+        `Switched to persona "${personaName}", which isn't linked to any TTRPG character.` +
+        (active ? ` Open the character sheet to link "${active.name || 'the current character'}" or create a new one.` : ''),
+        'Solo TTRPG Assistant',
+        { timeOut: 6000 },
+    );
+}
+
+function subscribePersonaEvents() {
+    const types = context.eventTypes ?? {};
+    const candidates = [
+        types.SETTINGS_UPDATED,
+        types.SETTINGS_LOADED,
+        types.PERSONA_CHANGED,
+        types.PERSONA_UPDATED,
+    ].filter(Boolean);
+
+    for (const eventType of candidates) {
+        context.eventSource.on(eventType, () => {
+            void handlePersonaAvatarChange();
+        });
+    }
+}
+
+subscribePersonaEvents();

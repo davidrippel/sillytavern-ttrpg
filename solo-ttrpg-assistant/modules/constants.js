@@ -31,7 +31,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
     packs: {},
     activePackName: null,
     activePack: null,
-    character: null,
+    characters: {},
+    activeCharacterId: null,
     logs: [],
     sheetInjection: {
         enabled: true,

@@ -1,9 +1,18 @@
 import { findAbilityDefinition, getActivePack, hasActivePack, initializeCharacterForPack, subscribePack } from './pack.js';
+import {
+    emitCharacterMetaChanged,
+    ensureActiveCharacter as storeEnsureActive,
+    getActiveCharacter as storeGetActive,
+    linkPersona,
+    subscribeCharacters,
+    syncPersonaForCharacter,
+} from './characters.js';
 import { log } from './logger.js';
 import {
     escapeHtml,
     formatSignedNumber,
     getContext,
+    getPersonasMap,
     getSettings,
     normalizeName,
     saveSettings,
@@ -33,11 +42,7 @@ export function subscribeSheet(listener) {
 }
 
 export function getCharacter() {
-    const settings = getSettings();
-    if (!settings.character) {
-        settings.character = initializeCharacterForPack();
-    }
-    return settings.character;
+    return storeEnsureActive();
 }
 
 export function saveCharacter({ rerender = true } = {}) {
@@ -48,15 +53,20 @@ export function saveCharacter({ rerender = true } = {}) {
 }
 
 export function ensureCharacter() {
-    const settings = getSettings();
-    if (!settings.character) {
-        settings.character = initializeCharacterForPack();
-    }
-    return settings.character;
+    return storeEnsureActive();
 }
 
 export function resetCharacterForActivePack() {
-    getSettings().character = initializeCharacterForPack();
+    const active = storeGetActive();
+    if (!active) {
+        storeEnsureActive();
+        saveCharacter();
+        return;
+    }
+
+    const fresh = initializeCharacterForPack();
+    Object.assign(active, fresh);
+    active.packName = getSettings().activePackName ?? active.packName ?? null;
     saveCharacter();
     log('Character sheet reset from pack template.');
 }
@@ -146,6 +156,50 @@ export function formatCharacterSheetForPrompt() {
     return lines.join('\n');
 }
 
+function getPersonaList() {
+    const personas = getPersonasMap();
+    return Object.entries(personas).map(([key, name]) => ({ key, name: String(name ?? key) }));
+}
+
+function createPersonaRow(character) {
+    const personas = getPersonaList();
+    const currentKey = character.personaKey ?? '';
+    const missing = currentKey && !personas.some((entry) => entry.key === currentKey);
+
+    const $wrapper = $('<label class="solo-stack"><span>Linked Persona</span></label>');
+    const $row = $('<div class="solo-row wrap"></div>');
+    const $select = $('<select></select>');
+
+    const options = ['<option value="">— None —</option>'];
+    for (const persona of personas) {
+        const selected = persona.key === currentKey ? ' selected' : '';
+        options.push(`<option value="${escapeHtml(persona.key)}"${selected}>${escapeHtml(persona.name)}</option>`);
+    }
+    if (missing) {
+        options.push(`<option value="${escapeHtml(currentKey)}" selected>— None (missing: ${escapeHtml(currentKey)}) —</option>`);
+    }
+    $select.html(options.join(''));
+
+    $select.on('change', (event) => {
+        const value = event.target.value || null;
+        linkPersona(character.id, value);
+        saveCharacter({ rerender: false });
+    });
+
+    const $sync = $('<button class="menu_button" type="button">Sync Now</button>');
+    $sync.on('click', async () => {
+        try {
+            await syncPersonaForCharacter(character);
+        } catch (error) {
+            toastr.error(error.message);
+        }
+    });
+
+    $row.append($select, $sync);
+    $wrapper.append($row);
+    return $wrapper;
+}
+
 function createListEditor(title, items, onAdd, onRemove) {
     const $section = $('<section class="solo-section solo-stack"></section>');
     $section.append(`<div class="solo-row spread"><h5>${escapeHtml(title)}</h5></div>`);
@@ -188,13 +242,14 @@ function renderDegradedSheet($root) {
     const $concept = $(`<label class="solo-stack"><span>Concept</span><input type="text" value="${escapeHtml(character.concept ?? '')}" /></label>`);
     $name.find('input').on('input', (event) => {
         character.name = event.target.value;
+        emitCharacterMetaChanged();
         saveCharacter({ rerender: false });
     });
     $concept.find('input').on('input', (event) => {
         character.concept = event.target.value;
         saveCharacter({ rerender: false });
     });
-    $base.append($name, $concept);
+    $base.append($name, $concept, createPersonaRow(character));
 
     const attributesValue = JSON.stringify(character.attributes ?? {}, null, 2);
     const stateValue = JSON.stringify(character.state ?? {}, null, 2);
@@ -237,13 +292,14 @@ function renderPackSheet($root) {
     const $concept = $(`<label class="solo-stack"><span>Concept</span><input type="text" value="${escapeHtml(character.concept ?? '')}" /></label>`);
     $name.find('input').on('input', (event) => {
         character.name = event.target.value;
+        emitCharacterMetaChanged();
         saveCharacter({ rerender: false });
     });
     $concept.find('input').on('input', (event) => {
         character.concept = event.target.value;
         saveCharacter({ rerender: false });
     });
-    $base.append($name, $concept);
+    $base.append($name, $concept, createPersonaRow(character));
     $root.append($base);
 
     const $attributes = $('<section class="solo-section solo-stack"></section>');
@@ -398,13 +454,11 @@ export function mountSheet(root, modeLabel) {
     modeElement = modeLabel;
 
     subscribePack(() => {
-        const settings = getSettings();
-        if (!settings.character) {
-            settings.character = initializeCharacterForPack();
-        }
+        storeEnsureActive();
         renderSheet();
     });
 
+    subscribeCharacters(() => renderSheet());
     subscribeSheet(() => renderSheet());
     renderSheet();
 }

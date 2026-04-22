@@ -1,6 +1,7 @@
 import { bytesToString, createZip, downloadBlob, readZip, stringToBytes } from '../lib/zip.js';
 import { getCurrentChatLorebookName, loadCurrentLorebook, saveLorebook } from './pack.js';
 import { getCharacter, saveCharacter } from './sheet.js';
+import { getActiveCharacter } from './characters.js';
 import { log } from './logger.js';
 import {
     deepClone,
@@ -37,7 +38,10 @@ async function buildBundleFiles() {
     const lorebook = await loadCurrentLorebook();
     const authorsNote = readAuthorsNote();
     const extensionState = deepClone(getSettings());
-    const character = deepClone(getCharacter());
+    const active = getActiveCharacter();
+    const character = active ? deepClone(active) : deepClone(getCharacter());
+    const characters = deepClone(getSettings().characters ?? {});
+    const activeCharacterId = getSettings().activeCharacterId ?? null;
     const chat = deepClone(context.chat ?? []);
     const summary = context.extensionSettings?.summarize?.summary ?? '';
     const packReference = getPackReference();
@@ -47,6 +51,7 @@ async function buildBundleFiles() {
         'lorebook.json': stringifyJson(lorebook ?? {}),
         'authors_note.txt': authorsNote,
         'character_sheet.json': stringifyJson(character),
+        'characters.json': stringifyJson({ characters, activeCharacterId }),
         'extension_settings.json': stringifyJson(extensionState),
         'summary.txt': String(summary ?? ''),
         'vector_store_export.json': stringifyJson({ rebuild_from_chat: true, exported: false }),
@@ -159,11 +164,28 @@ export async function importBackupBundle(file) {
         const nextAuthorsNote = bytesToString(entries.get('authors_note.txt'));
         const nextCharacter = JSON.parse(bytesToString(entries.get('character_sheet.json')));
         const nextExtensionSettings = JSON.parse(bytesToString(entries.get('extension_settings.json')));
+        const charactersEntry = entries.get('characters.json');
+        const nextCharacters = charactersEntry ? JSON.parse(bytesToString(charactersEntry)) : null;
 
         await replaceCurrentChat(nextChat);
         await writeAuthorsNote(nextAuthorsNote);
-        getSettings().character = nextCharacter;
-        Object.assign(getSettings(), nextExtensionSettings);
+
+        const settings = getSettings();
+        Object.assign(settings, nextExtensionSettings);
+
+        if (nextCharacters && nextCharacters.characters) {
+            settings.characters = nextCharacters.characters;
+            settings.activeCharacterId = nextCharacters.activeCharacterId ?? Object.keys(nextCharacters.characters)[0] ?? null;
+            delete settings.character;
+        } else if (nextCharacter) {
+            // Legacy bundle: wrap the single character; getSettings() will finish migration.
+            settings.character = nextCharacter;
+            settings.characters = {};
+            settings.activeCharacterId = null;
+        }
+
+        // Re-run getSettings() so any legacy-character wrapping kicks in.
+        getSettings();
         saveSettings();
         saveCharacter();
 
@@ -177,7 +199,6 @@ export async function importBackupBundle(file) {
     } catch (error) {
         await replaceCurrentChat(previous.chat);
         await writeAuthorsNote(previous.authorsNote);
-        getSettings().character = previous.character;
         Object.assign(getSettings(), previous.extensionState);
         saveSettings();
         saveCharacter();

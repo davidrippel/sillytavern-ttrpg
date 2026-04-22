@@ -204,6 +204,11 @@ export function initializeCharacterForPack(pack = getActivePack()) {
     return deepClone(pack.characterTemplate);
 }
 
+function getActiveCharacterRecord(settings) {
+    const id = settings.activeCharacterId;
+    return id ? settings.characters?.[id] ?? null : null;
+}
+
 export async function setActivePack(packName, { preserveCharacter = true } = {}) {
     const settings = getSettings();
     const pack = settings.packs[packName];
@@ -212,8 +217,10 @@ export async function setActivePack(packName, { preserveCharacter = true } = {})
         throw new Error(`Unknown pack "${packName}".`);
     }
 
-    if (!preserveCharacter && !isCharacterCompatibleWithPack(settings.character, pack)) {
-        settings.character = initializeCharacterForPack(pack);
+    const active = getActiveCharacterRecord(settings);
+    if (!preserveCharacter && active && !isCharacterCompatibleWithPack(active, pack)) {
+        Object.assign(active, initializeCharacterForPack(pack));
+        active.packName = packName;
     }
 
     settings.activePackName = packName;
@@ -231,8 +238,12 @@ export async function storeLoadedPack(pack) {
     settings.activePackName = pack.name;
     settings.activePack = pack;
 
-    if (!settings.character || !isCharacterCompatibleWithPack(settings.character, pack)) {
-        settings.character = initializeCharacterForPack(pack);
+    const active = getActiveCharacterRecord(settings);
+    if (active && !isCharacterCompatibleWithPack(active, pack)) {
+        Object.assign(active, initializeCharacterForPack(pack));
+        active.packName = pack.name;
+    } else if (active && !active.packName) {
+        active.packName = pack.name;
     }
 
     saveSettings();
