@@ -12,6 +12,7 @@ import {
 import { log } from './modules/logger.js';
 import {
     getCurrentPersonaKey,
+    isExtensionEnabled,
     getNoteDepth,
     getNotePosition,
     getPersonasMap,
@@ -44,7 +45,7 @@ function getInjectionIndex(chat) {
 
 globalThis.soloTtrpgGenerateInterceptor = async function soloTtrpgGenerateInterceptor(chat) {
     const settings = getSettings();
-    if (!settings.sheetInjection?.enabled) {
+    if (!isExtensionEnabled() || !settings.sheetInjection?.enabled) {
         return;
     }
 
@@ -65,11 +66,14 @@ async function initUi() {
 
 context.eventSource.on(context.eventTypes.APP_READY, initUi);
 context.eventSource.on(context.eventTypes.CHAT_CHANGED, async () => {
+    if (!isExtensionEnabled()) {
+        return;
+    }
     await runCompatibilityCheck();
 });
 context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, async (message) => {
     const settings = getSettings();
-    if (settings.statusUpdate?.enabled !== false) {
+    if (isExtensionEnabled() && settings.statusUpdate?.enabled !== false) {
         await maybeHandleStatusUpdate(message);
     }
 });
@@ -77,6 +81,10 @@ context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, async (message) => {
 let lastSeenUserAvatar = null;
 
 async function handlePersonaAvatarChange() {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
     const nextKey = await getCurrentPersonaKey();
     if (!nextKey || nextKey === lastSeenUserAvatar) {
         return;

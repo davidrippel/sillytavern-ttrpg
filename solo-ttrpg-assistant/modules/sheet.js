@@ -14,6 +14,7 @@ import {
     getContext,
     getPersonasMap,
     getSettings,
+    isExtensionEnabled,
     normalizeName,
     saveSettings,
 } from './util.js';
@@ -440,6 +441,12 @@ export function renderSheet() {
 
     const $root = $(rootElement);
     $root.empty();
+
+    if (!isExtensionEnabled()) {
+        setModeLabel('Disabled');
+        $root.append('<section class="solo-section solo-stack solo-warning"><h5>Extension Off</h5><p class="solo-muted">The assistant is paused. Stored characters remain available, but sheet injection and automation are disabled until you turn the extension back on.</p></section>');
+        return;
+    }
 
     if (!hasActivePack()) {
         renderDegradedSheet($root);

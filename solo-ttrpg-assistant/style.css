@@ -149,6 +149,22 @@
     width: auto;
 }
 
+.solo-ttrpg-assistant .solo-inline-button {
+    width: auto !important;
+    min-width: 6rem;
+    padding-inline: 0.9rem;
+}
+
+.solo-ttrpg-assistant .solo-inline-button.solo-enabled {
+    background: #5c4023 !important;
+    color: #f3efe7 !important;
+}
+
+.solo-ttrpg-assistant .solo-inline-button.solo-disabled {
+    background: #3a3a3a !important;
+    color: #e5e1d8 !important;
+}
+
 .solo-ttrpg-assistant .solo-log {
     max-height: 12rem;
     overflow: auto;

@@ -19,6 +19,7 @@ Core modules:
 - Backup and restore bundles
 - Session log export
 - Lorebook hygiene
+- Global enable/disable switch
 
 ---
 
@@ -99,6 +100,19 @@ This mode exists so the extension doesn't hard-fail on fresh installs before the
 A "Reload pack" button in the settings panel re-opens the directory picker for the currently-active pack's name. Useful when the user has edited pack files on disk (e.g., tuned the GM overlay, added an ability) and wants the extension to pick up changes.
 
 Note: changes to `gm_prompt_overlay.md` or `failure_moves.md` do NOT propagate to existing campaigns via a reload, because those files reach the GM through lorebook entries embedded by the campaign generator at campaign-creation time. To propagate overlay changes to an existing campaign, the user must regenerate the campaign OR manually edit the `__pack_gm_overlay` lorebook entry. The extension surfaces this in the reload confirmation: "Pack reloaded. Note: GM overlay changes apply to new campaigns only."
+
+### Global enable / disable
+
+The settings panel includes a top-level switch that pauses the extension without deleting any stored state. This is for users who only sometimes play the solo campaign and do not want the extension active during unrelated SillyTavern use.
+
+When disabled:
+
+- Character sheet prompt injection is off
+- Event-driven behavior is off (`CHAT_CHANGED`, `MESSAGE_RECEIVED`, persona auto-switch handling)
+- Sidebar action buttons are disabled
+- Slash commands should no-op with a clear "extension is disabled" message
+- Stored packs, characters, logs, and settings remain intact
+- Re-enabling resumes normal behavior immediately using the last active pack and character
 
 ---
 

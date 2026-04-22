@@ -2,7 +2,7 @@ import { QR_SET_NAME } from './constants.js';
 import { log } from './logger.js';
 import { findAbilityDefinition, getActivePack, subscribePack } from './pack.js';
 import { findAbilityOnSheet, getCharacter } from './sheet.js';
-import { formatSignedNumber, getContext, normalizeName } from './util.js';
+import { formatSignedNumber, getContext, isExtensionEnabled, normalizeName } from './util.js';
 
 function roll2d6() {
     const die1 = Math.floor(Math.random() * 6) + 1;
@@ -43,6 +43,10 @@ function buildRollMessage(label, roll, modifier) {
 }
 
 async function executeAttributeRoll(attributeKey) {
+    if (!isExtensionEnabled()) {
+        throw new Error('Solo TTRPG Assistant is disabled.');
+    }
+
     const pack = getActivePack();
     const character = getCharacter();
     const attribute = pack?.attributeMap?.[attributeKey];
@@ -56,6 +60,10 @@ async function executeAttributeRoll(attributeKey) {
 }
 
 async function executeManualRoll(modifier) {
+    if (!isExtensionEnabled()) {
+        throw new Error('Solo TTRPG Assistant is disabled.');
+    }
+
     const roll = roll2d6();
     const message = buildRollMessage('Manual check', roll, modifier);
     await appendSystemMessage(message);
@@ -64,6 +72,10 @@ async function executeManualRoll(modifier) {
 }
 
 async function executeAbilityRoll(abilityName) {
+    if (!isExtensionEnabled()) {
+        throw new Error('Solo TTRPG Assistant is disabled.');
+    }
+
     const pack = getActivePack();
     const sheetAbility = findAbilityOnSheet(abilityName);
     if (!sheetAbility) {

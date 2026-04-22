@@ -13,33 +13,54 @@ import {
 } from './modules/characters.js';
 import { getLogs, subscribeLog } from './modules/logger.js';
 import { getActivePack, getLoadedPacks, parsePackFromFiles, runCompatibilityCheck, setActivePack, storeLoadedPack, subscribePack } from './modules/pack.js';
-import { mountSheet } from './modules/sheet.js';
-import { clearBusy, escapeHtml, getContext, getSettings, setBusy } from './modules/util.js';
+import { mountSheet, renderSheet } from './modules/sheet.js';
+import { clearBusy, escapeHtml, getContext, getSettings, isExtensionEnabled, saveSettings, setBusy } from './modules/util.js';
 import { getExtensionPath } from './modules/constants.js';
 
 let settingsRoot = null;
 let packInput = null;
 let backupInput = null;
 
-function ensurePickerModeElement() {
+function ensureEnabledControls() {
     if (!settingsRoot) {
-        return null;
+        return;
+    }
+
+    const enabled = isExtensionEnabled();
+    applyEnabledUiState(enabled);
+}
+
+function applyEnabledUiState(enabled) {
+    if (!settingsRoot) {
+        return;
     }
 
     const $root = $(settingsRoot);
-    let $element = $root.find('#solo-pack-picker-mode');
-    if ($element.length > 0) {
-        return $element;
-    }
+    const $toggle = $root.find('#solo-enabled-toggle');
+    const selector = [
+        '#solo-pack-load',
+        '#solo-pack-reload',
+        '#solo-pack-select',
+        '#solo-character-select',
+        '#solo-character-new',
+        '#solo-character-duplicate',
+        '#solo-character-delete',
+        '#solo-backup-export',
+        '#solo-backup-import',
+        '#solo-scene-end',
+        '#solo-act-transition',
+    ].join(', ');
 
-    const $description = $root.find('#solo-pack-description');
-    if ($description.length === 0) {
-        return null;
-    }
+    $toggle
+        .text(enabled ? 'Active' : 'Paused')
+        .toggleClass('solo-enabled', enabled)
+        .toggleClass('solo-disabled', !enabled)
+        .attr('aria-pressed', enabled ? 'true' : 'false');
+    $root.find(selector).prop('disabled', !enabled);
+}
 
-    $element = $('<p id="solo-pack-picker-mode" class="solo-muted"></p>');
-    $description.after($element);
-    return $element;
+function ensurePickerModeElement() {
+    return null;
 }
 
 function getPackPickerMode() {
@@ -146,19 +167,7 @@ function renderPackSummary() {
     const $root = $(settingsRoot);
     const $status = $root.find('#solo-pack-status');
     const $description = $root.find('#solo-pack-description');
-    const $pickerMode = ensurePickerModeElement();
     const $select = $root.find('#solo-pack-select');
-    const pickerMode = getPackPickerMode();
-
-    if ($pickerMode) {
-        if (pickerMode === 'directory') {
-            $pickerMode.text('Picker mode: folder picker.');
-        } else if (pickerMode === 'file-handles') {
-            $pickerMode.text('Picker mode: file fallback. Select the 5 required pack files from the pack folder.');
-        } else {
-            $pickerMode.text('Picker mode: browser file input fallback. Select the 5 required pack files from the pack folder.');
-        }
-    }
 
     const packOptions = Object.values(getLoadedPacks())
         .sort((a, b) => a.displayName.localeCompare(b.displayName))
@@ -196,6 +205,11 @@ function renderLogs() {
 }
 
 async function handlePackInput(event) {
+    if (!isExtensionEnabled()) {
+        event.target.value = '';
+        return;
+    }
+
     const files = [...(event.target.files ?? [])];
     if (files.length === 0) {
         return;
@@ -219,6 +233,10 @@ async function handlePackInput(event) {
 }
 
 async function handlePackLoadClick() {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
     const $button = $(settingsRoot).find('#solo-pack-load');
     setBusy($button, 'Loading...');
 
@@ -276,6 +294,10 @@ function renderCharacterPicker() {
 }
 
 async function handleCharacterSwitch(event) {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
     const id = event.target.value;
     if (!id) {
         return;
@@ -289,11 +311,19 @@ async function handleCharacterSwitch(event) {
 }
 
 function handleCharacterNew() {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
     const settings = getSettings();
     createCharacter({ name: '', packName: settings.activePackName ?? null });
 }
 
 function handleCharacterDuplicate() {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
     const id = getActiveCharacterId();
     if (!id) {
         toastr.info('Create a character first.');
@@ -303,6 +333,10 @@ function handleCharacterDuplicate() {
 }
 
 async function handleCharacterDelete() {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
     const active = getActiveCharacter();
     if (!active) {
         return;
@@ -322,6 +356,10 @@ async function handleCharacterDelete() {
 }
 
 async function handlePackSwitch(event) {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
     const value = event.target.value;
     if (!value) {
         return;
@@ -337,6 +375,11 @@ async function handlePackSwitch(event) {
 }
 
 async function handleBackupImport(event) {
+    if (!isExtensionEnabled()) {
+        event.target.value = '';
+        return;
+    }
+
     const [file] = event.target.files ?? [];
     if (!file) {
         return;
@@ -353,6 +396,18 @@ async function handleBackupImport(event) {
     }
 }
 
+function handleEnabledToggle(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const nextEnabled = !isExtensionEnabled();
+    const settings = getSettings();
+    settings.enabled = nextEnabled;
+    applyEnabledUiState(nextEnabled);
+    saveSettings();
+    renderSheet();
+}
+
 export async function mountSettingsPanel() {
     const context = getContext();
     const html = await context.renderExtensionTemplateAsync(getExtensionPath(), 'ui/settings_panel');
@@ -363,6 +418,7 @@ export async function mountSettingsPanel() {
     backupInput = $(settingsRoot).find('#solo-backup-input').get(0);
     configureDirectoryPicker(packInput);
 
+    $(settingsRoot).on('click', '#solo-enabled-toggle', handleEnabledToggle);
     $(settingsRoot).find('#solo-pack-load').on('click', () => handlePackLoadClick());
     $(settingsRoot).find('#solo-pack-reload').on('click', () => handlePackLoadClick());
     $(settingsRoot).find('#solo-pack-select').on('change', handlePackSwitch);
@@ -388,6 +444,7 @@ export async function mountSettingsPanel() {
     subscribePack(renderPackSummary);
     subscribeCharacters(renderCharacterPicker);
     subscribeCharacterMeta(renderCharacterPicker);
+    ensureEnabledControls();
     renderPackSummary();
     renderCharacterPicker();
     renderLogs();

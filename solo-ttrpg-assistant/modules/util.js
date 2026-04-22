@@ -13,6 +13,9 @@ export function getSettings() {
     }
 
     const target = settings[MODULE_NAME];
+    if (!('enabled' in target)) {
+        target.enabled = DEFAULT_SETTINGS.enabled;
+    }
     target.packs ??= {};
     target.logs ??= [];
     target.sheetInjection ??= structuredClone(DEFAULT_SETTINGS.sheetInjection);
@@ -32,6 +35,10 @@ export function getSettings() {
     migrateLegacyCharacter(target);
 
     return target;
+}
+
+export function isExtensionEnabled() {
+    return getSettings().enabled !== false;
 }
 
 function migrateLegacyCharacter(target) {

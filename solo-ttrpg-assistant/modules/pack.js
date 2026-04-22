@@ -6,6 +6,7 @@ import {
     escapeHtml,
     getContext,
     getSettings,
+    isExtensionEnabled,
     normalizeName,
     saveSettings,
 } from './util.js';
@@ -327,6 +328,10 @@ export async function getPackReferenceFromLorebook() {
 }
 
 export async function runCompatibilityCheck({ interactive = false } = {}) {
+    if (!isExtensionEnabled()) {
+        return null;
+    }
+
     const reference = await getPackReferenceFromLorebook();
     const pack = getActivePack();
 

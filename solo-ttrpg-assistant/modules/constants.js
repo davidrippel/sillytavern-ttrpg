@@ -28,6 +28,7 @@ export const AUTHORS_NOTE_SECTIONS = Object.freeze([
 ]);
 
 export const DEFAULT_SETTINGS = Object.freeze({
+    enabled: true,
     packs: {},
     activePackName: null,
     activePack: null,
