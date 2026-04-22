@@ -31,8 +31,17 @@ The user is expected to run this blind: they read only `opening_hook.txt` and `i
 - `rich` for readable console output
 - `pytest` for tests
 - `pyproject.toml` + venv (or `uv`) for dependency management
-- OpenRouter as the LLM provider (https://openrouter.ai/api/v1/chat/completions). API key from env var `OPENROUTER_API_KEY`.
-- Default model: `anthropic/claude-sonnet-4.5`. Make configurable via CLI flag.
+- OpenRouter as the LLM provider (https://openrouter.ai/api/v1/chat/completions). API key from env var `OPENROUTER_API_KEY`, with `.env` loading supported.
+- Default model comes from env, not hard-coded. Current env keys:
+  - `CAMPAIGN_GENERATOR_DEFAULT_MODEL`
+  - `CAMPAIGN_GENERATOR_DRY_RUN_MODEL`
+  - `CAMPAIGN_GENERATOR_DEFAULT_TEMPERATURE`
+  - `OPENROUTER_API_URL`
+  - `OPENROUTER_TIMEOUT_SECONDS`
+  - `OPENROUTER_MAX_RETRIES`
+  - `CAMPAIGN_GENERATOR_STAGE_MAX_RETRIES`
+  - `CAMPAIGN_GENERATOR_GENRES_BASE_DIR`
+  - `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR`
 
 Web search during development to confirm: current OpenRouter API shape, current SillyTavern lorebook JSON schema, current model slug for `anthropic/claude-sonnet-4.5`.
 
@@ -46,7 +55,7 @@ Web search during development to confirm: current OpenRouter API shape, current 
 python -m campaign_generator \
     --genre genres/symbaroum_dark_fantasy/ \
     --seed my_seed.yaml \
-    --output ./campaigns/davokar_shadows/ \
+    --output davokar_shadows \
     --model anthropic/claude-sonnet-4.5 \
     --stages all                           # or: premise,plot,factions
 ```
@@ -54,11 +63,23 @@ python -m campaign_generator \
 Flags:
 - `--genre PATH` (required) — path to a validated genre pack directory
 - `--seed PATH` (required) — campaign seed YAML
-- `--output PATH` (required) — output directory (will be created)
-- `--model STR` — OpenRouter model slug, default `anthropic/claude-sonnet-4.5`
+- `--output PATH` (optional if `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set) — output directory or output name
+- `--model STR` — OpenRouter model slug
 - `--stages STR` — `all` or comma-separated list of stage names to run (uses cached outputs for others)
 - `--dry-run` — use a cheap model (e.g. `anthropic/claude-haiku-4.5`) for the whole pipeline
 - `--random-seed INT` — reproducibility seed
+
+Model precedence is:
+1. `model:` in the seed YAML
+2. `--model`
+3. `CAMPAIGN_GENERATOR_DRY_RUN_MODEL` when `--dry-run` is set
+4. `CAMPAIGN_GENERATOR_DEFAULT_MODEL`
+
+Path resolution rules:
+- If `CAMPAIGN_GENERATOR_GENRES_BASE_DIR` is set, `--genre` may be either a full path or just the pack name.
+- If `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set, a relative `--output my_campaign` is resolved under that base directory.
+- If `--output` is omitted and `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set, the tool auto-generates a campaign directory name using timestamp + pack name + seed stem.
+- Output name collisions are resolved by appending `_1`, `_2`, etc.
 
 Seed file extends the pack's `generator_seed.yaml`. Any fields specified in the seed override the pack defaults, except `themes_exclude` (which merges) and `strictness` (which merges field-by-field). The full seed format is specified in `09_SEED_FORMAT.md`.
 
@@ -85,6 +106,8 @@ The generated file must:
 - Be a valid YAML file even when no fields are uncommented beyond `genre`
 
 Implementation: read the pack's `generator_seed.yaml` and `pack.yaml`, then write a templated YAML file with comments. Template structure lives in `campaign_generator/seed_template.py` or equivalent. Keep the template close to `09_SEED_FORMAT.md`'s structure so the documentation and the template stay synchronized.
+
+The repo also ships `.env.example` documenting all supported environment variables.
 
 ---
 
@@ -166,6 +189,8 @@ Output: 4-act structure with:
 - The hook (how the protagonist is drawn in)
 - Escalation arc (how stakes rise across acts)
 
+Implementation detail: acts and beats are first-class structured objects. Beats are not anonymous strings in the canonical model; they are assigned stable ids like `act1_beat1`, `act1_beat2`, etc. Final human-facing outputs render them as numbered beats like `1.1 ...`.
+
 ### 3. `factions`
 
 Input: premise + plot skeleton + pack tone.
@@ -193,6 +218,11 @@ Each NPC:
 
 The generator keeps a running roster and forbids duplicate names. NPCs should have varied demographics, voices, and agendas — if the first 3 NPCs are all wizened old men, reject and regenerate.
 
+Current implementation constraints that must be treated as spec:
+- Plot-critical named characters inferred from the plot skeleton must appear in the final NPC roster. This prevents later stages from referencing off-roster core characters.
+- `{{user}}` is the only valid protagonist placeholder. Never invent a protagonist name.
+- NPC relationships may reference `{{user}}`, the NPC themself, or another roster NPC. They should not introduce free-floating non-roster relationship targets.
+
 ### 5. `locations`
 
 Input: all prior.
@@ -207,6 +237,11 @@ Each location:
 - Which NPCs can be found here
 - Which plot beats occur here
 
+Current implementation constraints:
+- Locations are generated one at a time.
+- `plot_beats` are normalized to canonical beat ids.
+- `npc_names` must reference roster NPCs only; if the model invents a name, regenerate/repair the location instead of letting the bad reference through.
+
 ### 6. `clue_chains`
 
 Input: all prior.
@@ -217,7 +252,8 @@ Each clue:
 - `id` (unique)
 - `found_at` — location or NPC reference
 - `reveals` — what the clue tells the protagonist
-- `points_to` — next clue id(s), NPC, or location
+- `points_to` — next clue id(s), NPC, location, or beat
+- `supports_beats` — canonical beat ids that this clue materially supports
 
 Constraints (validated by pydantic):
 - Every clue must be reachable from the opening hook (graph connectivity)
@@ -226,6 +262,16 @@ Constraints (validated by pydantic):
 - No missing references (a clue pointing to NPC X requires X to exist)
 
 If the first generation fails these constraints, loop: feed the constraint failures back to the LLM as a repair prompt.
+
+Current implementation details that should be treated as part of the contract:
+- The model receives explicit menus of valid NPC names, location names, and beat ids.
+- Beat references are canonicalized to ids like `act2_beat3`.
+- If the model fails clue validation after 3 attempts, the tool uses a hybrid fallback:
+  - preserve valid model clues where possible
+  - drop invalid or unusable clues
+  - rebuild graph wiring to guarantee reachability and two-path coverage
+  - synthesize only the missing clue slots needed to satisfy validation
+- The fallback writes how many model clues were preserved and how many synthetic clues were added to `stages/validation_log.txt`.
 
 ### 7. `branches`
 
@@ -238,13 +284,18 @@ Generate 6-10 "if-then" contingencies:
 
 Each branch notes consequences for later acts.
 
+Current implementation constraints:
+- Branch references may target factions, NPCs, clues, locations, and plot beat ids.
+- The stage receives an explicit `reference_menu`.
+- References are normalized after generation so beat text and simple faction aliases map back to canonical tokens.
+
 ### 8. `initial_authors_note`
 
 Input: plot skeleton, opening hook content.
 
 Output: the Author's Note text for Act 1 state. Sections:
 - Current Act: Act 1 — [title]
-- Pending beats: first 2-3 beats from Act 1
+- Pending beats: first 2-3 beats from Act 1, rendered with explicit numbering (`1.1`, `1.2`, ...)
 - Active threads: 2-3 initial hooks
 - Recent beats: (empty at start)
 - Reminders: anything the GM must not forget from the opening situation
@@ -262,6 +313,8 @@ Output: the `opening_hook.txt` the player reads. Contains:
 - Opening scene (the first scene the GM will narrate, from the player's point of view — where they are, what they see, what prompts them to act)
 
 MUST NOT contain: antagonist identity, clue chain, plot beats beyond Act 1 opener, NPC secrets, branch contingencies.
+
+Protagonist naming rule: every protagonist reference in all generated artifacts must use the exact SillyTavern placeholder `{{user}}`. Prompting should enforce this, and outputs should be sanitized afterward in case the model invents a protagonist name or uses generic phrases like "the protagonist" or "player character".
 
 ### 10. `lorebook_assembly`
 
@@ -285,7 +338,7 @@ Generate these entry types:
 **Campaign-specific entries**:
 
 - Campaign bible (constant, high order) — premise, themes, campaign-specific tone calibrations (not the pack's tone — those are in the overlay)
-- Current Act (constant, high order) — Act 1 goals and beats
+- Current Act (constant, high order) — Act 1 goals and explicitly numbered beats
 - One entry per NPC (keyword-triggered)
 - One entry per location (keyword-triggered)
 - One entry per faction (keyword-triggered)
@@ -312,10 +365,22 @@ Each stage's output is parsed into a pydantic model. If parsing fails, the stage
 Cross-stage validation:
 - NPCs in clue chains and branches must exist in the NPC roster
 - Locations in clue chains and branches must exist in the location list
-- Faction references must match faction names exactly
+- Faction references in branches must resolve to known factions; simple aliases like dropping the leading `The` are normalized
+- Branch references may also use canonical beat ids or beat text
 - Abilities assigned to NPCs must exist in the pack's `abilities.yaml` catalog
+- Location `plot_beats` must resolve to canonical beat ids or known beat text
+- NPC relationships may use roster NPCs, the NPC themself, or `{{user}}`
 
 Log all validation failures to `stages/validation_log.txt`.
+
+Console/runtime behavior:
+- Print timestamped progress messages as the pipeline runs.
+- Print stage duration after each stage. Use seconds below 60s and minutes above that.
+- Print OpenRouter usage summaries after each stage and at the end of the run:
+  - total calls
+  - total tokens
+  - total cost/credits
+- Log raw call responses plus OpenRouter `usage` blocks to `stages/calls.jsonl`.
 
 ---
 
@@ -326,6 +391,12 @@ Log all validation failures to `stages/validation_log.txt`.
 ├── opening_hook.txt
 ├── initial_authors_note.txt
 ├── campaign_lorebook.json
+├── partials/
+│   ├── opening_hook.partial.txt
+│   ├── initial_authors_note.partial.txt
+│   ├── npcs.partial.json
+│   ├── locations.partial.json
+│   └── clue_chains.partial.json
 ├── spoilers/
 │   └── full_campaign.md
 └── stages/
@@ -336,9 +407,17 @@ Log all validation failures to `stages/validation_log.txt`.
     ├── locations.json
     ├── clue_chains.json
     ├── branches.json
-    ├── calls.jsonl            # all LLM calls logged
+    ├── calls.jsonl            # all LLM calls logged, including usage
     └── validation_log.txt
 ```
+
+Artifact shape details that are now part of the spec:
+- `plot_skeleton.json` stores beat objects with:
+  - `id`
+  - `label`
+  - `text`
+  - `rendered`
+- location and clue artifacts include beat detail expansions for readability, while still preserving canonical beat ids for machine references.
 
 ---
 
@@ -349,6 +428,8 @@ Log all validation failures to `stages/validation_log.txt`.
 - Handle rate limits and transient errors with exponential backoff (use `tenacity`).
 - The final lorebook must import cleanly into SillyTavern without errors. Document the manual verification step in the README.
 - `--dry-run` with a cheap model must complete the full pipeline so Claude Code can test end-to-end without expensive generations.
+- Partial outputs must be written early enough that a failed run still leaves useful artifacts behind.
+- Prefer preserving high-quality model output and repairing structure over discarding whole stages unnecessarily. The clue fallback is the current example of this policy.
 
 ---
 
@@ -377,12 +458,17 @@ campaign_generator/
 ├── campaign_generator/
 │   ├── __init__.py
 │   ├── __main__.py              # CLI entry (both --seed and --init-seed modes)
+│   ├── env.py                   # .env loading
+│   ├── settings.py              # env-backed runtime settings
+│   ├── paths.py                 # genre/output resolution
 │   ├── pack.py                  # pack loading and validation (importable by pack generator too)
 │   ├── schemas.py               # pydantic models for all stages
 │   ├── seed.py                  # seed loading, validation, pack-default merging
 │   ├── seed_template.py         # blank annotated seed file generation (--init-seed)
 │   ├── llm.py                   # OpenRouter client
 │   ├── pipeline.py              # stage orchestration
+│   ├── artifacts.py             # enriched serialized stage artifacts
+│   ├── placeholders.py          # protagonist placeholder normalization
 │   ├── stages/                  # one module per stage
 │   │   ├── premise.py
 │   │   ├── plot_skeleton.py
@@ -421,6 +507,13 @@ Also include:
 - Unit tests for pack loading and validation (run against the example pack in `08_EXAMPLE_PACK_SYMBAROUM.md` rendered as a real pack directory)
 - Unit tests for schema validation with malformed inputs
 - Integration test: full pipeline with replay fixtures, assert all output files exist and parse
+- Tests for:
+  - example seed validation
+  - output path auto-generation and collision suffixing
+  - beat numbering/id rendering
+  - protagonist placeholder sanitization
+  - branch reference normalization
+  - clue fallback behavior
 
 ---
 
