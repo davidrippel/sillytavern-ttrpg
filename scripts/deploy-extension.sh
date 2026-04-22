@@ -18,7 +18,10 @@ if [[ ! -d "${TARGET_ROOT}" ]]; then
     exit 1
 fi
 
+echo "Removing old deployment at ${TARGET_DIR}"
 rm -rf "${TARGET_DIR}"
+
+echo "Copying ${SOURCE_DIR} -> ${TARGET_ROOT}"
 cp -R "${SOURCE_DIR}" "${TARGET_ROOT}/"
 
 echo "Deployed ${SOURCE_DIR} -> ${TARGET_DIR}"

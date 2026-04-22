@@ -52,13 +52,5 @@ export const DEFAULT_SETTINGS = Object.freeze({
 });
 
 export function getExtensionPath() {
-    const url = import.meta.url;
-    const marker = '/scripts/extensions/';
-    const index = url.indexOf(marker);
-
-    if (index === -1) {
-        return 'third-party/solo-ttrpg-assistant';
-    }
-
-    return url.slice(index + marker.length).split('/').slice(0, -1).join('/');
+    return 'third-party/solo-ttrpg-assistant';
 }

@@ -114,7 +114,7 @@ async function handleBackupImport(event) {
 
 export async function mountSettingsPanel() {
     const context = getContext();
-    const html = await context.renderExtensionTemplateAsync(getExtensionPath(), 'settings_panel');
+    const html = await context.renderExtensionTemplateAsync(getExtensionPath(), 'ui/settings_panel');
     $('#extensions_settings2').append(html);
 
     settingsRoot = $('#extensions_settings2 .solo-ttrpg-assistant').last().get(0);
