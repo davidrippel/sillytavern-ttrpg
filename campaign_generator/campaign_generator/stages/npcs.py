@@ -52,6 +52,31 @@ def _extract_required_npc_names(plot: PlotSkeleton) -> list[str]:
     return names
 
 
+_NULL_FACTION_TOKENS = {"", "none", "null", "n/a", "independent", "unaffiliated"}
+
+
+def _normalize_faction_affiliation(value: str | None, faction_names: set[str]) -> tuple[str | None, str | None]:
+    """Return (canonical_value, error_message). canonical_value is None when the
+    input represents 'no faction'; otherwise it's the matched canonical name from
+    `faction_names`. error_message is non-None when the value cannot be reconciled."""
+    if value is None:
+        return None, None
+    stripped = value.strip()
+    if stripped.lower() in _NULL_FACTION_TOKENS:
+        return None, None
+    if stripped in faction_names:
+        return stripped, None
+    canonical_lookup = {name.lower(): name for name in faction_names}
+    if stripped.lower() in canonical_lookup:
+        return canonical_lookup[stripped.lower()], None
+    if stripped.lower().startswith("none"):
+        return None, (
+            f"faction affiliation {value!r} parses as 'none' but smuggles in extra text; "
+            "use null/None to indicate independence and never describe former affiliations here"
+        )
+    return None, f"unknown faction {value!r} (must be one of {sorted(faction_names)!r} or null)"
+
+
 def _initial_npc_errors(
     *,
     npc: NPC,
@@ -65,8 +90,9 @@ def _initial_npc_errors(
         errors.append(f"duplicate NPC name {npc.name!r}")
     if must_use_names and npc.name not in must_use_names:
         errors.append(f"NPC name must be one of {sorted(must_use_names)!r}, got {npc.name!r}")
-    if npc.faction_affiliation and npc.faction_affiliation not in faction_names:
-        errors.append(f"NPC {npc.name} references unknown faction {npc.faction_affiliation!r}")
+    _, faction_error = _normalize_faction_affiliation(npc.faction_affiliation, faction_names)
+    if faction_error:
+        errors.append(f"NPC {npc.name} {faction_error}")
     invalid_abilities = [ability for ability in npc.abilities if ability not in ability_names]
     if invalid_abilities:
         errors.append(f"NPC {npc.name} references unknown abilities {invalid_abilities!r}")
@@ -132,14 +158,20 @@ def run(
                 temperature=temperature,
                 validation_log=validation_log,
             )
+            faction_name_set = {faction.name for faction in factions.factions}
             errors = _initial_npc_errors(
                 npc=npc,
                 existing_names=existing_names,
                 must_use_names=must_use_names,
-                faction_names={faction.name for faction in factions.factions},
+                faction_names=faction_name_set,
                 ability_names=pack.ability_names,
             )
             if not errors:
+                canonical_faction, _ = _normalize_faction_affiliation(
+                    npc.faction_affiliation, faction_name_set
+                )
+                if canonical_faction != npc.faction_affiliation:
+                    npc = npc.model_copy(update={"faction_affiliation": canonical_faction})
                 break
             validation_log.write(f"[npc_{index + 1}] semantic validation failed: {'; '.join(errors)}")
             repair_note = "Repair these constraint failures: " + "; ".join(errors)

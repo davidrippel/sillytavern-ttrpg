@@ -31,8 +31,15 @@ def _normalize_plot_beats(plot: PlotSkeleton, beat_refs: list[str]) -> list[str]
     return normalized
 
 
-def _location_errors(location: Location, plot: PlotSkeleton, npc_names: set[str]) -> list[str]:
+def _location_errors(
+    location: Location,
+    plot: PlotSkeleton,
+    npc_names: set[str],
+    existing_names: set[str],
+) -> list[str]:
     errors: list[str] = []
+    if location.name in existing_names:
+        errors.append(f"duplicate location name {location.name!r}")
     invalid_npcs = [name for name in location.npc_names if name not in npc_names]
     if invalid_npcs:
         errors.append(f"location {location.name} references unknown NPCs {invalid_npcs!r}")
@@ -90,7 +97,8 @@ def run(
                 validation_log=validation_log,
             )
             location = raw_location.model_copy(update={"plot_beats": _normalize_plot_beats(plot, raw_location.plot_beats)})
-            errors = _location_errors(location, plot, roster_names)
+            existing_names = {item.name for item in catalog}
+            errors = _location_errors(location, plot, roster_names, existing_names)
             if not errors:
                 break
             validation_log.write(f"[location_{index + 1}] semantic validation failed: {'; '.join(errors)}")

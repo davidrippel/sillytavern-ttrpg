@@ -83,6 +83,13 @@ def _write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _slugify_title(title: str) -> str:
+    import re
+
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", title.strip()).strip("_").lower()
+    return slug or "campaign_lorebook"
+
+
 def _format_duration(duration_seconds: float) -> str:
     if duration_seconds >= 60:
         return f"{duration_seconds / 60:.1f}m"
@@ -324,6 +331,7 @@ def run_pipeline(
         runner=lambda: clue_chains_stage.run(
             client=client,
             system_prompt=_load_prompt(clue_chains_stage.PROMPT_FILE),
+            prose_system_prompt=_load_prompt(clue_chains_stage.PROSE_PROMPT_FILE),
             premise=premise,
             plot=plot,
             factions=factions,
@@ -373,7 +381,20 @@ def run_pipeline(
     if progress_callback is not None:
         progress_callback("Cross-stage validation passed")
 
-    opening_hook = opening_hook_stage.render(pack, premise, plot, loaded_seed.resolved)
+    opening_hook = opening_hook_stage.render(
+        pack,
+        premise,
+        plot,
+        loaded_seed.resolved,
+        npcs=npcs,
+        locations=locations,
+        client=client,
+        system_prompt=_load_prompt(opening_hook_stage.PROMPT_FILE),
+        model=resolved_model,
+        temperature=temperature,
+        validation_log=validation_log,
+        progress_callback=progress_callback,
+    )
     _write_text(output_dir / "opening_hook.txt", opening_hook.render())
     if progress_callback is not None:
         progress_callback("Wrote opening_hook.txt")
@@ -393,9 +414,10 @@ def run_pipeline(
         clue_graph=clue_graph,
         branches=branches,
     )
-    _write_json(output_dir / "campaign_lorebook.json", lorebook)
+    lorebook_filename = _slugify_title(premise.title) + ".json"
+    _write_json(output_dir / lorebook_filename, lorebook)
     if progress_callback is not None:
-        progress_callback("Wrote campaign_lorebook.json")
+        progress_callback(f"Wrote {lorebook_filename}")
 
     spoilers = spoilers_stage.render(
         premise=premise,

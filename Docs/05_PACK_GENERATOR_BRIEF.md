@@ -358,6 +358,7 @@ Both generators import from `common/`.
 3. **Transparent retries.** When a stage retries due to validation failure, log the retry with reason. This surfaces LLM failure modes for tuning.
 4. **Cheap iteration.** `--dry-run` with a cheap model must complete end-to-end so users can test briefs without burning tokens.
 5. **Deterministic structure.** Same brief + same seed + same model → same pack (modulo LLM sampling variance). This matters for reproducibility.
+6. **No hard-wrapped prose.** All generated markdown content (`gm_prompt_overlay.md`, `failure_moves.md`, `tone.md`, `example_hooks.md`, descriptions inside YAML files, etc.) must use newlines **only** as paragraph or list-item separators — never to wrap a paragraph at a fixed column width. Prose paragraphs are written as a single long line; the rendered output (and the campaign lorebook that bundles these files verbatim) needs unbroken paragraphs so SillyTavern displays them correctly. Every prompt that asks the LLM to produce prose must include this rule explicitly.
 
 ---
 

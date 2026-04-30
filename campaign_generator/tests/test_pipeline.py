@@ -12,7 +12,8 @@ from campaign_generator.pipeline import _format_usage_summary
 from campaign_generator.placeholders import sanitize_text
 from campaign_generator.schemas import Clue, ClueGraph, ClueTarget, LocationCatalog, NPCRoster, PlotSkeleton
 from campaign_generator.stages.npcs import _extract_required_npc_names
-from campaign_generator.stages.clue_chains import _build_hybrid_fallback_clue_graph
+from campaign_generator.stages.clue_chains import _build_hybrid_fallback_clue_graph, build_clue_skeleton
+from campaign_generator.stages.opening_hook import _autofix_casing, _detect_issues
 from campaign_generator.validation import validate_clue_graph
 
 
@@ -43,7 +44,9 @@ def test_pipeline_replay_writes_outputs(tmp_path):
 
     assert (output_dir / "opening_hook.txt").exists()
     assert (output_dir / "initial_authors_note.txt").exists()
-    assert (output_dir / "campaign_lorebook.json").exists()
+    lorebook_files = list(output_dir.glob("*.json"))
+    assert len(lorebook_files) == 1, f"expected one lorebook json, got {lorebook_files}"
+    assert lorebook_files[0].name == "the_ferryman_s_satchel.json"
     assert (output_dir / "spoilers" / "full_campaign.md").exists()
     assert (output_dir / "stages" / "premise.json").exists()
     assert (output_dir / "stages" / "branches.json").exists()
@@ -434,3 +437,41 @@ def test_hybrid_clue_fallback_preserves_valid_clues_and_synthesizes_missing_slot
     kept = next(clue for clue in repaired_graph.clues if clue.id == "kept_clue")
     assert kept.reveals == "A waterlogged page names the missing courier."
     assert all(clue.id != "bad_clue" for clue in repaired_graph.clues)
+
+
+def _ferryman_plot_npcs_locations():
+    plot = PlotSkeleton.model_validate(
+        json.loads(Path("tests/fixtures/canned_llm_responses/plot_skeleton.json").read_text())
+    )
+    npcs = NPCRoster.model_validate(
+        {"npcs": [json.loads(Path(f"tests/fixtures/canned_llm_responses/npc_{i}.json").read_text()) for i in range(1, 7)]}
+    )
+    locations = LocationCatalog.model_validate(
+        {"locations": [json.loads(Path(f"tests/fixtures/canned_llm_responses/location_{i}.json").read_text()) for i in range(1, 6)]}
+    )
+    return plot, npcs, locations
+
+
+def test_build_clue_skeleton_produces_valid_graph_without_llm():
+    plot, npcs, locations = _ferryman_plot_npcs_locations()
+    skeleton = build_clue_skeleton(plot=plot, npcs=npcs, locations=locations)
+    errors = validate_clue_graph(plot, npcs, locations, skeleton)
+    assert errors == []
+    beat_ids = set(plot.beat_id_to_text())
+    for beat_id in beat_ids:
+        supports = sum(1 for clue in skeleton.clues for t in clue.points_to if t.type == "beat" and t.value == beat_id)
+        assert supports >= 2, f"beat {beat_id} should be supported by >= 2 clues, got {supports}"
+
+
+def test_opening_hook_post_validation_flags_lowercase_proper_nouns():
+    bad = "you arrive at the threshold of thistle hold with a raven delivers the news."
+    issues = _detect_issues(bad, {"Thistle Hold"})
+    assert any("Thistle Hold" in issue for issue in issues)
+    assert any("with a raven delivers" in issue for issue in issues)
+
+
+def test_opening_hook_autofix_corrects_casing_only():
+    bad = "you arrive at the threshold of thistle hold and the storm thickens around you tonight."
+    fixed = _autofix_casing(bad, {"Thistle Hold"})
+    assert "Thistle Hold" in fixed
+    assert "thistle hold" not in fixed

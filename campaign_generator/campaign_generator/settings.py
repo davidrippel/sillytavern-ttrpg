@@ -43,6 +43,18 @@ def _get_env_float(name: str, fallback: float) -> float:
     return float(value)
 
 
+def _get_env_bool(name: str, fallback: bool) -> bool:
+    load_project_dotenv()
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return fallback
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_use_llm_clue_graph() -> bool:
+    return _get_env_bool("CG_LLM_CLUE_GRAPH", False)
+
+
 def get_default_model() -> str:
     return _get_env_str("CAMPAIGN_GENERATOR_DEFAULT_MODEL", DEFAULT_MODEL_FALLBACK)
 

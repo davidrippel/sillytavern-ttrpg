@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class PremiseDocument(BaseModel):
+    title: str = Field(min_length=1, max_length=80)
     paragraphs: list[str] = Field(min_length=2, max_length=2)
     central_conflict: str
     tone_statement: str

@@ -11,10 +11,12 @@ from pydantic import BaseModel, Field
 from ..artifacts import serialize_clue_graph
 from ..llm import LLMClient, LLMError, generate_structured
 from ..schemas import Clue, ClueGraph, ClueTarget, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
+from ..settings import get_use_llm_clue_graph
 from ..validation import ValidationLog, validate_clue_graph
 
 
 PROMPT_FILE = "06_clue_chains.md"
+PROSE_PROMPT_FILE = "06b_clue_prose.md"
 
 
 class StageClueTarget(BaseModel):
@@ -291,7 +293,143 @@ def _build_hybrid_fallback_clue_graph(
     return graph, preserved_count, synthetic_count
 
 
-def run(
+def build_clue_skeleton(
+    *,
+    plot: PlotSkeleton,
+    npcs: NPCRoster,
+    locations: LocationCatalog,
+) -> ClueGraph:
+    """Build a structurally-valid clue graph deterministically from the plot,
+    NPCs, and locations. Every beat receives exactly two clues that point at
+    it, and the ordering wires successive beats together so that every clue is
+    reachable from the entry pair."""
+    anchor_type = "location" if locations.locations else "npc"
+    anchor_name = (
+        locations.locations[0].name if locations.locations else npcs.npcs[0].name
+    )
+    first_beat_id = plot.acts[0].beats[0].id
+    first_beat_text = plot.acts[0].beats[0].text
+    seed_clues = [
+        Clue(
+            id=f"__skeleton_seed_{index}__",
+            found_at_type=anchor_type,
+            found_at=anchor_name,
+            reveals=_synthetic_reveals(plot, first_beat_text, "a" if index % 2 == 0 else "b"),
+            points_to=[ClueTarget(type="beat", value=first_beat_id)],
+            supports_beats=[first_beat_id],
+        )
+        for index in range(4)
+    ]
+    seed_graph = ClueGraph(
+        entry_clue_ids=[seed_clues[0].id],
+        clues=seed_clues,
+    )
+    graph, _, _ = _build_hybrid_fallback_clue_graph(
+        plot=plot,
+        npcs=npcs,
+        locations=locations,
+        candidate_graph=seed_graph,
+    )
+    return graph
+
+
+def _summarize_npc(npcs: NPCRoster, name: str) -> dict[str, str] | None:
+    for npc in npcs.npcs:
+        if npc.name == name:
+            return {
+                "name": npc.name,
+                "role": npc.role,
+                "speaking_style": npc.speaking_style,
+                "motivation": npc.motivation,
+            }
+    return None
+
+
+def _summarize_location(locations: LocationCatalog, name: str) -> dict[str, object] | None:
+    for location in locations.locations:
+        if location.name == name:
+            return {
+                "name": location.name,
+                "type": location.type,
+                "notable_features": location.notable_features,
+            }
+    return None
+
+
+def _enrich_clue_prose(
+    *,
+    client: LLMClient,
+    system_prompt: str,
+    clue: Clue,
+    plot: PlotSkeleton,
+    npcs: NPCRoster,
+    locations: LocationCatalog,
+    premise: PremiseDocument,
+    model: str,
+    temperature: float,
+    validation_log: ValidationLog,
+) -> tuple[Clue, bool]:
+    """Ask the LLM to rewrite only the `reveals` field of a single clue.
+    Returns (possibly-updated clue, llm_success_flag)."""
+    beat_lookup = plot.beat_id_to_text()
+    beat_targets = [t.value for t in clue.points_to if t.type == "beat"]
+    beat_context = [
+        {"id": beat_id, "text": beat_lookup.get(beat_id, beat_id)}
+        for beat_id in beat_targets
+    ] or [
+        {"id": beat_id, "text": beat_lookup.get(beat_id, beat_id)}
+        for beat_id in clue.supports_beats
+    ]
+
+    if clue.found_at_type == "npc":
+        anchor_context = _summarize_npc(npcs, clue.found_at)
+    else:
+        anchor_context = _summarize_location(locations, clue.found_at)
+
+    context = {
+        "premise_summary": {
+            "central_conflict": premise.central_conflict,
+            "tone_statement": premise.tone_statement,
+        },
+        "clue": {
+            "id": clue.id,
+            "found_at_type": clue.found_at_type,
+            "found_at": clue.found_at,
+            "points_to": [t.model_dump() for t in clue.points_to],
+            "supports_beats": clue.supports_beats,
+        },
+        "found_at_context": anchor_context or {"name": clue.found_at},
+        "beat_context": beat_context,
+    }
+
+    try:
+        result = generate_structured(
+            client=client,
+            stage_name=f"clue_prose_{clue.id}",
+            system_prompt=system_prompt,
+            user_prompt=json.dumps(context, indent=2),
+            schema=StageClue,
+            model=model,
+            temperature=temperature,
+            validation_log=validation_log,
+        )
+    except LLMError as exc:
+        validation_log.write(
+            f"[clue_chains] prose enrichment for {clue.id} failed; keeping templated reveals. {exc}"
+        )
+        return clue, False
+
+    new_reveals = (result.reveals or "").strip()
+    if not new_reveals:
+        validation_log.write(
+            f"[clue_chains] prose enrichment for {clue.id} returned empty reveals; keeping templated text."
+        )
+        return clue, False
+
+    return clue.model_copy(update={"reveals": new_reveals}), True
+
+
+def _run_legacy_llm_first(
     *,
     client: LLMClient,
     system_prompt: str,
@@ -304,12 +442,16 @@ def run(
     model: str,
     temperature: float,
     validation_log: ValidationLog,
-    snapshot_path: Path | None = None,
-    progress_callback: Callable[[str], None] | None = None,
-) -> ClueGraph:
+    snapshot_path: Path | None,
+    progress_callback: Callable[[str], None] | None,
+) -> ClueGraph | None:
+    """Legacy path: ask the LLM to produce the entire graph, retry on validation
+    failure. Returns the graph on success, or None on persistent failure (caller
+    should fall through to the deterministic skeleton)."""
     repair_note = ""
     beat_lookup = _build_beat_lookup(plot)
     target_clues = _target_clue_count(density, len(beat_lookup))
+    clue_graph: ClueGraph | None = None
     for attempt in range(1, 4):
         context = {
             "premise_summary": {
@@ -342,38 +484,126 @@ def run(
                 validation_log=validation_log,
             )
         except LLMError as exc:
-            raise LLMError(
-                "clue_chains generation failed. Check stages/validation_log.txt and stages/calls.jsonl "
-                f"for the failed attempts. Last error: {exc}"
-            ) from exc
+            validation_log.write(f"[clue_chains] legacy LLM-first attempt {attempt} raised: {exc}")
+            return None
         clue_graph = _convert_stage_graph(stage_graph, beat_lookup)
         if snapshot_path is not None:
             _write_snapshot(snapshot_path, serialize_clue_graph(clue_graph, plot))
         errors = validate_clue_graph(plot, npcs, locations, clue_graph)
         if not errors:
             return clue_graph
-        validation_log.write(f"[clue_chains] repair attempt {attempt}: {'; '.join(errors)}")
+        validation_log.write(f"[clue_chains] legacy LLM-first attempt {attempt} validation: {'; '.join(errors)}")
         repair_note = "Repair these constraint failures: " + "; ".join(errors)
+    return None
 
-    validation_log.write("[clue_chains] model-generated clue graph failed after 3 attempts; using hybrid fallback")
-    if progress_callback is not None:
-        progress_callback("Clue graph model attempts failed; using hybrid fallback")
-    fallback_graph, preserved_count, synthetic_count = _build_hybrid_fallback_clue_graph(
-        plot=plot,
-        npcs=npcs,
-        locations=locations,
-        candidate_graph=clue_graph,
-    )
-    validation_log.write(
-        "[clue_chains] hybrid fallback preserved "
-        f"{preserved_count} model clues and synthesized {synthetic_count} clues"
-    )
-    if snapshot_path is not None:
-        _write_snapshot(snapshot_path, serialize_clue_graph(fallback_graph, plot))
-    fallback_errors = validate_clue_graph(plot, npcs, locations, fallback_graph)
-    if fallback_errors:
-        raise LLMError(
-            "clue_chains failed after model attempts and fallback graph validation. "
-            f"Fallback errors: {'; '.join(fallback_errors)}"
+
+def run(
+    *,
+    client: LLMClient,
+    system_prompt: str,
+    premise: PremiseDocument,
+    plot: PlotSkeleton,
+    factions: FactionSet,
+    npcs: NPCRoster,
+    locations: LocationCatalog,
+    density: str,
+    model: str,
+    temperature: float,
+    validation_log: ValidationLog,
+    snapshot_path: Path | None = None,
+    progress_callback: Callable[[str], None] | None = None,
+    prose_system_prompt: str | None = None,
+) -> ClueGraph:
+    """Generate a clue graph by:
+    1. Optionally trying the legacy LLM-builds-whole-graph path (off by default,
+       opt-in via CG_LLM_CLUE_GRAPH=1).
+    2. Otherwise (default) building a deterministic skeleton from beats/NPCs/
+       locations, then asking the LLM to enrich each clue's `reveals` prose in
+       isolation. The graph topology is never at risk; only prose can degrade,
+       and degradation falls back to the deterministic templated text.
+    """
+    if get_use_llm_clue_graph():
+        if progress_callback is not None:
+            progress_callback("Clue graph: attempting LLM-first mode (CG_LLM_CLUE_GRAPH=1)")
+        legacy_graph = _run_legacy_llm_first(
+            client=client,
+            system_prompt=system_prompt,
+            premise=premise,
+            plot=plot,
+            factions=factions,
+            npcs=npcs,
+            locations=locations,
+            density=density,
+            model=model,
+            temperature=temperature,
+            validation_log=validation_log,
+            snapshot_path=snapshot_path,
+            progress_callback=progress_callback,
         )
-    return fallback_graph
+        if legacy_graph is not None:
+            errors = validate_clue_graph(plot, npcs, locations, legacy_graph)
+            if not errors:
+                if progress_callback is not None:
+                    progress_callback("Clue graph: LLM-first succeeded")
+                validation_log.write(
+                    "[clue_chains] LLM-first mode produced a valid graph with "
+                    f"{len(legacy_graph.clues)} clues"
+                )
+                return legacy_graph
+        if progress_callback is not None:
+            progress_callback("Clue graph: LLM-first failed; falling through to deterministic skeleton")
+        validation_log.write("[clue_chains] LLM-first mode failed; falling through to deterministic skeleton")
+
+    skeleton = build_clue_skeleton(plot=plot, npcs=npcs, locations=locations)
+    skeleton_errors = validate_clue_graph(plot, npcs, locations, skeleton)
+    if skeleton_errors:
+        raise LLMError(
+            "clue_chains deterministic skeleton failed validation; this indicates a bug. "
+            f"Errors: {'; '.join(skeleton_errors)}"
+        )
+
+    enriched_clues: list[Clue] = []
+    enriched_count = 0
+    if prose_system_prompt is None:
+        enriched_clues = list(skeleton.clues)
+    else:
+        for index, clue in enumerate(skeleton.clues, start=1):
+            if progress_callback is not None:
+                progress_callback(f"Enriching clue prose {index}/{len(skeleton.clues)}: {clue.id}")
+            updated, used_llm = _enrich_clue_prose(
+                client=client,
+                system_prompt=prose_system_prompt,
+                clue=clue,
+                plot=plot,
+                npcs=npcs,
+                locations=locations,
+                premise=premise,
+                model=model,
+                temperature=temperature,
+                validation_log=validation_log,
+            )
+            enriched_clues.append(updated)
+            if used_llm:
+                enriched_count += 1
+
+    final_graph = ClueGraph(entry_clue_ids=skeleton.entry_clue_ids, clues=enriched_clues)
+    final_errors = validate_clue_graph(plot, npcs, locations, final_graph)
+    if final_errors:
+        raise LLMError(
+            "clue_chains failed validation after prose enrichment (this should not happen — "
+            f"prose enrichment must not alter topology). Errors: {'; '.join(final_errors)}"
+        )
+
+    template_count = len(final_graph.clues) - enriched_count
+    summary = (
+        f"Clue graph: skeleton produced {len(final_graph.clues)} clues, "
+        f"{enriched_count} enriched by LLM, {template_count} used template fallback"
+    )
+    validation_log.write(f"[clue_chains] {summary}")
+    if progress_callback is not None:
+        progress_callback(summary)
+
+    if snapshot_path is not None:
+        _write_snapshot(snapshot_path, serialize_clue_graph(final_graph, plot))
+
+    return final_graph

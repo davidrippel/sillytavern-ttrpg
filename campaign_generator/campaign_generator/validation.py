@@ -107,9 +107,17 @@ def validate_cross_stage(
     npc_names = {npc.name for npc in npcs.npcs}
     location_names = {location.name for location in locations.locations}
 
+    null_faction_tokens = {"", "none", "null", "n/a", "independent", "unaffiliated"}
+    canonical_lookup = {name.lower(): name for name in faction_names}
     for npc in npcs.npcs:
-        if npc.faction_affiliation and npc.faction_affiliation not in faction_names:
-            errors.append(f"NPC {npc.name} references unknown faction {npc.faction_affiliation!r}")
+        affiliation = (npc.faction_affiliation or "").strip()
+        if not affiliation or affiliation.lower() in null_faction_tokens:
+            continue
+        if affiliation in faction_names:
+            continue
+        if affiliation.lower() in canonical_lookup:
+            continue
+        errors.append(f"NPC {npc.name} references unknown faction {npc.faction_affiliation!r}")
         for ability in npc.abilities:
             if ability not in pack.ability_names:
                 errors.append(f"NPC {npc.name} references unknown ability {ability!r}")
