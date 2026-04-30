@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from ..llm import LLMClient, generate_structured
-from ..pack import GenrePack
+from common.llm import LLMClient, generate_structured
+from common.pack import GenrePack
 from ..schemas import PlotSkeleton, PremiseDocument
 from ..seed import CampaignSeed
 from ..validation import ValidationLog

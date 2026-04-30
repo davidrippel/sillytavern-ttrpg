@@ -9,9 +9,9 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..artifacts import serialize_clue_graph
-from ..llm import LLMClient, LLMError, generate_structured
+from common.llm import LLMClient, LLMError, generate_structured
 from ..schemas import Clue, ClueGraph, ClueTarget, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
-from ..settings import get_use_llm_clue_graph
+from common.settings import get_use_llm_clue_graph
 from ..validation import ValidationLog, validate_clue_graph
 
 

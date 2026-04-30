@@ -1,0 +1,16 @@
+{
+  "hooks": [
+    {
+      "title": "The Job",
+      "body": "The fixer's name is Vell, and Vell's office is the back booth of a bar on Tier-Three of Halcyon Station. The contract is sealed in a plain folder: pick up an unmarked crate from a derelict freighter at coordinates that nobody admits to having, deliver it to a buyer at a station three jumps further out, no questions, no logs. The pay is two months of fuel and a clean port slip on a station that does not normally let you tie up.\n\nYour engineer is across the table reading the contract upside down and shaking her head once, slowly. The captain — that's you, or the player you point at — has a docking fee due in eleven hours and a creditor who is one bad week from sending somebody. The fixer is waiting.\n\nWhat do you do?"
+    },
+    {
+      "title": "The Wreck",
+      "body": "You took the long-range survey contract for the salvage rights, and the survey co-ordinates were exactly what they said: a derelict at the edge of a dead system, drifting in slow tumble against a cold star. Up close the ship is older than it should be — its hull plating doesn't match anything the registry knows, its lights are still on, and the airlock cycles when you knock.\n\nYour edge prickles before your tech does. The deck is warm. The bulkheads have a sheen to them like something living and wet. You are six paces in when the ship's systems acknowledge your presence — not in any human script, but in a single low chord that travels through the deck plating up through your boots and into your teeth.\n\nWhat do you do?"
+    },
+    {
+      "title": "The Friend",
+      "body": "The message comes in clear-text, on the freight band, which nobody ever uses for anything but freight. The voice is somebody you have not heard in seven years. \"Hey,\" he says. \"It's me. I need a ride. Quietly.\" He gives a station name and a docking number and signs off before you can answer. The signal pings as coming from the direction of the deep-dark wrecks, which is where he should not be.\n\nThe last time you saw him he told you he was taking a corporate research job and that you should not contact him for any reason. Your engineer is staring at you. Your communications officer is pretending not to have heard. The station he named is two jumps out and the fees will be brutal.\n\nWhat do you do?"
+    }
+  ]
+}

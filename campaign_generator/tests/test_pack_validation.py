@@ -1,4 +1,4 @@
-from campaign_generator.pack import load_pack
+from common.pack import load_pack
 
 
 def test_symbaroum_pack_loads():

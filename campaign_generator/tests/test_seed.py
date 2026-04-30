@@ -2,7 +2,7 @@ from pathlib import Path
 
 import yaml
 
-from campaign_generator.pack import load_pack
+from common.pack import load_pack
 from campaign_generator.seed import load_seed
 
 

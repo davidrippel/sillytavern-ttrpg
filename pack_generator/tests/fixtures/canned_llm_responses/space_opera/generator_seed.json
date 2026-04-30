@@ -1,0 +1,40 @@
+{
+  "setting_anchors": [
+    "halcyon_station",
+    "derelict_alien_freighters",
+    "the_outer_belt",
+    "contested_trade_routes",
+    "frontier_repair_yards"
+  ],
+  "themes_include": [
+    "community_under_pressure",
+    "the_cost_of_freedom",
+    "what_the_old_ones_left_behind",
+    "blue_collar_heroism",
+    "moral_compromise_in_tight_quarters"
+  ],
+  "themes_exclude": [
+    "military_jingoism",
+    "grimdark_nihilism",
+    "racial_essentialism"
+  ],
+  "tone": [
+    "gritty",
+    "hopeful",
+    "wondrous",
+    "dangerous",
+    "blue_collar"
+  ],
+  "antagonist_archetypes_preferred": [
+    "corporate_handler",
+    "rival_captain",
+    "outer_edge_cult_leader",
+    "old_ones_witness",
+    "station_boss"
+  ],
+  "num_acts": 4,
+  "num_npcs": 10,
+  "num_locations": 8,
+  "clue_chain_density": "medium",
+  "branch_points": 6
+}

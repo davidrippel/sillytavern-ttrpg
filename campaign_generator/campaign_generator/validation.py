@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict, deque
-from pathlib import Path
 
-from .pack import GenrePack
+from common.pack import GenrePack
+from common.validation import ValidationLog
+
 from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton
+
+__all__ = [
+    "ValidationLog",
+    "validate_clue_graph",
+    "validate_cross_stage",
+]
 
 
 def _token_aliases(value: str) -> set[str]:
@@ -12,16 +19,6 @@ def _token_aliases(value: str) -> set[str]:
     if value.startswith("The "):
         aliases.add(value[4:])
     return aliases
-
-
-class ValidationLog:
-    def __init__(self, path: Path) -> None:
-        self.path = path
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-
-    def write(self, message: str) -> None:
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(message.rstrip() + "\n")
 
 
 def validate_clue_graph(plot: PlotSkeleton, npcs: NPCRoster, locations: LocationCatalog, clue_graph: ClueGraph) -> list[str]:

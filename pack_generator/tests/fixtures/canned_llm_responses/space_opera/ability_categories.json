@@ -1,0 +1,41 @@
+{
+  "categories": [
+    {
+      "key": "ship_systems",
+      "display": "Ship Systems",
+      "description": "Active ship-side actions — piloting under pressure, gunnery, jury-rigging in flight. Roll the relevant attribute. Failure adds 1 ship_wear.",
+      "activation": "active",
+      "roll_attribute": "tech",
+      "consequence_on_failure": "ship_wear: +1",
+      "consequence_on_partial": "ship_wear: +1 OR a complication on the action",
+      "has_levels": true,
+      "level_names": ["green", "veteran", "ace"]
+    },
+    {
+      "key": "general_skills",
+      "display": "General Skills",
+      "description": "Learned trades and professional capabilities — medicine, social legwork, frontier survival. Triggered when the GM calls a roll on the most appropriate attribute. No special cost.",
+      "activation": "passive_or_triggered",
+      "has_levels": true,
+      "level_names": ["green", "veteran", "ace"]
+    },
+    {
+      "key": "alien_tech",
+      "display": "Alien Tech",
+      "description": "Active uses of recovered alien artifacts and the rare practitioner's intuition for them. Roll Edge. Failure inflicts heat (the wrongness echoes outward). Partial succeeds with a complication or unexpected side effect.",
+      "activation": "active",
+      "roll_attribute": "edge",
+      "consequence_on_failure": "heat: +1",
+      "consequence_on_partial": "heat: +1 OR effect distorts in transit",
+      "has_levels": true,
+      "level_names": ["initiate", "adept", "deep-touched"]
+    },
+    {
+      "key": "frontier_traits",
+      "display": "Frontier Traits",
+      "description": "Permanent character features — backstory, lineage, signature gear. Passive; the GM applies their effect where relevant.",
+      "activation": "passive",
+      "has_levels": false
+    }
+  ]
+}

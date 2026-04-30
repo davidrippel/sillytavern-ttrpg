@@ -5,8 +5,8 @@ from collections.abc import Callable
 
 from pydantic import BaseModel, Field
 
-from ..llm import LLMClient, LLMError, generate_structured
-from ..pack import GenrePack
+from common.llm import LLMClient, LLMError, generate_structured
+from common.pack import GenrePack
 from ..schemas import LocationCatalog, NPCRoster, OpeningHookDocument, PlotSkeleton, PremiseDocument
 from ..seed import CampaignSeed
 from ..validation import ValidationLog

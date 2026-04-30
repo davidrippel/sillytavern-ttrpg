@@ -9,9 +9,9 @@ from typing import Any
 from pydantic import BaseModel
 
 from .artifacts import serialize_clue_graph, serialize_location_catalog, serialize_plot_skeleton
-from .llm import LLMClient, OpenRouterClient, UsageStats
+from common.llm import LLMClient, OpenRouterClient, UsageStats
 from .lorebook import assemble_lorebook
-from .pack import GenrePack, load_pack
+from common.pack import GenrePack, load_pack
 from .placeholders import infer_protagonist_name_candidates, sanitize_model
 from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument, SampleCharacterSet
 from .seed import LoadedSeed, load_seed
@@ -27,7 +27,7 @@ from .stages import plot_skeleton as plot_stage
 from .stages import premise as premise_stage
 from .stages import sample_characters as sample_characters_stage
 from .stages import spoilers as spoilers_stage
-from .settings import get_default_model, get_default_temperature, get_dry_run_model
+from common.settings import get_default_model, get_default_temperature, get_dry_run_model
 
 PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
 

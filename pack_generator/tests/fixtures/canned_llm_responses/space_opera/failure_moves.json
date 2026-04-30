@@ -1,0 +1,24 @@
+{
+  "moves": [
+    {"title": "Something out there hears you.", "body": "An alien presence registers the action; bank a future complication or introduce a watcher in a later scene."},
+    {"title": "The ship pays.", "body": "ship_wear: +1, narrated as a specific new fault — a flickering nav, a smoking conduit, a hatch that no longer seals."},
+    {"title": "A pursuit cuts the trip short.", "body": "heat: +2 and a hostile vessel is on the scope within the next scene; the crew has minutes, not hours."},
+    {"title": "An ally takes the hit.", "body": "An NPC crew member or contact suffers the consequence in the protagonist's place — injury, exposure, a betrayal forced on them."},
+    {"title": "An old debt surfaces.", "body": "Someone the protagonist owes appears (or a message from them does). They want collection. Now is inconvenient."},
+    {"title": "The cargo is not what was paid for.", "body": "Reveal a complication baked into the manifest: a stowaway, contraband under the contraband, a shipping crate making sounds."},
+    {"title": "A witness saw something.", "body": "A bystander, dock worker, or station drone caught the scene; the GM banks this for a return appearance, with rising stakes."},
+    {"title": "Atmosphere fails locally.", "body": "A bulkhead seal cracks, a suit warns, gravity stutters. Someone has minutes to fix it or lose part of the ship to vacuum."},
+    {"title": "The artifact answers wrong.", "body": "Alien tech responds to its makers' intent, not the operator's. heat: +1 and the GM narrates an effect that resembles what was wanted but in a way that will cost more later."},
+    {"title": "A faction takes notice.", "body": "A corporate, criminal, or governmental faction clocks the protagonist by name. heat: +1 and the next port has a quiet observer."}
+  ],
+  "partial_success_trades": [
+    "Success, but it takes much longer than hoped.",
+    "Success, but ship_wear: +1.",
+    "Success, but heat: +1.",
+    "Success, but you must choose only two of three things you wanted.",
+    "Success, but you leave a trail — someone can follow.",
+    "Success, but at a cost of injury (1-2 hp_current).",
+    "Success, but an ally is exposed or endangered.",
+    "Success, but you are noticed by someone you didn't want to notice you."
+  ]
+}

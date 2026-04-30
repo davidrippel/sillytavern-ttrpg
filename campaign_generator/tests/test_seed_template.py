@@ -1,4 +1,4 @@
-from campaign_generator.pack import load_pack
+from common.pack import load_pack
 from campaign_generator.seed import load_seed
 from campaign_generator.seed_template import build_seed_template
 

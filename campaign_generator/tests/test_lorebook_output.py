@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from campaign_generator.lorebook import _name_variants, assemble_lorebook
-from campaign_generator.pack import load_pack
+from common.pack import load_pack
 from campaign_generator.schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
 from campaign_generator.stages.branches import _build_reference_token_map
 from campaign_generator.stages.npcs import _normalize_faction_affiliation

@@ -1,0 +1,23 @@
+{
+  "setting_statement": "The frontier is the long ragged edge where law thins out and the old things wait. Out here, ships are homes, fuel is faith, and every derelict station hides somebody else's bad day. The big alien wrecks in the deep dark were here before us and they will be here after, and they are listening.",
+  "pillars": [
+    {"title": "Community under pressure", "description": "The crew is the campaign. Strangers on the same ship eventually become family or kill each other; both outcomes matter."},
+    {"title": "The cost of freedom", "description": "Out here you are nobody's pet, and nobody is coming to help you. Independence has a fuel bill, and the bill comes due."},
+    {"title": "What the old ones left behind", "description": "The deep dark holds wrecks and ruins from minds that did not think like ours. Touching them changes you, and not always physically."},
+    {"title": "Blue-collar heroism", "description": "These are not chosen ones. They are pilots, mechanics, scoundrels, and tired professionals making the right call when nobody is watching."}
+  ],
+  "content_to_include": [
+    "ships as homes and characters",
+    "the texture of frontier labor and trade",
+    "alien artifacts that are wondrous and dangerous",
+    "moral compromise in tight quarters",
+    "small acts of solidarity"
+  ],
+  "content_to_avoid": [
+    "military_jingoism",
+    "grimdark_nihilism",
+    "racial_essentialism",
+    "sexual content involving minors",
+    "torture as entertainment"
+  ]
+}

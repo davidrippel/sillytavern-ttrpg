@@ -1,0 +1,45 @@
+pack_name: space_opera_adventure
+display_name: "Space Opera Adventure"
+schema_version: 1
+
+one_line_pitch: >
+  Smugglers, derelict colonies, and ancient alien tech on the frontier
+  of known space. Think Firefly meets Alien.
+
+tone_keywords: [gritty, hopeful, wondrous, dangerous, blue-collar]
+
+thematic_pillars_hint: >
+  Community under pressure. The cost of freedom. What the old ones left
+  behind. Generate 3-5 pillars in this vein.
+
+content_to_avoid: [military_jingoism, grimdark_nihilism, racial_essentialism]
+
+attribute_flavor: >
+  Six attributes covering physical, mental, social, and tech/skill capabilities.
+  Lean into the genre: piloting and mechanical intuition matter, as does
+  social navigation in a multicultural frontier. Use names that feel
+  space-opera, not generic fantasy.
+
+resource_flavor: >
+  One primary resource representing long-term wear — could be ship condition,
+  fuel, or crew morale, whichever best captures the genre's stakes.
+  One short-term resource representing immediate pressure — heat (wanted
+  level), oxygen, or adrenaline. Pick what fits the one-line pitch best.
+
+ability_categories_hint: >
+  Include piloting/navigation, combat/small arms, ship systems/mechanics,
+  and at least one "weird" category — psionics, alien tech, or
+  something genre-defining. Decide on the final set.
+
+example_inspiration_list: >
+  Firefly, Alien, The Expanse, early Star Wars (pre-prequel), Outer Wilds.
+
+example_characters: >
+  A smuggler-captain with a haunted past. A xenoarcheologist who's seen
+  too much. A mechanic who talks to ships. An ex-corporate-security
+  trying to disappear. Use these as a vibe check for ability catalog
+  and tone.
+
+campaign_style_hint: >
+  Episodic adventures with an overarching mystery. Ships as homes.
+  Strangers on the same ship eventually become family (or kill each other).

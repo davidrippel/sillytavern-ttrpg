@@ -7,7 +7,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .pack import GenrePack
+from common.pack import GenrePack
 
 
 class SeedValidationError(ValueError):

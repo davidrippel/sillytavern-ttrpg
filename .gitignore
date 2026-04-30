@@ -22,6 +22,9 @@ dist/
 htmlcov/
 
 # Project-local environment and cache files
-campaign_generator/.env
 campaign_generator/.venv/
+pack_generator/.venv/
+
+# Output folders
 campaign_generator/campaigns/
+genres/

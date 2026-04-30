@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from .settings import get_campaigns_base_dir, get_genres_base_dir
+from common.settings import get_campaigns_base_dir, get_genres_base_dir
 
 
 def _slugify(value: str) -> str:

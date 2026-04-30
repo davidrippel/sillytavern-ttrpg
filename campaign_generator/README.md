@@ -19,10 +19,10 @@ python -m pip install -e ".[dev]"
 cp examples/seed_balanced.yaml my_seed.yaml
 ```
 
-3. Create `.env` from the example and add your OpenRouter key.
+3. Create `.env` from the example and add your OpenRouter key. The `.env` lives at the **repo root** so it's shared with the pack generator.
 
 ```bash
-cp .env.example .env
+cp ../.env.example ../.env
 ```
 
 4. Edit `my_seed.yaml`.

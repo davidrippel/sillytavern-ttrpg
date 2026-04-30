@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .pack import GenrePack
+from common.pack import GenrePack
 
 
 def build_seed_template(pack: GenrePack) -> str:

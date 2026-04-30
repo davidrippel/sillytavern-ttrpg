@@ -5,8 +5,8 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 
-from ..llm import LLMClient, LLMError, generate_structured
-from ..pack import GenrePack
+from common.llm import LLMClient, LLMError, generate_structured
+from common.pack import GenrePack
 from ..schemas import FactionSet, NPC, NPCRoster, PlotSkeleton, PremiseDocument
 from ..seed import CampaignSeed
 from ..validation import ValidationLog

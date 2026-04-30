@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from ..llm import LLMClient, generate_structured
+from common.llm import LLMClient, generate_structured
 from ..schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
 from ..seed import CampaignSeed
 from ..validation import ValidationLog

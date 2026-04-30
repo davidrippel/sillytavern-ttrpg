@@ -1,0 +1,13 @@
+{
+  "items": [
+    {"section": "Mechanics", "text": "Do Edge and Nerve remain distinct in play? Risk: both can be called for fear-related rolls; verify Edge stays focused on alien-touched perception."},
+    {"section": "Mechanics", "text": "Does the heat / ship_wear pair feel different at the table, or do they collapse into 'meter that goes up'?"},
+    {"section": "Mechanics", "text": "Are 4 abilities in ship_systems enough for a ship-heavy campaign, or does the category feel thin?"},
+    {"section": "Tone", "text": "Does the GM keep ship_wear and heat described physically (sparks, smoke, the watcher in the bar) rather than as numbers?"},
+    {"section": "Tone", "text": "Hook 2 (The Wreck) is heavier on alien menace than Hooks 1 and 3 — intentional?"},
+    {"section": "Content safety", "text": "Has the player reviewed content_to_avoid? Any other themes the table wants excluded?"},
+    {"section": "Pack-generator items", "text": "No stages retried in this run. If patterns emerge across multiple generations (e.g. attributes recurringly producing overlapping pairs), revisit the prompt."},
+    {"section": "Playtest items (after session 1)", "text": "Which failure moves actually fired? Which never did?"},
+    {"section": "Playtest items (after session 1)", "text": "Did Frontier Traits come into play, or were they paper background?"}
+  ]
+}

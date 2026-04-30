@@ -3,8 +3,8 @@ from pathlib import Path
 import json
 import yaml
 
-from campaign_generator.llm import UsageStats
-from campaign_generator.llm import ReplayLLMClient
+from common.llm import UsageStats
+from common.llm import ReplayLLMClient
 from campaign_generator.paths import build_auto_campaign_dir_name, resolve_output_path
 from campaign_generator.pipeline import run_pipeline
 from campaign_generator.pipeline import _format_duration

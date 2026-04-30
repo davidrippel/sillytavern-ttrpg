@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .pack import GenrePack
+from common.pack import GenrePack
 from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument, SampleCharacterSet
 
 

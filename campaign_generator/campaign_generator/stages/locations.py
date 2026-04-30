@@ -5,7 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ..artifacts import serialize_location_list
-from ..llm import LLMClient, LLMError, generate_structured
+from common.llm import LLMClient, LLMError, generate_structured
 from ..schemas import FactionSet, Location, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
 from ..seed import CampaignSeed
 from ..validation import ValidationLog

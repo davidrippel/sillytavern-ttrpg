@@ -1,0 +1,64 @@
+{
+  "attributes": [
+    {
+      "key": "grit",
+      "display": "Grit",
+      "description": "Physical endurance, raw strength, the ability to keep going when ship systems fail and the air goes thin. Not athleticism for its own sake — it's the willingness to hold on.",
+      "examples": [
+        "wrenching a stuck airlock open before the breach widens",
+        "carrying a wounded crewmate down a flooded corridor",
+        "fighting through hull-rash and oxygen debt"
+      ]
+    },
+    {
+      "key": "reflex",
+      "display": "Reflex",
+      "description": "Speed, precision, fine motor control. Pilot's hands, gunner's eye, surgeon's stitch.",
+      "examples": [
+        "threading a freighter through an asteroid swarm",
+        "shooting first when a deal goes sideways",
+        "patching a leaking suit during EVA"
+      ]
+    },
+    {
+      "key": "tech",
+      "display": "Tech",
+      "description": "Engineering instinct and applied knowledge. Reading a system's faults, jury-rigging repairs, recognizing patterns in unfamiliar machinery.",
+      "examples": [
+        "rerouting power around a damaged junction",
+        "deciphering a salvaged ship log",
+        "improvising a repair with mismatched parts"
+      ]
+    },
+    {
+      "key": "nerve",
+      "display": "Nerve",
+      "description": "Composure under pressure and resistance to fear. Holding your line when the cargo bay is rattling and the pirates are hailing.",
+      "examples": [
+        "staying calm when alien tech starts singing back",
+        "facing down an angry station boss",
+        "lying convincingly to a customs officer"
+      ]
+    },
+    {
+      "key": "charm",
+      "display": "Charm",
+      "description": "Social navigation in a multicultural frontier — persuasion, deception, leadership, the ability to make a stranger want to help you.",
+      "examples": [
+        "talking a hostile crew into standing down",
+        "negotiating a salvage rate up by twenty percent",
+        "gathering rumor in a dockside cantina"
+      ]
+    },
+    {
+      "key": "edge",
+      "display": "Edge",
+      "description": "Frontier instinct — the prickle that says don't go in there, the read on a scene that doesn't add up, sensitivity to the deep-dark wrongness of alien things.",
+      "examples": [
+        "sensing an ambush before it springs",
+        "catching the off-pattern in alien glyphs",
+        "knowing which rumor is the truthful one"
+      ]
+    }
+  ]
+}

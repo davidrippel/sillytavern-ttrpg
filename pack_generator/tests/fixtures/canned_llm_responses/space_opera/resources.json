@@ -1,0 +1,62 @@
+{
+  "resources": [
+    {
+      "key": "hp_current",
+      "display": "Hit Points",
+      "kind": "pool",
+      "description": "Physical condition. At zero, the character is dying — they will die without intervention within a scene.",
+      "starting_value": 10,
+      "max_value_field": "hp_max"
+    },
+    {
+      "key": "hp_max",
+      "display": "Max HP",
+      "kind": "static_value",
+      "description": "Upper bound for hp_current. Rises with permanent advancement.",
+      "starting_value": 10
+    },
+    {
+      "key": "ship_wear",
+      "display": "Ship Wear",
+      "kind": "pool_with_threshold",
+      "description": "Long-term ship condition. Accumulates from rough landings, combat hits, deferred maintenance, and contact with alien tech. When ship_wear reaches ship_wear_threshold, a permanent ship problem is inflicted and ship_wear resets to zero.",
+      "starting_value": 0,
+      "threshold_field": "ship_wear_threshold",
+      "threshold_consequence": {"field": "ship_problems", "delta": "+1", "then_reset": true}
+    },
+    {
+      "key": "ship_wear_threshold",
+      "display": "Ship Wear Threshold",
+      "kind": "static_value",
+      "description": "When ship_wear reaches this value, a new permanent ship problem is rolled.",
+      "starting_value": 5
+    },
+    {
+      "key": "ship_problems",
+      "display": "Permanent Ship Problems",
+      "kind": "counter",
+      "description": "Lifetime count of permanent ship problems. At 5, the ship is barely flyable. At 10, it is a wreck and cannot leave dock.",
+      "starting_value": 0,
+      "threshold": 5,
+      "threshold_effect": "ship_handles_poorly",
+      "endgame_value": 10,
+      "endgame_effect": "ship_grounded_permanently"
+    },
+    {
+      "key": "heat",
+      "display": "Heat",
+      "kind": "pool_with_threshold",
+      "description": "Short-term notice from law enforcement, factions, or angry creditors. Rises with loud action and visibility, falls with successful low profile or paid bribes. When heat reaches heat_threshold, a pursuit or hostile encounter follows in hours, not days, and heat resets.",
+      "starting_value": 0,
+      "threshold_field": "heat_threshold",
+      "threshold_consequence": {"field": "heat", "delta": 0, "then_reset": true}
+    },
+    {
+      "key": "heat_threshold",
+      "display": "Heat Threshold",
+      "kind": "static_value",
+      "description": "When heat reaches this value, the GM introduces an immediate pursuit or hostile encounter.",
+      "starting_value": 4
+    }
+  ]
+}
