@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 from .pack import GenrePack
-from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
+from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument, SampleCharacterSet
 
 
 _HONORIFICS = {
@@ -193,6 +193,7 @@ def assemble_lorebook(
     locations: LocationCatalog,
     clue_graph: ClueGraph,
     branches: BranchPlan,
+    sample_characters: SampleCharacterSet | None = None,
 ) -> dict[str, Any]:
     entries: dict[str, dict[str, Any]] = {}
     uid = 0
@@ -422,6 +423,27 @@ def assemble_lorebook(
             order=700,
         )
     )
+
+    if sample_characters is not None:
+        sample_lines = [
+            f"- {character.archetype}: {character.hook_into_campaign}"
+            for character in sample_characters.characters
+        ]
+        sample_content = (
+            "Pre-built sample characters available for this campaign. "
+            "If a player needs help making a character, offer one of:\n\n"
+            + "\n".join(sample_lines)
+        )
+        uid += 1
+        add(
+            _entry(
+                uid,
+                comment="Sample Characters",
+                content=sample_content,
+                keys=["sample characters", "pregens", "make a character", "character creation"],
+                order=750,
+            )
+        )
 
     return {
         "name": title,

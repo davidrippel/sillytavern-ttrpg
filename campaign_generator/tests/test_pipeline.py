@@ -44,12 +44,26 @@ def test_pipeline_replay_writes_outputs(tmp_path):
 
     assert (output_dir / "opening_hook.txt").exists()
     assert (output_dir / "initial_authors_note.txt").exists()
-    lorebook_files = list(output_dir.glob("*.json"))
+    lorebook_files = [
+        path for path in output_dir.glob("*.json") if path.name != "sample_characters.json"
+    ]
     assert len(lorebook_files) == 1, f"expected one lorebook json, got {lorebook_files}"
     assert lorebook_files[0].name == "the_ferryman_s_satchel.json"
     assert (output_dir / "spoilers" / "full_campaign.md").exists()
     assert (output_dir / "stages" / "premise.json").exists()
     assert (output_dir / "stages" / "branches.json").exists()
+    assert (output_dir / "stages" / "sample_characters.json").exists()
+    assert (output_dir / "sample_characters.json").exists()
+    samples_payload = json.loads((output_dir / "sample_characters.json").read_text(encoding="utf-8"))
+    assert samples_payload["pack_name"] == "symbaroum_dark_fantasy"
+    assert len(samples_payload["characters"]) == 3
+    assert samples_payload["characters"][0]["story"]["strengths"]
+    assert samples_payload["characters"][0]["pack"]["attributes"]
+    lorebook_payload = json.loads(lorebook_files[0].read_text(encoding="utf-8"))
+    assert any(
+        entry.get("comment") == "Sample Characters"
+        for entry in lorebook_payload["entries"].values()
+    )
     assert (output_dir / "stages" / "calls.jsonl").exists()
     assert (output_dir / "stages" / "validation_log.txt").exists()
     assert (output_dir / "partials" / "opening_hook.partial.txt").exists()

@@ -13,7 +13,7 @@ from .llm import LLMClient, OpenRouterClient, UsageStats
 from .lorebook import assemble_lorebook
 from .pack import GenrePack, load_pack
 from .placeholders import infer_protagonist_name_candidates, sanitize_model
-from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
+from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument, SampleCharacterSet
 from .seed import LoadedSeed, load_seed
 from .validation import ValidationLog, validate_cross_stage
 from .stages import branches as branches_stage
@@ -25,6 +25,7 @@ from .stages import npcs as npcs_stage
 from .stages import opening_hook as opening_hook_stage
 from .stages import plot_skeleton as plot_stage
 from .stages import premise as premise_stage
+from .stages import sample_characters as sample_characters_stage
 from .stages import spoilers as spoilers_stage
 from .settings import get_default_model, get_default_temperature, get_dry_run_model
 
@@ -40,6 +41,8 @@ STAGE_ALIASES = {
     "clue_chains": "clue_chains",
     "clues": "clue_chains",
     "branches": "branches",
+    "sample_characters": "sample_characters",
+    "samples": "sample_characters",
     "all": "all",
 }
 
@@ -51,6 +54,7 @@ STAGE_MODELS: dict[str, type[BaseModel]] = {
     "locations": LocationCatalog,
     "clue_chains": ClueGraph,
     "branches": BranchPlan,
+    "sample_characters": SampleCharacterSet,
 }
 
 
@@ -373,6 +377,39 @@ def run_pipeline(
     branches = sanitize_model(branches, protagonist_names=protagonist_names)
     _write_json(_stage_cache_path(stages_dir, "branches"), branches.model_dump())
 
+    sample_characters: SampleCharacterSet | None = None
+    sample_cache_path = _stage_cache_path(stages_dir, "sample_characters")
+    if "sample_characters" in selected or sample_cache_path.exists():
+        sample_characters = _run_or_load_stage(
+            name="sample_characters",
+            selected=selected,
+            stages_dir=stages_dir,
+            model_cls=SampleCharacterSet,
+            client=client,
+            progress_callback=progress_callback,
+            runner=lambda: sample_characters_stage.run(
+                client=client,
+                system_prompt=_load_prompt(sample_characters_stage.PROMPT_FILE),
+                pack=pack,
+                premise=premise,
+                plot=plot,
+                factions=factions,
+                npcs=npcs,
+                locations=locations,
+                model=resolved_model,
+                temperature=temperature,
+                validation_log=validation_log,
+            ),
+        )
+        sample_payload = {
+            "pack_name": pack.metadata.pack_name,
+            "pack_version": pack.metadata.version,
+            "characters": [character.model_dump() for character in sample_characters.characters],
+        }
+        _write_json(output_dir / "sample_characters.json", sample_payload)
+        if progress_callback is not None:
+            progress_callback("Wrote sample_characters.json")
+
     cross_stage_errors = validate_cross_stage(pack, plot, factions, npcs, locations, clue_graph, branches)
     if cross_stage_errors:
         for error in cross_stage_errors:
@@ -413,6 +450,7 @@ def run_pipeline(
         locations=locations,
         clue_graph=clue_graph,
         branches=branches,
+        sample_characters=sample_characters,
     )
     lorebook_filename = _slugify_title(premise.title) + ".json"
     _write_json(output_dir / lorebook_filename, lorebook)

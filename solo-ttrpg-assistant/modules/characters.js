@@ -82,9 +82,31 @@ function buildCharacterRecord({ name = '', packName = null, personaKey = null } 
     return {
         ...base,
         id: newCharacterId(),
+        mode: 'pack',
         name: name || base.name || '',
         packName: packName ?? getSettings().activePackName ?? null,
         personaKey: personaKey ?? null,
+    };
+}
+
+function buildStoryCharacterRecord({
+    name = '',
+    description = '',
+    strengths = [],
+    weakness = '',
+    notes = '',
+    personaKey = null,
+} = {}) {
+    return {
+        id: newCharacterId(),
+        mode: 'story',
+        name: name || '',
+        packName: null,
+        personaKey: personaKey ?? null,
+        description: String(description ?? ''),
+        strengths: Array.isArray(strengths) ? strengths.slice(0, 2).map((value) => String(value)) : [],
+        weakness: String(weakness ?? ''),
+        notes: String(notes ?? ''),
     };
 }
 
@@ -95,6 +117,17 @@ export function createCharacter(options = {}) {
     settings.activeCharacterId = record.id;
     saveSettings();
     log(`Created character ${record.name || '(unnamed)'}.`);
+    emitCharactersChanged();
+    return record;
+}
+
+export function createStoryCharacter(options = {}) {
+    const settings = getSettings();
+    const record = buildStoryCharacterRecord(options);
+    settings.characters[record.id] = record;
+    settings.activeCharacterId = record.id;
+    saveSettings();
+    log(`Created story character ${record.name || '(unnamed)'}.`);
     emitCharactersChanged();
     return record;
 }

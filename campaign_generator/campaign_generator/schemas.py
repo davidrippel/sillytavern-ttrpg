@@ -254,6 +254,33 @@ class InitialAuthorsNote(BaseModel):
         return "\n".join(sections)
 
 
+class StoryModeProfile(BaseModel):
+    name: str
+    description: str
+    strengths: list[str] = Field(min_length=1, max_length=2)
+    weakness: str
+
+
+class PackModeProfile(BaseModel):
+    name: str
+    concept: str
+    attributes: dict[str, int] = Field(default_factory=dict)
+    abilities: list[str] = Field(default_factory=list)
+    equipment: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class SampleCharacter(BaseModel):
+    archetype: str
+    hook_into_campaign: str
+    story: StoryModeProfile
+    pack: PackModeProfile
+
+
+class SampleCharacterSet(BaseModel):
+    characters: list[SampleCharacter] = Field(min_length=3, max_length=3)
+
+
 class OpeningHookDocument(BaseModel):
     premise: str
     tone_statement: str

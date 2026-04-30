@@ -105,9 +105,42 @@ function getResourceDisplay(character, resource) {
     return String(value ?? '');
 }
 
+function formatStoryCharacterForPrompt(character) {
+    const lines = [
+        '=== CHARACTER ===',
+        `Name: ${character.name || 'Unknown'}`,
+    ];
+    if (character.description) {
+        lines.push(`Description: ${character.description}`);
+    }
+    const strengths = (character.strengths ?? []).filter(Boolean);
+    if (strengths.length > 0) {
+        lines.push(`Good at: ${strengths.join('; ')}`);
+    }
+    if (character.weakness) {
+        lines.push(`Bad at: ${character.weakness}`);
+    }
+    if (character.notes) {
+        lines.push(`Notes: ${character.notes}`);
+    }
+    lines.push('');
+    lines.push('=== NARRATION GUIDANCE ===');
+    lines.push('This is a story-mode character. There are no dice rolls or stats.');
+    lines.push('Resolve attempted actions narratively: lean toward success when the');
+    lines.push("character draws on what they're good at, lean toward complications or");
+    lines.push('failure when their weakness is in play, and let neutral attempts go');
+    lines.push('either way based on what makes the better story. Be willing to commit');
+    lines.push("to clear failures and complications — don't soften every outcome.");
+    return lines.join('\n');
+}
+
 export function formatCharacterSheetForPrompt() {
     const character = getCharacter();
     const pack = getActivePack();
+
+    if ((character.mode ?? 'pack') === 'story') {
+        return formatStoryCharacterForPrompt(character);
+    }
 
     if (!pack) {
         const lines = [
@@ -231,6 +264,72 @@ function createListEditor(title, items, onAdd, onRemove) {
     $section.append($row);
 
     return $section;
+}
+
+function renderStorySheet($root) {
+    const character = ensureCharacter();
+    setModeLabel('Story mode');
+
+    if (!Array.isArray(character.strengths)) {
+        character.strengths = [];
+    }
+    if (typeof character.description !== 'string') {
+        character.description = '';
+    }
+    if (typeof character.weakness !== 'string') {
+        character.weakness = '';
+    }
+
+    const $base = $('<section class="solo-section solo-stack"></section>');
+    $base.append('<div class="solo-row spread"><h5>Core</h5></div>');
+    const $name = $(`<label class="solo-stack"><span>Name</span><input type="text" value="${escapeHtml(character.name ?? '')}" /></label>`);
+    $name.find('input').on('input', (event) => {
+        character.name = event.target.value;
+        emitCharacterMetaChanged();
+        saveCharacter({ rerender: false });
+    });
+    $base.append($name, createPersonaRow(character));
+
+    const $description = $(`<label class="solo-stack"><span>Description</span><textarea rows="4">${escapeHtml(character.description ?? '')}</textarea></label>`);
+    $description.find('textarea').on('input', (event) => {
+        character.description = event.target.value;
+        saveCharacter({ rerender: false });
+    });
+
+    const $strengths = createListEditor(
+        'Strengths (max 2)',
+        character.strengths,
+        (value) => {
+            if (character.strengths.length >= 2) {
+                toastr.info('Story mode allows up to 2 strengths.');
+                return;
+            }
+            character.strengths.push(value);
+            saveCharacter();
+        },
+        (index) => {
+            character.strengths.splice(index, 1);
+            saveCharacter();
+        },
+    );
+
+    const $weakness = $(`<label class="solo-stack"><span>Weakness</span><input type="text" value="${escapeHtml(character.weakness ?? '')}" /></label>`);
+    $weakness.find('input').on('input', (event) => {
+        character.weakness = event.target.value;
+        saveCharacter({ rerender: false });
+    });
+
+    const $notes = $(`<label class="solo-stack"><span>Notes</span><textarea rows="3">${escapeHtml(character.notes ?? '')}</textarea></label>`);
+    $notes.find('textarea').on('input', (event) => {
+        character.notes = event.target.value;
+        saveCharacter({ rerender: false });
+    });
+
+    const $preview = $('<section class="solo-section solo-stack"></section>');
+    $preview.append('<div class="solo-row spread"><h5>Prompt Preview</h5></div>');
+    $preview.append(`<pre class="solo-code">${escapeHtml(formatCharacterSheetForPrompt())}</pre>`);
+
+    $root.append($base, $description, $strengths, $weakness, $notes, $preview);
 }
 
 function renderDegradedSheet($root) {
@@ -445,6 +544,12 @@ export function renderSheet() {
     if (!isExtensionEnabled()) {
         setModeLabel('Disabled');
         $root.append('<section class="solo-section solo-stack solo-warning"><h5>Extension Off</h5><p class="solo-muted">The assistant is paused. Stored characters remain available, but sheet injection and automation are disabled until you turn the extension back on.</p></section>');
+        return;
+    }
+
+    const character = storeGetActive();
+    if (character && (character.mode ?? 'pack') === 'story') {
+        renderStorySheet($root);
         return;
     }
 

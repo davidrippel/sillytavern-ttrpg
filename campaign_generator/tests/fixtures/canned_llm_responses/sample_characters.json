@@ -1,0 +1,58 @@
+{
+  "characters": [
+    {
+      "archetype": "Disgraced lantern-carter",
+      "hook_into_campaign": "Once a sworn carrier of the Lantern Carters Guild, dismissed under suspicious circumstances after the ferryman's death.",
+      "story": {
+        "name": "Halden Brewer",
+        "description": "A wiry man in patched road-leathers who still keeps a guild oil-lamp in his pack despite being struck from the rolls. He wants to clear his name and learn what really happened on the night the satchel went missing.",
+        "strengths": ["knows every back road and ford", "reads people"],
+        "weakness": "too proud to ask for help"
+      },
+      "pack": {
+        "name": "Halden Brewer",
+        "concept": "Disgraced lantern-carter chasing the truth about the ferryman.",
+        "attributes": {"might": 0, "finesse": 1, "wits": 1, "will": 0, "presence": 0, "shadow": -1},
+        "abilities": ["Stealth", "Sword Fighting"],
+        "equipment": ["worn road-cloak", "guild oil-lamp", "short blade"],
+        "notes": "Carries a folded letter accusing him of theft; refuses to throw it away."
+      }
+    },
+    {
+      "archetype": "Sun Choir penitent",
+      "hook_into_campaign": "A junior cantor of the Sun Choir of Prios sent to investigate the corruption rumors leaking out of the Root-Glass Circle.",
+      "story": {
+        "name": "Sister Iola",
+        "description": "Young, fervent, with sun-symbols inked across her forearms. The Choir trusts her precisely because she has never doubted — which is exactly the wrong qualification for what she will find.",
+        "strengths": ["unshakable in the face of fear"],
+        "weakness": "sees compromise as betrayal"
+      },
+      "pack": {
+        "name": "Sister Iola",
+        "concept": "Cantor of the Sun Choir, sent to root out corruption.",
+        "attributes": {"might": 0, "finesse": 0, "wits": 0, "will": 2, "presence": 1, "shadow": -1},
+        "abilities": ["Bend Will", "Lore of the Forest"],
+        "equipment": ["sun-medallion", "ritual chalk", "plain robe"],
+        "notes": "Has not yet realized the Choir's leadership is fractured."
+      }
+    },
+    {
+      "archetype": "Root-Glass scout",
+      "hook_into_campaign": "A Root-Glass Circle scout exiled for refusing a ritual; still loyal in heart, watching the same forest from outside.",
+      "story": {
+        "name": "Veshka Greythorn",
+        "description": "Spare, watchful, and quiet to a fault. She knows the forest's moods better than most know their own families, and she suspects her old circle has been twisted by something they were meant to contain.",
+        "strengths": ["forest-witch instincts", "deadly with a thrown blade"],
+        "weakness": "carries a slow-growing corruption she will not name"
+      },
+      "pack": {
+        "name": "Veshka Greythorn",
+        "concept": "Exiled Root-Glass scout walking the edge between her old circle and the world.",
+        "attributes": {"might": 0, "finesse": 2, "wits": 1, "will": 0, "presence": -1, "shadow": 1},
+        "abilities": ["Witchsight", "Stealth"],
+        "equipment": ["ash-bow", "throwing knives", "amulet of bound thorn"],
+        "notes": "The corruption she hides will cost her if she keeps using witchsight."
+      }
+    }
+  ]
+}

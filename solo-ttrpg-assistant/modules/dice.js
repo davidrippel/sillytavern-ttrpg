@@ -1,4 +1,5 @@
 import { QR_SET_NAME } from './constants.js';
+import { subscribeCharacters } from './characters.js';
 import { log } from './logger.js';
 import { findAbilityDefinition, getActivePack, subscribePack } from './pack.js';
 import { findAbilityOnSheet, getCharacter } from './sheet.js';
@@ -42,6 +43,10 @@ function buildRollMessage(label, roll, modifier) {
     return `[ROLL: ${label} - 2d6 (${roll.die1}+${roll.die2}=${roll.total})${modifierText} = **${total} - ${getResultBand(total)}**]`;
 }
 
+function isStoryMode(character) {
+    return (character?.mode ?? 'pack') === 'story';
+}
+
 async function executeAttributeRoll(attributeKey) {
     if (!isExtensionEnabled()) {
         throw new Error('Solo TTRPG Assistant is disabled.');
@@ -49,6 +54,10 @@ async function executeAttributeRoll(attributeKey) {
 
     const pack = getActivePack();
     const character = getCharacter();
+    if (isStoryMode(character)) {
+        toastr.info('Story-mode characters resolve outcomes narratively — no rolls.');
+        return null;
+    }
     const attribute = pack?.attributeMap?.[attributeKey];
     const modifier = Number(character.attributes?.[attributeKey] ?? 0);
     const label = attribute ? `${attribute.display} check` : `${attributeKey} check`;
@@ -64,6 +73,11 @@ async function executeManualRoll(modifier) {
         throw new Error('Solo TTRPG Assistant is disabled.');
     }
 
+    if (isStoryMode(getCharacter())) {
+        toastr.info('Story-mode characters resolve outcomes narratively — no rolls.');
+        return null;
+    }
+
     const roll = roll2d6();
     const message = buildRollMessage('Manual check', roll, modifier);
     await appendSystemMessage(message);
@@ -74,6 +88,11 @@ async function executeManualRoll(modifier) {
 async function executeAbilityRoll(abilityName) {
     if (!isExtensionEnabled()) {
         throw new Error('Solo TTRPG Assistant is disabled.');
+    }
+
+    if (isStoryMode(getCharacter())) {
+        toastr.info('Story-mode characters resolve outcomes narratively — no rolls.');
+        return null;
     }
 
     const pack = getActivePack();
@@ -155,11 +174,38 @@ function registerSlashCommands() {
     }));
 }
 
+function clearRollQuickReplies(api) {
+    if (!api || typeof api.getSetByName !== 'function') {
+        return;
+    }
+    try {
+        const set = api.getSetByName(QR_SET_NAME);
+        if (!set) {
+            return;
+        }
+        const labels = (set.qrList ?? []).map((qr) => qr.label).filter(Boolean);
+        for (const label of labels) {
+            api.deleteQuickReply?.(QR_SET_NAME, label);
+        }
+    } catch (error) {
+        log('Failed to clear roll Quick Replies for story mode.', 'warn', error.message);
+    }
+}
+
 function syncQuickReplies() {
     const pack = getActivePack();
     const api = globalThis.quickReplyApi;
 
-    if (!pack || !api || typeof api.createSet !== 'function' || typeof api.createQuickReply !== 'function') {
+    if (!api || typeof api.createSet !== 'function' || typeof api.createQuickReply !== 'function') {
+        return;
+    }
+
+    if ((getCharacter()?.mode ?? 'pack') === 'story') {
+        clearRollQuickReplies(api);
+        return;
+    }
+
+    if (!pack) {
         return;
     }
 
@@ -198,5 +244,6 @@ function syncQuickReplies() {
 export function initDiceModule() {
     registerSlashCommands();
     subscribePack(() => syncQuickReplies());
+    subscribeCharacters(() => syncQuickReplies());
     syncQuickReplies();
 }

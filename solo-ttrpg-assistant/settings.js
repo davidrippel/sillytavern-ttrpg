@@ -2,6 +2,7 @@ import { exportBackupBundle, importBackupBundle } from './modules/backup.js';
 import { runActTransitionFlow, runSceneEndFlow } from './modules/authors_note.js';
 import {
     createCharacter,
+    createStoryCharacter,
     deleteCharacter,
     duplicateCharacter,
     getActiveCharacter,
@@ -43,8 +44,10 @@ function applyEnabledUiState(enabled) {
         '#solo-pack-select',
         '#solo-character-select',
         '#solo-character-new',
+        '#solo-character-new-story',
         '#solo-character-duplicate',
         '#solo-character-delete',
+        '#solo-character-import-samples',
         '#solo-backup-export',
         '#solo-backup-import',
         '#solo-scene-end',
@@ -319,6 +322,84 @@ function handleCharacterNew() {
     createCharacter({ name: '', packName: settings.activePackName ?? null });
 }
 
+function handleCharacterNewStory() {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
+    createStoryCharacter({ name: '' });
+}
+
+async function handleCharacterImportSamples(event) {
+    if (!isExtensionEnabled()) {
+        event.target.value = '';
+        return;
+    }
+
+    const [file] = event.target.files ?? [];
+    if (!file) {
+        return;
+    }
+
+    try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const characters = Array.isArray(data?.characters) ? data.characters : [];
+        if (characters.length === 0) {
+            toastr.warning('No characters found in this file.');
+            return;
+        }
+
+        const context = getContext();
+        const settings = getSettings();
+        const activePackName = settings.activePackName ?? data.pack_name ?? null;
+
+        for (const sample of characters) {
+            const archetype = sample?.archetype ?? 'Sample character';
+            const choice = await context.Popup.show.input(
+                `Import "${archetype}"`,
+                `${sample?.hook_into_campaign ?? ''}\n\nType "story" to create a story-mode character, "pack" to create a stat-based character, or leave blank to skip.`,
+                '',
+            );
+
+            const mode = String(choice ?? '').trim().toLowerCase();
+            if (mode === 'story' && sample?.story) {
+                createStoryCharacter({
+                    name: sample.story.name ?? archetype,
+                    description: sample.story.description ?? '',
+                    strengths: sample.story.strengths ?? [],
+                    weakness: sample.story.weakness ?? '',
+                });
+            } else if (mode === 'pack' && sample?.pack) {
+                const created = createCharacter({
+                    name: sample.pack.name ?? archetype,
+                    packName: activePackName,
+                });
+                created.concept = sample.pack.concept ?? created.concept ?? '';
+                if (sample.pack.attributes && typeof sample.pack.attributes === 'object') {
+                    created.attributes = { ...(created.attributes ?? {}), ...sample.pack.attributes };
+                }
+                if (Array.isArray(sample.pack.abilities)) {
+                    created.abilities = sample.pack.abilities.slice();
+                }
+                if (Array.isArray(sample.pack.equipment)) {
+                    created.equipment = sample.pack.equipment.slice();
+                }
+                if (sample.pack.notes) {
+                    created.notes = sample.pack.notes;
+                }
+                saveSettings();
+            }
+        }
+
+        toastr.success('Sample import complete.');
+    } catch (error) {
+        toastr.error(`Failed to import samples: ${error.message}`);
+    } finally {
+        event.target.value = '';
+    }
+}
+
 function handleCharacterDuplicate() {
     if (!isExtensionEnabled()) {
         return;
@@ -424,10 +505,15 @@ export async function mountSettingsPanel() {
     $(settingsRoot).find('#solo-pack-select').on('change', handlePackSwitch);
     $(packInput).on('change', handlePackInput);
 
+    const samplesInput = $(settingsRoot).find('#solo-character-samples-input').get(0);
+
     $(settingsRoot).find('#solo-character-select').on('change', handleCharacterSwitch);
     $(settingsRoot).find('#solo-character-new').on('click', handleCharacterNew);
+    $(settingsRoot).find('#solo-character-new-story').on('click', handleCharacterNewStory);
     $(settingsRoot).find('#solo-character-duplicate').on('click', handleCharacterDuplicate);
     $(settingsRoot).find('#solo-character-delete').on('click', handleCharacterDelete);
+    $(settingsRoot).find('#solo-character-import-samples').on('click', () => samplesInput?.click());
+    $(samplesInput).on('change', handleCharacterImportSamples);
 
     $(settingsRoot).find('#solo-backup-export').on('click', () => exportBackupBundle().catch((error) => toastr.error(error.message)));
     $(settingsRoot).find('#solo-backup-import').on('click', () => backupInput.click());
