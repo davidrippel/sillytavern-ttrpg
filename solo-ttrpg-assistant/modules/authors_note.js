@@ -71,7 +71,7 @@ async function confirmAuthorsNoteUpdate(title, nextSections, reason) {
     return true;
 }
 
-function sanitizeProposal(raw) {
+function sanitizeProposal(raw, { requireBullets = true } = {}) {
     const text = String(raw ?? '').trim();
     if (!text) {
         return '';
@@ -81,6 +81,8 @@ function sanitizeProposal(raw) {
         `^\\s*(?:${AUTHORS_NOTE_SECTIONS.map((label) => label.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|')})\\s*:`,
         'i',
     );
+    const isBullet = (line) => /^\s*[-*•]\s+/.test(line);
+    const sentinelPattern = /^\(.*\)$/;
 
     const cleaned = [];
     for (const line of text.split('\n')) {
@@ -97,7 +99,26 @@ function sanitizeProposal(raw) {
         cleaned.push(line);
     }
 
-    return cleaned.join('\n').trim();
+    const result = cleaned.join('\n').trim();
+    if (!result) {
+        return '';
+    }
+
+    if (requireBullets) {
+        const lines = result.split('\n').map((line) => line.trim()).filter(Boolean);
+        if (lines.length === 1 && sentinelPattern.test(lines[0])) {
+            return result;
+        }
+        const bulletCount = lines.filter(isBullet).length;
+        if (bulletCount === 0 || bulletCount < lines.length / 2) {
+            log('Discarded malformed proposal (no bullet structure detected).', 'warn');
+            return '';
+        }
+        const bulletsOnly = lines.filter(isBullet).join('\n');
+        return bulletsOnly;
+    }
+
+    return result;
 }
 
 async function runQuietPrompt(prompt, label) {
@@ -144,9 +165,7 @@ async function readCurrentActBeats() {
     return String(entry?.content ?? '').trim();
 }
 
-async function generatePendingBeatsProposal(currentPendingBeats) {
-    const settings = getSettings();
-    const excerpt = buildRecentChatExcerpt(settings.authorsNote.recentBeatsMessages ?? 8);
+async function generatePendingBeatsProposal(currentPendingBeats, recentBeatsSummary) {
     const actText = await readCurrentActBeats();
 
     if (!actText && !currentPendingBeats?.trim()) {
@@ -154,27 +173,28 @@ async function generatePendingBeatsProposal(currentPendingBeats) {
     }
 
     const prompt = [
-        'You diff authored act beats against what has actually happened in chat.',
+        'You diff authored act beats against what has happened in the story so far.',
         '',
         'For each beat in the Current Act lorebook entry, decide:',
-        '- ADDRESSED: the chat clearly shows the beat played out (player encountered it, it concluded, or its dramatic question was answered). DROP it.',
-        '- PENDING: the chat does not yet show this beat happening. KEEP it.',
+        '- ADDRESSED: the beat\'s subject matter appears in either "Recent beats" or in any previously-addressed beat that has dropped off the Pending list. The player has reached the situation the beat describes — even if a choice within it is technically still open.',
+        '- PENDING: the beat\'s subject matter has NOT yet appeared in Recent beats and is NOT yet in play.',
         '',
-        'Be willing to mark a beat ADDRESSED even if its phrasing is open-ended ("must decide", "may attend") — what matters is whether the in-fiction event has occurred.',
+        'Important: a beat phrased as "X must decide whether to Y" is ADDRESSED once X is in the situation requiring the decision (e.g., the invitation arrived and was read). Do not keep it pending just because the choice itself is unmade.',
         '',
         'Output format — STRICT:',
         '- One bullet per PENDING beat, copied verbatim from the lorebook (keep the beat number prefix like "1.2").',
+        '- EVERY non-empty line MUST start with "- ".',
         '- Nothing else. No headings. No explanations. No narration. No story continuation. No "---" separators. No NPC dialogue.',
         '- If every beat is addressed, return exactly: (all beats resolved)',
         '',
-        '=== Current Act lorebook entry ===',
+        '=== Current Act lorebook entry (authored beats) ===',
         actText || '(empty)',
         '',
         '=== Previously listed Pending beats ===',
         currentPendingBeats?.trim() || '(empty)',
         '',
-        '=== Recent chat ===',
-        excerpt || '(no chat yet)',
+        '=== Recent beats (what has actually happened) ===',
+        recentBeatsSummary?.trim() || '(empty)',
     ].join('\n');
 
     return runQuietPrompt(prompt, 'Pending beats');
@@ -271,9 +291,10 @@ export async function runSceneEndFlow() {
     }
 
     const current = parseAuthorsNoteSections();
-    const [recentBeats, pendingBeats, activeThreads, reminders] = await Promise.all([
-        generateRecentBeatsProposal(),
-        generatePendingBeatsProposal(current['Pending beats']),
+    const recentBeats = await generateRecentBeatsProposal();
+    const recentBeatsForDiff = recentBeats || current['Recent beats'];
+    const [pendingBeats, activeThreads, reminders] = await Promise.all([
+        generatePendingBeatsProposal(current['Pending beats'], recentBeatsForDiff),
         generateActiveThreadsProposal(current['Active threads']),
         generateRemindersProposal(current['Reminders']),
     ]);
