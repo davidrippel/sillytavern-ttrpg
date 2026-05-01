@@ -110,6 +110,50 @@ function buildStoryCharacterRecord({
     };
 }
 
+export function convertCharacterMode(id, nextMode) {
+    const record = getCharacterById(id);
+    if (!record) {
+        throw new Error(`Unknown character "${id}".`);
+    }
+
+    const mode = nextMode === 'story' ? 'story' : 'pack';
+    if ((record.mode ?? 'pack') === mode) {
+        return record;
+    }
+
+    const settings = getSettings();
+    let converted;
+
+    if (mode === 'story') {
+        converted = buildStoryCharacterRecord({
+            name: record.name ?? '',
+            description: record.description ?? record.concept ?? '',
+            strengths: Array.isArray(record.strengths) ? record.strengths : [],
+            weakness: record.weakness ?? '',
+            notes: record.notes ?? '',
+            personaKey: record.personaKey ?? null,
+        });
+    } else {
+        const base = buildCharacterRecord({
+            name: record.name ?? '',
+            packName: settings.activePackName ?? record.packName ?? null,
+            personaKey: record.personaKey ?? null,
+        });
+        converted = {
+            ...base,
+            concept: record.concept ?? record.description ?? '',
+            notes: record.notes ?? '',
+        };
+    }
+
+    converted.id = record.id;
+    settings.characters[record.id] = converted;
+    saveSettings();
+    log(`Converted character ${converted.name || '(unnamed)'} to ${mode === 'story' ? 'story-based' : 'stats-based'}.`);
+    emitCharactersChanged();
+    return converted;
+}
+
 export function createCharacter(options = {}) {
     const settings = getSettings();
     const record = buildCharacterRecord(options);

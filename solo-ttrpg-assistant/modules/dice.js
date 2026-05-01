@@ -47,7 +47,7 @@ function isStoryMode(character) {
     return (character?.mode ?? 'pack') === 'story';
 }
 
-async function executeAttributeRoll(attributeKey) {
+export async function executeAttributeRoll(attributeKey) {
     if (!isExtensionEnabled()) {
         throw new Error('Solo TTRPG Assistant is disabled.');
     }
@@ -68,7 +68,7 @@ async function executeAttributeRoll(attributeKey) {
     return message;
 }
 
-async function executeManualRoll(modifier) {
+export async function executeManualRoll(modifier) {
     if (!isExtensionEnabled()) {
         throw new Error('Solo TTRPG Assistant is disabled.');
     }
@@ -85,7 +85,7 @@ async function executeManualRoll(modifier) {
     return message;
 }
 
-async function executeAbilityRoll(abilityName) {
+export async function executeAbilityRoll(abilityName) {
     if (!isExtensionEnabled()) {
         throw new Error('Solo TTRPG Assistant is disabled.');
     }

@@ -3,16 +3,14 @@ import {
     emitCharacterMetaChanged,
     ensureActiveCharacter as storeEnsureActive,
     getActiveCharacter as storeGetActive,
-    linkPersona,
     subscribeCharacters,
-    syncPersonaForCharacter,
 } from './characters.js';
 import { log } from './logger.js';
+import { getPersonaLinkInfo, promptPersonaLink, syncPersonaLink } from './persona_link.js';
 import {
     escapeHtml,
     formatSignedNumber,
     getContext,
-    getPersonasMap,
     getSettings,
     isExtensionEnabled,
     normalizeName,
@@ -20,6 +18,7 @@ import {
 } from './util.js';
 
 const sheetSubscribers = new Set();
+const sheetStateSubscribers = new Set();
 let rootElement = null;
 let modeElement = null;
 
@@ -37,9 +36,20 @@ function emitSheetChanged() {
     }
 }
 
+function emitSheetStateChanged() {
+    for (const listener of sheetStateSubscribers) {
+        listener();
+    }
+}
+
 export function subscribeSheet(listener) {
     sheetSubscribers.add(listener);
     return () => sheetSubscribers.delete(listener);
+}
+
+export function subscribeSheetState(listener) {
+    sheetStateSubscribers.add(listener);
+    return () => sheetStateSubscribers.delete(listener);
 }
 
 export function getCharacter() {
@@ -48,6 +58,7 @@ export function getCharacter() {
 
 export function saveCharacter({ rerender = true } = {}) {
     saveSettings();
+    emitSheetStateChanged();
     if (rerender) {
         emitSheetChanged();
     }
@@ -198,46 +209,41 @@ export function formatCharacterSheetForPrompt() {
     return lines.join('\n');
 }
 
-function getPersonaList() {
-    const personas = getPersonasMap();
-    return Object.entries(personas).map(([key, name]) => ({ key, name: String(name ?? key) }));
-}
-
 function createPersonaRow(character) {
-    const personas = getPersonaList();
-    const currentKey = character.personaKey ?? '';
-    const missing = currentKey && !personas.some((entry) => entry.key === currentKey);
+    const info = getPersonaLinkInfo(character);
+    const $wrapper = $('<div class="solo-stack"></div>');
+    $wrapper.append('<div class="solo-row spread"><h5>Persona Link</h5></div>');
+    $wrapper.append(`
+        <div class="solo-stack">
+            <strong>${escapeHtml(info.label)}</strong>
+            <span class="solo-muted">${escapeHtml(info.detail)}</span>
+        </div>
+    `);
 
-    const $wrapper = $('<label class="solo-stack"><span>Linked Persona</span></label>');
     const $row = $('<div class="solo-row wrap"></div>');
-    const $select = $('<select></select>');
-
-    const options = ['<option value="">— None —</option>'];
-    for (const persona of personas) {
-        const selected = persona.key === currentKey ? ' selected' : '';
-        options.push(`<option value="${escapeHtml(persona.key)}"${selected}>${escapeHtml(persona.name)}</option>`);
-    }
-    if (missing) {
-        options.push(`<option value="${escapeHtml(currentKey)}" selected>— None (missing: ${escapeHtml(currentKey)}) —</option>`);
-    }
-    $select.html(options.join(''));
-
-    $select.on('change', (event) => {
-        const value = event.target.value || null;
-        linkPersona(character.id, value);
-        saveCharacter({ rerender: false });
-    });
-
-    const $sync = $('<button class="menu_button" type="button">Sync Now</button>');
-    $sync.on('click', async () => {
+    const $change = $('<button class="menu_button" type="button">Change</button>');
+    $change.on('click', async () => {
         try {
-            await syncPersonaForCharacter(character);
+            const changed = await promptPersonaLink(character);
+            if (!changed) {
+                return;
+            }
+            saveCharacter({ rerender: false });
         } catch (error) {
             toastr.error(error.message);
         }
     });
 
-    $row.append($select, $sync);
+    const $sync = $('<button class="menu_button" type="button">Sync</button>');
+    $sync.on('click', async () => {
+        try {
+            await syncPersonaLink(character);
+        } catch (error) {
+            toastr.error(error.message);
+        }
+    });
+
+    $row.append($change, $sync);
     $wrapper.append($row);
     return $wrapper;
 }
@@ -276,7 +282,7 @@ function createListEditor(title, items, onAdd, onRemove) {
 
 function renderStorySheet($root) {
     const character = ensureCharacter();
-    setModeLabel('Story mode');
+    setModeLabel('Story-Based');
 
     if (!Array.isArray(character.strengths)) {
         character.strengths = [];
@@ -309,7 +315,7 @@ function renderStorySheet($root) {
         character.strengths,
         (value) => {
             if (character.strengths.length >= 2) {
-                toastr.info('Story mode allows up to 2 strengths.');
+                toastr.info('Story-based characters allow up to 2 strengths.');
                 return;
             }
             character.strengths.push(value);
@@ -342,7 +348,7 @@ function renderStorySheet($root) {
 
 function renderDegradedSheet($root) {
     const character = ensureCharacter();
-    setModeLabel('Unknown pack mode');
+    setModeLabel('Stats-Based (No Pack)');
 
     const $base = $('<section class="solo-section solo-stack"></section>');
     $base.append('<div class="solo-row spread"><h5>Core</h5></div>');
@@ -392,7 +398,7 @@ function renderDegradedSheet($root) {
 function renderPackSheet($root) {
     const pack = getActivePack();
     const character = ensureCharacter();
-    setModeLabel(pack.displayName);
+    setModeLabel(pack.displayName || 'Stats-Based');
 
     const $base = $('<section class="solo-section solo-stack"></section>');
     $base.append('<div class="solo-row spread"><h5>Core</h5></div>');

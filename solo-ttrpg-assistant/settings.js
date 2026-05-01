@@ -1,6 +1,7 @@
 import { exportBackupBundle, importBackupBundle } from './modules/backup.js';
 import { runActTransitionFlow, runSceneEndFlow } from './modules/authors_note.js';
 import {
+    convertCharacterMode,
     createCharacter,
     createStoryCharacter,
     deleteCharacter,
@@ -8,27 +9,63 @@ import {
     getActiveCharacter,
     getActiveCharacterId,
     listCharacters,
+    renameCharacter,
     setActiveCharacter,
     subscribeCharacterMeta,
     subscribeCharacters,
 } from './modules/characters.js';
+import { executeAbilityRoll, executeAttributeRoll, executeManualRoll } from './modules/dice.js';
 import { getLogs, subscribeLog } from './modules/logger.js';
 import { getActivePack, getLoadedPacks, parsePackFromFiles, runCompatibilityCheck, setActivePack, storeLoadedPack, subscribePack } from './modules/pack.js';
-import { mountSheet, renderSheet } from './modules/sheet.js';
-import { clearBusy, escapeHtml, getContext, getSettings, isExtensionEnabled, saveSettings, setBusy } from './modules/util.js';
+import { getPersonaLinkInfo, promptPersonaLink, syncPersonaLink } from './modules/persona_link.js';
+import { mountSheet, renderSheet, subscribeSheetState } from './modules/sheet.js';
+import { clearBusy, escapeHtml, formatSignedNumber, getContext, getSettings, isExtensionEnabled, saveSettings, setBusy } from './modules/util.js';
 import { getExtensionPath } from './modules/constants.js';
 
 let settingsRoot = null;
 let packInput = null;
 let backupInput = null;
 
+function getCharacterTypeLabel(character) {
+    return (character?.mode ?? 'pack') === 'story' ? 'Story-Based' : 'Stats-Based';
+}
+
+function getAbilityLabel(ability) {
+    if (typeof ability === 'string') {
+        return ability;
+    }
+    if (!ability || typeof ability !== 'object') {
+        return '';
+    }
+    return ability.level ? `${ability.name ?? ''} (${ability.level})` : `${ability.name ?? ''}`;
+}
+
+function getResourceDisplay(character, resource) {
+    const value = character.state?.[resource.key];
+
+    if (resource.kind === 'pool' || resource.kind === 'pool_with_threshold') {
+        const maxKey = resource.max_value_field;
+        const maxValue = maxKey ? character.state?.[maxKey] : resource.threshold_field ? character.state?.[resource.threshold_field] : null;
+        return `${value ?? 0}/${maxValue ?? '?'}`;
+    }
+
+    if (resource.kind === 'toggle') {
+        return value ? 'On' : 'Off';
+    }
+
+    if (resource.kind === 'track' && Array.isArray(value)) {
+        return value.join(', ');
+    }
+
+    return String(value ?? '');
+}
+
 function ensureEnabledControls() {
     if (!settingsRoot) {
         return;
     }
 
-    const enabled = isExtensionEnabled();
-    applyEnabledUiState(enabled);
+    applyEnabledUiState(isExtensionEnabled());
 }
 
 function applyEnabledUiState(enabled) {
@@ -38,32 +75,14 @@ function applyEnabledUiState(enabled) {
 
     const $root = $(settingsRoot);
     const $toggle = $root.find('#solo-enabled-toggle');
-    const selector = [
-        '#solo-pack-load',
-        '#solo-pack-reload',
-        '#solo-pack-select',
-        '#solo-character-select',
-        '#solo-character-new',
-        '#solo-character-new-story',
-        '#solo-character-duplicate',
-        '#solo-character-delete',
-        '#solo-character-import-samples',
-        '#solo-backup-export',
-        '#solo-backup-import',
-        '#solo-scene-end',
-        '#solo-act-transition',
-    ].join(', ');
 
     $toggle
         .text(enabled ? 'Active' : 'Paused')
         .toggleClass('solo-enabled', enabled)
         .toggleClass('solo-disabled', !enabled)
         .attr('aria-pressed', enabled ? 'true' : 'false');
-    $root.find(selector).prop('disabled', !enabled);
-}
 
-function ensurePickerModeElement() {
-    return null;
+    $root.find('.solo-requires-enabled').prop('disabled', !enabled);
 }
 
 function getPackPickerMode() {
@@ -83,7 +102,6 @@ function configureDirectoryPicker(input) {
         return;
     }
 
-    // These non-standard attributes are what make Chromium-based browsers show a folder picker.
     input.setAttribute('webkitdirectory', '');
     input.setAttribute('directory', '');
     input.setAttribute('mozdirectory', '');
@@ -96,7 +114,6 @@ function configureDirectoryPicker(input) {
 async function readFilesFromDirectoryHandle(handle, relativePath = '') {
     const files = [];
 
-    // File System Access API directory handles are async-iterable.
     for await (const [name, entry] of handle.entries()) {
         const nextPath = relativePath ? `${relativePath}/${name}` : name;
 
@@ -160,6 +177,14 @@ async function openPackPicker() {
     });
 }
 
+function buildCharacterOptionLabel(character) {
+    const base = character.name?.trim() || 'Unnamed character';
+    const type = getCharacterTypeLabel(character);
+    const personaInfo = getPersonaLinkInfo(character);
+    const personaSuffix = personaInfo.linkedName ? ` - ${personaInfo.linkedName}` : '';
+    return `${base} - ${type}${personaSuffix}`;
+}
+
 function renderPackSummary() {
     if (!settingsRoot) {
         return;
@@ -171,6 +196,8 @@ function renderPackSummary() {
     const $status = $root.find('#solo-pack-status');
     const $description = $root.find('#solo-pack-description');
     const $select = $root.find('#solo-pack-select');
+    const $playStatus = $root.find('#solo-play-pack-status');
+    const $playDescription = $root.find('#solo-play-pack-description');
 
     const packOptions = Object.values(getLoadedPacks())
         .sort((a, b) => a.displayName.localeCompare(b.displayName))
@@ -180,13 +207,18 @@ function renderPackSummary() {
     $select.html(packOptions || '<option value="">No packs loaded</option>');
 
     if (!pack) {
-        $status.text('Unknown pack mode');
+        $status.text('No pack loaded');
         $description.text('Load a pack to unlock the structured sheet, attribute rolls, and status field validation.');
+        $playStatus.text('No pack loaded');
+        $playDescription.text('Load a pack to enable structured rolls and resource tracking.');
         return;
     }
 
-    $status.text(`${pack.displayName} ${pack.version}`);
+    const label = `${pack.displayName} ${pack.version}`;
+    $status.text(label);
     $description.text(pack.description || 'Pack loaded.');
+    $playStatus.text(label);
+    $playDescription.text(pack.description || 'Pack loaded.');
 }
 
 function renderLogs() {
@@ -207,6 +239,205 @@ function renderLogs() {
     $(settingsRoot).find('#solo-log-root').html(html || '<div class="solo-muted">No activity yet.</div>');
 }
 
+function renderCharacterPicker() {
+    if (!settingsRoot) {
+        return;
+    }
+
+    const $root = $(settingsRoot);
+    const characters = listCharacters();
+    const activeId = getActiveCharacterId();
+    const $selects = $root.find('#solo-character-select, #solo-play-character-select');
+
+    if (characters.length === 0) {
+        $selects.html('<option value="">No characters</option>');
+        return;
+    }
+
+    const options = characters
+        .map((character) => {
+            const selected = character.id === activeId ? ' selected' : '';
+            return `<option value="${escapeHtml(character.id)}"${selected}>${escapeHtml(buildCharacterOptionLabel(character))}</option>`;
+        })
+        .join('');
+    $selects.html(options);
+}
+
+function renderCharacterStatus() {
+    if (!settingsRoot) {
+        return;
+    }
+
+    const character = getActiveCharacter();
+    const pack = getActivePack();
+    const typeLabel = getCharacterTypeLabel(character);
+    const detail = character
+        ? ((character.mode ?? 'pack') === 'story' ? 'Narrative play' : (pack?.displayName || 'No pack loaded'))
+        : 'No character';
+
+    const $root = $(settingsRoot);
+    $root.find('#solo-character-type-badge').text(typeLabel);
+    $root.find('#solo-play-character-type').text(typeLabel);
+    $root.find('#solo-sheet-mode').text(detail);
+    $root.find('#solo-character-mode-select').val((character?.mode ?? 'pack') === 'story' ? 'story' : 'pack');
+}
+
+function renderPlayConditions(character) {
+    const $root = $(settingsRoot).find('#solo-play-conditions');
+    $root.empty();
+
+    if (!character) {
+        return;
+    }
+
+    if ((character.mode ?? 'pack') === 'story') {
+        const strengths = (character.strengths ?? []).filter(Boolean);
+        if (strengths.length > 0) {
+            $root.append(`<div class="solo-stack"><strong>Strengths</strong><div class="solo-pill-list">${strengths.map((value) => `<span class="solo-pill">${escapeHtml(value)}</span>`).join('')}</div></div>`);
+        }
+        if (character.weakness) {
+            $root.append(`<div class="solo-stack"><strong>Weakness</strong><div class="solo-pill-list"><span class="solo-pill">${escapeHtml(character.weakness)}</span></div></div>`);
+        }
+        return;
+    }
+
+    const conditions = Array.isArray(character.state?.conditions) ? character.state.conditions.filter(Boolean) : [];
+    if (conditions.length === 0) {
+        return;
+    }
+
+    $root.append(`<div class="solo-stack"><strong>Conditions</strong><div class="solo-pill-list">${conditions.map((value) => `<span class="solo-pill">${escapeHtml(value)}</span>`).join('')}</div></div>`);
+}
+
+function renderPlayResources(character, pack) {
+    const $root = $(settingsRoot).find('#solo-play-resources');
+    $root.empty();
+
+    if (!character) {
+        $root.html('<div class="solo-muted">No active character.</div>');
+        return;
+    }
+
+    if ((character.mode ?? 'pack') === 'story') {
+        $root.append(`<div class="solo-summary-card"><strong>${escapeHtml(character.name || 'Story-Based Character')}</strong><span class="solo-muted">${escapeHtml(character.description || 'Outcomes resolve narratively. No dice or resource pools are active.')}</span></div>`);
+        return;
+    }
+
+    if (!pack) {
+        const entries = Object.entries(character.state ?? {});
+        if (entries.length === 0) {
+            $root.html('<div class="solo-muted">No state fields yet. Load a pack or edit the sheet to add fields.</div>');
+            return;
+        }
+
+        for (const [key, value] of entries) {
+            const rendered = Array.isArray(value) ? value.join(', ') : String(value ?? '');
+            $root.append(`<div class="solo-summary-card"><strong>${escapeHtml(key)}</strong><span>${escapeHtml(rendered)}</span></div>`);
+        }
+        return;
+    }
+
+    for (const resource of pack.resources) {
+        const value = getResourceDisplay(character, resource);
+        const $card = $(`<div class="solo-summary-card"><strong>${escapeHtml(resource.display)}</strong><span>${escapeHtml(value)}</span></div>`);
+
+        if (resource.kind === 'pool' || resource.kind === 'pool_with_threshold') {
+            const maxKey = resource.max_value_field ?? resource.threshold_field;
+            const maxValue = Number(character.state?.[maxKey] ?? 0) || 0;
+            const currentValue = Number(character.state?.[resource.key] ?? 0) || 0;
+            const ratio = maxValue > 0 ? Math.min(100, Math.max(0, (currentValue / maxValue) * 100)) : 0;
+            $card.append(`<div class="solo-progress"><span style="width:${ratio}%"></span></div>`);
+        }
+
+        $root.append($card);
+    }
+}
+
+function renderPlayRolls(character, pack) {
+    const $rolls = $(settingsRoot).find('#solo-play-rolls');
+    const $abilitySelect = $(settingsRoot).find('#solo-play-ability-select');
+    const $abilityButton = $(settingsRoot).find('#solo-play-ability-roll');
+    const $manualButton = $(settingsRoot).find('#solo-play-manual-roll');
+    const $storyNote = $(settingsRoot).find('#solo-play-story-note');
+
+    $rolls.empty();
+    $storyNote.text('');
+
+    if (!character) {
+        $rolls.html('<div class="solo-muted">No active character.</div>');
+        $abilitySelect.html('<option value="">No abilities</option>').prop('disabled', true);
+        $abilityButton.prop('disabled', true);
+        $manualButton.prop('disabled', true);
+        return;
+    }
+
+    if ((character.mode ?? 'pack') === 'story') {
+        $rolls.html('<div class="solo-muted">Story-based characters resolve outcomes narratively.</div>');
+        $abilitySelect.html('<option value="">No abilities</option>').prop('disabled', true);
+        $abilityButton.prop('disabled', true);
+        $manualButton.prop('disabled', true);
+        $storyNote.text('Story-based characters do not use attribute or ability rolls.');
+        return;
+    }
+
+    $manualButton.prop('disabled', !isExtensionEnabled());
+
+    if (!pack) {
+        $rolls.html('<div class="solo-muted">Load a pack to enable attribute rolls.</div>');
+        $abilitySelect.html('<option value="">No abilities</option>').prop('disabled', true);
+        $abilityButton.prop('disabled', true);
+        $storyNote.text('Manual rolls are still available without a pack.');
+        return;
+    }
+
+    for (const attribute of pack.attributes) {
+        const modifier = Number(character.attributes?.[attribute.key] ?? 0);
+        const $button = $(`<button class="menu_button solo-requires-enabled" type="button">${escapeHtml(attribute.display)} ${escapeHtml(formatSignedNumber(modifier))}</button>`);
+        $button.on('click', () => executeAttributeRoll(attribute.key).catch((error) => toastr.error(error.message)));
+        $rolls.append($button);
+    }
+
+    const abilities = (character.abilities ?? [])
+        .map((ability) => ({ value: typeof ability === 'string' ? ability : String(ability?.name ?? ''), label: getAbilityLabel(ability) }))
+        .filter((ability) => ability.value);
+
+    if (abilities.length === 0) {
+        $abilitySelect.html('<option value="">No abilities on sheet</option>').prop('disabled', true);
+        $abilityButton.prop('disabled', true);
+        return;
+    }
+
+    $abilitySelect.html(abilities.map((ability) => `<option value="${escapeHtml(ability.value)}">${escapeHtml(ability.label)}</option>`).join(''));
+    $abilitySelect.prop('disabled', !isExtensionEnabled());
+    $abilityButton.prop('disabled', !isExtensionEnabled());
+}
+
+function renderPersonaSummary() {
+    if (!settingsRoot) {
+        return;
+    }
+
+    const character = getActiveCharacter();
+    const info = getPersonaLinkInfo(character);
+    $(settingsRoot).find('#solo-play-persona-state').text(info.label);
+    $(settingsRoot).find('#solo-play-persona-meta').text(info.detail);
+}
+
+function renderPlayDashboard() {
+    if (!settingsRoot) {
+        return;
+    }
+
+    const character = getActiveCharacter();
+    const pack = getActivePack();
+    renderPersonaSummary();
+    renderCharacterStatus();
+    renderPlayResources(character, pack);
+    renderPlayConditions(character);
+    renderPlayRolls(character, pack);
+    ensureEnabledControls();
+}
+
 async function handlePackInput(event) {
     if (!isExtensionEnabled()) {
         event.target.value = '';
@@ -225,6 +456,7 @@ async function handlePackInput(event) {
         const pack = await parsePackFromFiles(files);
         await storeLoadedPack(pack);
         renderPackSummary();
+        renderPlayDashboard();
         await runCompatibilityCheck({ interactive: true });
         toastr.success(`Loaded pack ${pack.displayName}.`);
     } catch (error) {
@@ -257,6 +489,7 @@ async function handlePackLoadClick() {
         const pack = await parsePackFromFiles(files);
         await storeLoadedPack(pack);
         renderPackSummary();
+        renderPlayDashboard();
         await runCompatibilityCheck({ interactive: true });
         toastr.success(`Loaded pack ${pack.displayName}.`);
     } catch (error) {
@@ -269,31 +502,6 @@ async function handlePackLoadClick() {
             packInput.value = '';
         }
     }
-}
-
-function renderCharacterPicker() {
-    if (!settingsRoot) {
-        return;
-    }
-
-    const $root = $(settingsRoot);
-    const $select = $root.find('#solo-character-select');
-    const characters = listCharacters();
-    const activeId = getActiveCharacterId();
-
-    if (characters.length === 0) {
-        $select.html('<option value="">No characters</option>');
-        return;
-    }
-
-    const options = characters
-        .map((character) => {
-            const label = character.name?.trim() || 'Unnamed character';
-            const selected = character.id === activeId ? ' selected' : '';
-            return `<option value="${escapeHtml(character.id)}"${selected}>${escapeHtml(label)}</option>`;
-        })
-        .join('');
-    $select.html(options);
 }
 
 async function handleCharacterSwitch(event) {
@@ -313,7 +521,33 @@ async function handleCharacterSwitch(event) {
     }
 }
 
-function handleCharacterNew() {
+async function handleCharacterModeSwitch(event) {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
+    const active = getActiveCharacter();
+    if (!active) {
+        return;
+    }
+
+    const nextMode = String(event.target.value || 'pack');
+    const currentMode = (active.mode ?? 'pack') === 'story' ? 'story' : 'pack';
+    if (nextMode === currentMode) {
+        return;
+    }
+
+    try {
+        convertCharacterMode(active.id, nextMode);
+        renderPlayDashboard();
+        toastr.success(`Character switched to ${nextMode === 'story' ? 'story-based' : 'stats-based'} mode.`);
+    } catch (error) {
+        toastr.error(error.message);
+        renderCharacterStatus();
+    }
+}
+
+function handleCharacterNewStats() {
     if (!isExtensionEnabled()) {
         return;
     }
@@ -328,6 +562,24 @@ function handleCharacterNewStory() {
     }
 
     createStoryCharacter({ name: '' });
+}
+
+async function handleCharacterRename() {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
+    const active = getActiveCharacter();
+    if (!active) {
+        return;
+    }
+
+    const nextName = await getContext().Popup.show.input('Rename Character', 'Enter a new name:', active.name ?? '');
+    if (nextName === null) {
+        return;
+    }
+
+    renameCharacter(active.id, nextName.trim());
 }
 
 async function handleCharacterImportSamples(event) {
@@ -358,7 +610,7 @@ async function handleCharacterImportSamples(event) {
             const archetype = sample?.archetype ?? 'Sample character';
             const choice = await context.Popup.show.input(
                 `Import "${archetype}"`,
-                `${sample?.hook_into_campaign ?? ''}\n\nType "story" to create a story-mode character, "pack" to create a stat-based character, or leave blank to skip.`,
+                `${sample?.hook_into_campaign ?? ''}\n\nType "story" to create a story-based character, "stats" to create a stats-based character, or leave blank to skip.`,
                 '',
             );
 
@@ -370,7 +622,7 @@ async function handleCharacterImportSamples(event) {
                     strengths: sample.story.strengths ?? [],
                     weakness: sample.story.weakness ?? '',
                 });
-            } else if (mode === 'pack' && sample?.pack) {
+            } else if ((mode === 'stats' || mode === 'pack') && sample?.pack) {
                 const created = createCharacter({
                     name: sample.pack.name ?? archetype,
                     packName: activePackName,
@@ -410,6 +662,7 @@ function handleCharacterDuplicate() {
         toastr.info('Create a character first.');
         return;
     }
+
     duplicateCharacter(id);
 }
 
@@ -449,6 +702,7 @@ async function handlePackSwitch(event) {
     try {
         await setActivePack(value);
         renderPackSummary();
+        renderPlayDashboard();
         await runCompatibilityCheck({ interactive: true });
     } catch (error) {
         toastr.error(error.message);
@@ -470,6 +724,7 @@ async function handleBackupImport(event) {
         await importBackupBundle(file);
         toastr.success('Backup imported.');
         renderPackSummary();
+        renderPlayDashboard();
     } catch (error) {
         toastr.error(error.message);
     } finally {
@@ -487,11 +742,88 @@ function handleEnabledToggle(event) {
     applyEnabledUiState(nextEnabled);
     saveSettings();
     renderSheet();
+    renderPlayDashboard();
+}
+
+async function handlePlayManualRoll() {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
+    const value = await getContext().Popup.show.input('Manual Roll', 'Enter a modifier for a 2d6 roll.', '0');
+    if (value === null) {
+        return;
+    }
+
+    const modifier = Number(value);
+    if (!Number.isFinite(modifier)) {
+        toastr.error('Modifier must be a number.');
+        return;
+    }
+
+    try {
+        await executeManualRoll(modifier);
+    } catch (error) {
+        toastr.error(error.message);
+    }
+}
+
+async function handlePlayAbilityRoll() {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
+    const abilityName = $(settingsRoot).find('#solo-play-ability-select').val();
+    if (!abilityName) {
+        return;
+    }
+
+    try {
+        await executeAbilityRoll(String(abilityName));
+    } catch (error) {
+        toastr.error(error.message);
+    }
+}
+
+async function handlePersonaChange() {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
+    const character = getActiveCharacter();
+    if (!character) {
+        return;
+    }
+
+    try {
+        await promptPersonaLink(character);
+    } catch (error) {
+        toastr.error(error.message);
+    }
+}
+
+async function handlePersonaSync() {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
+    const character = getActiveCharacter();
+    if (!character) {
+        return;
+    }
+
+    try {
+        await syncPersonaLink(character);
+        renderPersonaSummary();
+    } catch (error) {
+        toastr.error(error.message);
+    }
 }
 
 export async function mountSettingsPanel() {
     const context = getContext();
     const html = await context.renderExtensionTemplateAsync(getExtensionPath(), 'ui/settings_panel');
+    $('#extensions_settings2 .solo-ttrpg-assistant').remove();
     $('#extensions_settings2').append(html);
 
     settingsRoot = $('#extensions_settings2 .solo-ttrpg-assistant').last().get(0);
@@ -507,19 +839,27 @@ export async function mountSettingsPanel() {
 
     const samplesInput = $(settingsRoot).find('#solo-character-samples-input').get(0);
 
-    $(settingsRoot).find('#solo-character-select').on('change', handleCharacterSwitch);
-    $(settingsRoot).find('#solo-character-new').on('click', handleCharacterNew);
+    $(settingsRoot).find('#solo-character-select, #solo-play-character-select').on('change', handleCharacterSwitch);
+    $(settingsRoot).find('#solo-character-mode-select').on('change', (event) => handleCharacterModeSwitch(event).catch((error) => toastr.error(error.message)));
+    $(settingsRoot).find('#solo-character-new-stats').on('click', handleCharacterNewStats);
     $(settingsRoot).find('#solo-character-new-story').on('click', handleCharacterNewStory);
+    $(settingsRoot).find('#solo-character-rename').on('click', () => handleCharacterRename().catch((error) => toastr.error(error.message)));
     $(settingsRoot).find('#solo-character-duplicate').on('click', handleCharacterDuplicate);
-    $(settingsRoot).find('#solo-character-delete').on('click', handleCharacterDelete);
+    $(settingsRoot).find('#solo-character-delete').on('click', () => handleCharacterDelete().catch((error) => toastr.error(error.message)));
     $(settingsRoot).find('#solo-character-import-samples').on('click', () => samplesInput?.click());
     $(samplesInput).on('change', handleCharacterImportSamples);
+
+    $(settingsRoot).find('#solo-play-persona-change').on('click', () => handlePersonaChange().catch((error) => toastr.error(error.message)));
+    $(settingsRoot).find('#solo-play-persona-sync').on('click', () => handlePersonaSync().catch((error) => toastr.error(error.message)));
+    $(settingsRoot).find('#solo-play-manual-roll').on('click', () => handlePlayManualRoll().catch((error) => toastr.error(error.message)));
+    $(settingsRoot).find('#solo-play-ability-roll').on('click', () => handlePlayAbilityRoll().catch((error) => toastr.error(error.message)));
 
     $(settingsRoot).find('#solo-backup-export').on('click', () => exportBackupBundle().catch((error) => toastr.error(error.message)));
     $(settingsRoot).find('#solo-backup-import').on('click', () => backupInput.click());
     $(backupInput).on('change', handleBackupImport);
-    $(settingsRoot).find('#solo-scene-end').on('click', () => runSceneEndFlow().catch((error) => toastr.error(error.message)));
-    $(settingsRoot).find('#solo-act-transition').on('click', () => runActTransitionFlow().catch((error) => toastr.error(error.message)));
+
+    $(settingsRoot).find('#solo-scene-end, #solo-play-scene-end').on('click', () => runSceneEndFlow().catch((error) => toastr.error(error.message)));
+    $(settingsRoot).find('#solo-act-transition, #solo-play-act-transition').on('click', () => runActTransitionFlow().catch((error) => toastr.error(error.message)));
 
     mountSheet(
         $(settingsRoot).find('#solo-sheet-root').get(0),
@@ -527,11 +867,24 @@ export async function mountSettingsPanel() {
     );
 
     subscribeLog(renderLogs);
-    subscribePack(renderPackSummary);
-    subscribeCharacters(renderCharacterPicker);
-    subscribeCharacterMeta(renderCharacterPicker);
-    ensureEnabledControls();
+    subscribePack(() => {
+        renderPackSummary();
+        renderPlayDashboard();
+    });
+    subscribeCharacters(() => {
+        renderCharacterPicker();
+        renderPlayDashboard();
+    });
+    subscribeCharacterMeta(() => {
+        renderCharacterPicker();
+        renderPlayDashboard();
+    });
+    subscribeSheetState(() => renderPlayDashboard());
+
     renderPackSummary();
     renderCharacterPicker();
+    renderCharacterStatus();
+    renderPlayDashboard();
     renderLogs();
+    ensureEnabledControls();
 }

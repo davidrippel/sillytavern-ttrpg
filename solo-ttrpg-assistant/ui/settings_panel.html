@@ -5,69 +5,203 @@
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div class="inline-drawer-content">
-            <div class="solo-grid">
+            <div class="solo-shell">
                 <section class="solo-section solo-stack">
                     <div class="solo-row spread">
-                        <h4>Extension</h4>
+                        <div class="solo-stack">
+                            <h4>Control</h4>
+                            <p class="solo-muted">Play-focused tools, character editing, pack management, and automation.</p>
+                        </div>
                         <button id="solo-enabled-toggle" class="menu_button solo-inline-button solo-enabled" type="button">Active</button>
                     </div>
                 </section>
 
-                <section class="solo-section solo-stack">
-                    <div class="solo-row spread">
-                        <h4>Pack</h4>
-                        <span class="solo-badge" id="solo-pack-status">Unknown pack mode</span>
+                <section class="solo-disclosure inline-drawer">
+                    <div class="inline-drawer-toggle inline-drawer-header solo-disclosure-toggle">
+                        <b>Play</b>
+                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-up up"></div>
                     </div>
-                    <p class="solo-muted" id="solo-pack-description">Load a genre pack to enable the structured sheet, attribute rolls, and ability catalog.</p>
-                    <div class="solo-row wrap">
-                        <button id="solo-pack-load" class="menu_button">Load Pack</button>
-                        <button id="solo-pack-reload" class="menu_button">Reload Pack</button>
+                    <div class="solo-disclosure-body inline-drawer-content" style="display: block;">
+                        <div class="solo-grid">
+                            <section class="solo-section solo-stack">
+                                <div class="solo-row spread solo-row-start">
+                                    <label class="solo-stack solo-grow">
+                                        <span>Active character</span>
+                                        <select id="solo-play-character-select" class="solo-requires-enabled"></select>
+                                    </label>
+                                    <div class="solo-badge-column">
+                                        <span class="solo-badge" id="solo-play-character-type">Stats-Based</span>
+                                        <span class="solo-badge" id="solo-play-pack-status">No pack loaded</span>
+                                    </div>
+                                </div>
+                                <p class="solo-muted" id="solo-play-pack-description">Load a pack to enable structured rolls and resource tracking.</p>
+                            </section>
+
+                            <section class="solo-section solo-stack">
+                                <div class="solo-row spread">
+                                    <h4>Persona Link</h4>
+                                </div>
+                                <div class="solo-stack">
+                                    <strong id="solo-play-persona-state">Not linked</strong>
+                                    <span class="solo-muted" id="solo-play-persona-meta">Choose a persona for auto-switching.</span>
+                                </div>
+                                <div class="solo-actions">
+                                    <button id="solo-play-persona-change" class="menu_button solo-requires-enabled" type="button">Change</button>
+                                    <button id="solo-play-persona-sync" class="menu_button solo-requires-enabled" type="button">Sync</button>
+                                </div>
+                            </section>
+
+                            <section class="solo-section solo-stack">
+                                <div class="solo-row spread">
+                                    <h4>Rolls</h4>
+                                    <button id="solo-play-manual-roll" class="menu_button solo-requires-enabled" type="button">Manual Roll</button>
+                                </div>
+                                <div id="solo-play-rolls" class="solo-quick-grid"></div>
+                                <label class="solo-stack">
+                                    <span>Ability roll</span>
+                                    <div class="solo-row wrap">
+                                        <select id="solo-play-ability-select" class="solo-requires-enabled"></select>
+                                        <button id="solo-play-ability-roll" class="menu_button solo-requires-enabled" type="button">Roll Ability</button>
+                                    </div>
+                                </label>
+                                <p class="solo-muted" id="solo-play-story-note"></p>
+                            </section>
+
+                            <section class="solo-section solo-stack">
+                                <div class="solo-row spread">
+                                    <h4>Current State</h4>
+                                </div>
+                                <div id="solo-play-resources" class="solo-summary-grid"></div>
+                                <div id="solo-play-conditions"></div>
+                            </section>
+
+                            <section class="solo-section solo-stack">
+                                <div class="solo-row spread">
+                                    <h4>Scene</h4>
+                                </div>
+                                <div class="solo-actions">
+                                    <button id="solo-play-scene-end" class="menu_button solo-requires-enabled" type="button">Scene End</button>
+                                    <button id="solo-play-act-transition" class="menu_button solo-requires-enabled" type="button">Act Transition</button>
+                                </div>
+                            </section>
+                        </div>
                     </div>
-                    <label class="solo-stack">
-                        <span>Active pack</span>
-                        <select id="solo-pack-select"></select>
-                    </label>
-                    <input id="solo-pack-input" type="file" webkitdirectory multiple hidden />
                 </section>
 
-                <section class="solo-section solo-stack">
-                    <div class="solo-row spread">
-                        <h4>Character Sheet</h4>
-                        <span class="solo-muted" id="solo-sheet-mode"></span>
+                <section class="solo-disclosure inline-drawer">
+                    <div class="inline-drawer-toggle inline-drawer-header solo-disclosure-toggle">
+                        <b>Character</b>
+                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                     </div>
-                    <label class="solo-stack">
-                        <span>Active character</span>
-                        <select id="solo-character-select"></select>
-                    </label>
-                    <div class="solo-row wrap">
-                        <button id="solo-character-new" class="menu_button" type="button">New</button>
-                        <button id="solo-character-new-story" class="menu_button" type="button">New Story</button>
-                        <button id="solo-character-duplicate" class="menu_button" type="button">Duplicate</button>
-                        <button id="solo-character-delete" class="menu_button" type="button">Delete</button>
-                        <button id="solo-character-import-samples" class="menu_button" type="button">Import Samples</button>
+                    <div class="solo-disclosure-body inline-drawer-content" style="display: none;">
+                        <div class="solo-grid">
+                            <section class="solo-section solo-stack">
+                                <div class="solo-row spread solo-row-start">
+                                    <label class="solo-stack solo-grow">
+                                        <span>Active character</span>
+                                        <select id="solo-character-select" class="solo-requires-enabled"></select>
+                                    </label>
+                                    <div class="solo-badge-column">
+                                        <span class="solo-badge" id="solo-character-type-badge">Stats-Based</span>
+                                        <span class="solo-muted" id="solo-sheet-mode"></span>
+                                    </div>
+                                </div>
+                                <label class="solo-stack">
+                                    <span>Character type</span>
+                                    <select id="solo-character-mode-select" class="solo-requires-enabled">
+                                        <option value="pack">Stats-Based</option>
+                                        <option value="story">Story-Based</option>
+                                    </select>
+                                </label>
+                                <div class="solo-actions">
+                                    <button id="solo-character-new-stats" class="menu_button solo-requires-enabled" type="button">New Stats Character</button>
+                                    <button id="solo-character-new-story" class="menu_button solo-requires-enabled" type="button">New Story Character</button>
+                                    <button id="solo-character-rename" class="menu_button solo-requires-enabled" type="button">Rename</button>
+                                    <button id="solo-character-duplicate" class="menu_button solo-requires-enabled" type="button">Duplicate</button>
+                                    <button id="solo-character-delete" class="menu_button solo-requires-enabled" type="button">Delete</button>
+                                    <button id="solo-character-import-samples" class="menu_button solo-requires-enabled" type="button">Import Samples</button>
+                                </div>
+                                <input id="solo-character-samples-input" type="file" accept=".json,application/json" hidden />
+                            </section>
+
+                            <div id="solo-sheet-root"></div>
+                        </div>
                     </div>
-                    <input id="solo-character-samples-input" type="file" accept=".json,application/json" hidden />
-                    <div id="solo-sheet-root"></div>
                 </section>
 
-                <section class="solo-section solo-stack">
-                    <div class="solo-row spread">
-                        <h4>Actions</h4>
+                <section class="solo-disclosure inline-drawer">
+                    <div class="inline-drawer-toggle inline-drawer-header solo-disclosure-toggle">
+                        <b>Pack</b>
+                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                     </div>
-                    <div class="solo-actions">
-                        <button id="solo-backup-export" class="menu_button">Export Backup</button>
-                        <button id="solo-backup-import" class="menu_button">Import Backup</button>
-                        <button id="solo-scene-end" class="menu_button">Scene End</button>
-                        <button id="solo-act-transition" class="menu_button">Act Transition</button>
+                    <div class="solo-disclosure-body inline-drawer-content" style="display: none;">
+                        <div class="solo-grid">
+                            <section class="solo-section solo-stack">
+                                <div class="solo-row spread">
+                                    <h4>Pack</h4>
+                                    <span class="solo-badge" id="solo-pack-status">No pack loaded</span>
+                                </div>
+                                <p class="solo-muted" id="solo-pack-description">Load a genre pack to enable the structured sheet, attribute rolls, and ability catalog.</p>
+                                <div class="solo-actions">
+                                    <button id="solo-pack-load" class="menu_button solo-requires-enabled" type="button">Load Pack</button>
+                                    <button id="solo-pack-reload" class="menu_button solo-requires-enabled" type="button">Reload Pack</button>
+                                </div>
+                                <label class="solo-stack">
+                                    <span>Active pack</span>
+                                    <select id="solo-pack-select" class="solo-requires-enabled"></select>
+                                </label>
+                                <input id="solo-pack-input" type="file" webkitdirectory multiple hidden />
+                            </section>
+                        </div>
                     </div>
-                    <input id="solo-backup-input" type="file" accept=".zip" hidden />
                 </section>
 
-                <section class="solo-section solo-stack">
-                    <div class="solo-row spread">
-                        <h4>Activity</h4>
+                <section class="solo-disclosure inline-drawer">
+                    <div class="inline-drawer-toggle inline-drawer-header solo-disclosure-toggle">
+                        <b>Automation</b>
+                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                     </div>
-                    <div id="solo-log-root" class="solo-log"></div>
+                    <div class="solo-disclosure-body inline-drawer-content" style="display: none;">
+                        <div class="solo-grid">
+                            <section class="solo-section solo-stack">
+                                <div class="solo-row spread">
+                                    <h4>Scene Tools</h4>
+                                </div>
+                                <div class="solo-actions">
+                                    <button id="solo-scene-end" class="menu_button solo-requires-enabled" type="button">Scene End</button>
+                                    <button id="solo-act-transition" class="menu_button solo-requires-enabled" type="button">Act Transition</button>
+                                </div>
+                            </section>
+
+                            <section class="solo-section solo-stack">
+                                <div class="solo-row spread">
+                                    <h4>Backup</h4>
+                                </div>
+                                <div class="solo-actions">
+                                    <button id="solo-backup-export" class="menu_button solo-requires-enabled" type="button">Export Backup</button>
+                                    <button id="solo-backup-import" class="menu_button solo-requires-enabled" type="button">Import Backup</button>
+                                </div>
+                                <input id="solo-backup-input" type="file" accept=".zip" hidden />
+                            </section>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="solo-disclosure inline-drawer">
+                    <div class="inline-drawer-toggle inline-drawer-header solo-disclosure-toggle">
+                        <b>Log</b>
+                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                    </div>
+                    <div class="solo-disclosure-body inline-drawer-content" style="display: none;">
+                        <div class="solo-grid">
+                            <section class="solo-section solo-stack">
+                                <div class="solo-row spread">
+                                    <h4>Activity</h4>
+                                </div>
+                                <div id="solo-log-root" class="solo-log"></div>
+                            </section>
+                        </div>
+                    </div>
                 </section>
             </div>
         </div>
