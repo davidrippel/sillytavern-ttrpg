@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 from common.llm import LLMClient
@@ -16,6 +17,11 @@ from ..schemas import (
 from ._common import call_llm
 
 PROMPT_FILE = "05_ability_catalog.md"
+
+# Match strict mechanic notation "<key>: <±N>" — the convention used in
+# consequence_on_failure / consequence_on_partial. Anything that looks like that but
+# names an unknown key is a hallucinated reference.
+RESOURCE_DELTA = re.compile(r"\b([a-z][a-z0-9_]*)\s*:\s*([+-]\s*\d+)")
 
 
 def run(
@@ -52,7 +58,33 @@ def run(
         validation_log=validation_log,
     )
     _validate_distribution(draft, categories, validation_log)
+    _validate_effect_grammar(draft, attributes, resources, validation_log)
     return draft
+
+
+def _validate_effect_grammar(
+    draft: AbilityCatalogDraft,
+    attributes: AttributesDraft,
+    resources: ResourcesDraft,
+    validation_log: ValidationLog,
+) -> None:
+    attribute_keys = {a.key for a in attributes.attributes}
+    resource_keys = {r.key for r in resources.resources}
+    known = attribute_keys | resource_keys
+    errors: list[str] = []
+    for ability in draft.catalog:
+        for match in RESOURCE_DELTA.finditer(ability.effect):
+            token = match.group(1)
+            if token in known:
+                continue
+            errors.append(
+                f"ability {ability.name!r} effect references unknown key {token!r} "
+                f"(not an attribute or resource); appeared as {match.group(0)!r}"
+            )
+    if errors:
+        for error in errors:
+            validation_log.write(f"[ability_catalog effect-grammar] {error}")
+        raise ValueError("ability_catalog failed effect-grammar validation: " + "; ".join(errors))
 
 
 def _validate_distribution(

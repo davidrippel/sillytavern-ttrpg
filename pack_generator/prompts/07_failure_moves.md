@@ -11,11 +11,11 @@ Good moves are:
 - Actionable (describe a concrete change)
 - Tension-ratcheting rather than scene-ending
 
-Bad moves to avoid:
+Bad moves to avoid (these will be rejected by validation):
 - "The player loses." (Not a move, a dead end.)
-- "Something mysterious happens." (Too vague.)
-- "The GM decides." (Not a move.)
+- "Something happens" / "Something bad happens" / "Something mysterious happens." (Too vague.)
+- "The GM decides" / "The GM chooses" / "You fail" / "The worst happens." (Not a move.)
 
-Reference the pack's resources and NPC archetypes by name where it sharpens the move.
+Reference the pack's resources and NPC archetypes by name where it sharpens the move. At least one-third of the moves should call out a specific resource change using the `<resource_key>: ±N` notation (e.g. `heat: +1`, `ship_condition: -1`); the rest can be purely narrative consequences.
 
 Return JSON only.

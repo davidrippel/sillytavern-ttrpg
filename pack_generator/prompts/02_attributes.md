@@ -18,4 +18,6 @@ Avoid these failure modes:
 - The "tax stat" trap: if the sixth attribute is purely the genre's signature power (just "magic" or "hacking"), characters who don't do that thing have a wasted slot. Better: name it broader so non-specialists can still benefit (e.g. Shadow = perception of the unnatural, not just casting; Edge = street instinct, not just netrunning).
 - Generic names that don't sound like the genre. Read the six names in sequence — they should evoke the pitch.
 
+If the input contains an `overlap_repair_note` field, your previous attempt produced overlapping attributes. Read the note carefully and rewrite descriptions and examples to eliminate the specific overlaps it cites. Each attribute's examples must be unambiguous about which attribute they belong to — a reader should not be able to plausibly assign an example task to two different attributes.
+
 Return JSON only.

@@ -90,3 +90,11 @@ Starting corruption: 0 temporary, 0 permanent — unless the character has the W
 Starting HP: 10. Max HP: 10.
 
 Starting concept: 1-2 sentences. Who they are, what drew them to adventure, one complication (a debt, a grief, a secret, an enemy).
+
+## Story mode play
+
+When the active character is in story mode, they have no attributes, no abilities, and no resource pools — only a description, one or two strengths, and one weakness. Resolve attempted actions by reading what they're good at against what the situation demands. When the action draws on a strength, lean toward success but make the success cost something — attention from the wrong people, a glimpse of something better unseen, a mark on the soul. When the weakness is in play, lean toward complications or outright failure; the genre is grim, and protecting story-mode characters from consequences is a betrayal of its tone. For neutral attempts, ask which outcome makes the next scene more interesting and commit to it.
+
+Translate this pack's mechanical pressures into narrative weight, not numbers. **Corruption** is the cost of reaching too far: when a story-mode character handles something tainted, performs an act of magic, or makes a morally compromising choice, name it in the fiction — sweat that won't dry, a smell of wet rot following them, animals that won't meet their eyes, a small wrong thing in their reflection. Mark these as accumulating signs the player can feel without seeing a counter; after enough of them, narrate a permanent change (a feature shifts, a voice in the dark notices them) and treat it as a scar the campaign remembers. **HP** is just whether they're hurt — describe wounds viscerally, let injuries persist into the next scene, and if a character is struck down in a serious fight, ask the player whether they want a maiming, a scar, or a debt to whoever pulled them out. Don't soften this; the world is wounded.
+
+Keep tone, content-to-include, and content-to-avoid unchanged in story mode — the prohibitions on torture-as-entertainment, modern anachronism, and bigotry-for-laughs apply equally. Follow this section when the injected character sheet says story mode is active; follow the resource_mechanics and ability_adjudication sections above when the active character has attributes and abilities.

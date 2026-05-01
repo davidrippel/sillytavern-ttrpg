@@ -191,10 +191,13 @@ def render_gm_overlay_md(overlay: GMOverlay) -> str:
         ("Content to include", overlay.content_to_include),
         ("Content to avoid", overlay.content_to_avoid),
         ("Character creation", overlay.character_creation),
+        ("Story mode play", overlay.story_mode_play),
     ]
     parts: list[str] = []
     for title, body in sections:
-        body = _unwrap_prose(body)
+        body = _unwrap_prose(body or "").strip()
+        if not body:
+            continue
         parts.append(f"## {title}\n\n{body}")
     return "\n\n".join(parts) + "\n"
 

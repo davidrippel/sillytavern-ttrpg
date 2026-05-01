@@ -10,4 +10,8 @@ Produce JSON with these fields:
 
 Avoid: contradicting the user's tone keywords; producing pillars that all say the same thing; treating "the setting is grim" as enough texture.
 
+If the brief includes an `example_inspiration_list`, do NOT just echo it. Pick the 2-3 inspirations that best match the one-line pitch and tone keywords; downweight or ignore the rest if their tone doesn't fit. Integrate the chosen inspirations into the `setting_statement` — the reader should feel them in the texture, not see them named in a list. (E.g. an Outer Wilds + Alien + Firefly brief that the pitch describes as "rust and rot" should lean into Alien/Firefly, not Outer Wilds.)
+
+Every term in the brief's `content_to_avoid` MUST appear (verbatim or in clear paraphrase) in your generated `content_to_avoid`. The user's exclusions are not optional.
+
 Return JSON only.

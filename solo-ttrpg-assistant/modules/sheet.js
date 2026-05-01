@@ -125,12 +125,20 @@ function formatStoryCharacterForPrompt(character) {
     }
     lines.push('');
     lines.push('=== NARRATION GUIDANCE ===');
-    lines.push('This is a story-mode character. There are no dice rolls or stats.');
-    lines.push('Resolve attempted actions narratively: lean toward success when the');
-    lines.push("character draws on what they're good at, lean toward complications or");
-    lines.push('failure when their weakness is in play, and let neutral attempts go');
-    lines.push('either way based on what makes the better story. Be willing to commit');
-    lines.push("to clear failures and complications — don't soften every outcome.");
+    lines.push('This character is in STORY MODE: no attributes, no abilities, no resource');
+    lines.push('pools, no dice. Resolve attempted actions narratively, leaning toward');
+    lines.push("success when the character draws on what they're good at, toward");
+    lines.push('complications or failure when their weakness is in play, and either way');
+    lines.push("for neutral attempts based on what makes the better story. Don't soften");
+    lines.push('every outcome — commit to clear failures and lasting consequences when');
+    lines.push('the fiction calls for them.');
+    lines.push('');
+    lines.push('Follow the GM overlay\'s "Story mode play" section for this genre\'s');
+    lines.push('story-mode behavior (how to translate corruption / heat / ship damage /');
+    lines.push('etc. into narrative consequences instead of resource ticks). Ignore the');
+    lines.push("overlay's resource_mechanics, ability_adjudication, and dice-band");
+    lines.push('instructions while this character is active. Tone, content-to-include,');
+    lines.push('and content-to-avoid still apply.');
     return lines.join('\n');
 }
 

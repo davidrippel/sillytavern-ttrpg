@@ -13,12 +13,14 @@ Produce JSON with these fields. Each field is a markdown chunk (one or more para
 - `content_to_include`: a bulleted list of textures the GM should lean into.
 - `content_to_avoid`: a bulleted list of themes the GM should not generate. Merge user-supplied content_to_avoid with universal safety items (sexual content, child endangerment).
 - `character_creation`: a paragraph or short bulleted list covering: point-buy distribution for attributes (e.g. "+4 spread with at least one -1, no value above +3"), starting abilities count (typically 3), starting equipment guidance, and starting resource values (HP at max, signature resources at 0).
+- `story_mode_play`: 2-3 paragraphs of GM guidance for running this genre WITHOUT dice or stats. Story-mode characters have only a name, a description, 1-2 strengths, and one weakness — no attributes, no abilities, no resources. The GM resolves attempted actions narratively. Cover: (1) how to lean on the character's strengths and weakness when judging outcomes, (2) how to translate this genre's signature mechanical pressures (corruption, heat, exposure, ship damage, etc.) into NARRATIVE consequences instead of resource ticks — ground them in fiction (a new scar, a debt owed, attention drawn, a creeping wrongness), (3) when to commit to clear failure or partial success even without rolls, (4) how to keep the genre's tone and content guidance (above) intact in story mode. Reference this genre's resources by name so the GM knows which mechanical pressures get translated. End with a one-line reminder that the GM should follow THIS section when the active character has no stats, and follow the stat-mode sections (resource_mechanics, ability_adjudication) when the active character has attributes and abilities.
 
 Avoid:
 - Restating engine-level rules (scene structure, STATUS_UPDATE format, dice mechanics) — the base GM prompt already covers those.
 - Mere vibes ("make it dark") — the LLM will over-correct.
 - Internal contradictions (e.g. "prioritize mood" alongside "always be clear about options").
+- Padding. Total document must stay under 1500 words; hard cap 1800. If you find yourself restating a pillar or repeating a sensory note, cut.
 
-Constraint generates style: prefer "always do X" / "never do Y" instructions over generic descriptors.
+Constraint generates style: prefer "always do X" / "never do Y" instructions over generic descriptors. The `content_to_avoid` and `content_to_include` sections in particular should be lists of imperatives, not adjectives.
 
 Return JSON only.

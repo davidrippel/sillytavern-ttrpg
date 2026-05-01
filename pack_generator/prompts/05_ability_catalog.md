@@ -20,4 +20,8 @@ Use prerequisite chains sparingly — most abilities should be independent, so c
 
 Each catalog entry should be something a starting character or a campaign-generated antagonist might plausibly take. Don't include abilities with no in-play role.
 
+For categories with `activation` of `passive`, `passive_or_triggered`, or `triggered`: at least one ability per such category MUST include a meaningful tradeoff or cost — a resource cost, a once-per-scene/session limit tied to a real consequence, or a choice between two effects. Pure flat buffs ("once per session, gain advantage on a roll") are dead weight; replace any that read that way with abilities that have teeth.
+
+Use the strict mechanic notation `<resource_key>: ±N` (e.g. `heat: +1`, `hp_current: -1`) when an effect changes a resource — every key on either side of the colon must be a real resource or attribute key from the inputs above. Do not invent keys.
+
 Return JSON only.

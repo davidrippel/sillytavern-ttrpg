@@ -19,4 +19,6 @@ If the `retries_log` shows a stage retried, INCLUDE a Pack-generator-items entry
 
 If a category in the ability catalog has only 2 abilities, flag it. If example_hooks #2 is much darker/lighter than the others, flag it. Read the actual content and surface where reviewer attention is most valuable.
 
+Always include at least one item under section `Inspirations` that asks the reviewer whether each inspiration listed in `pack.yaml` is actually felt somewhere in the tone, hooks, or mechanics — inspirations that exist only on paper are a smell.
+
 Return JSON only.

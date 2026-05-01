@@ -349,6 +349,21 @@ Explicit lists of themes the pack embraces and themes it avoids. This is both sa
 
 Point-buy or array for attribute distribution. Number of starting abilities. Starting equipment guidance. Starting corruption/sanity/heat values.
 
+### Story mode play
+
+GM guidance for running this genre without dice or stats — for characters in **story mode** (description + 1-2 strengths + one weakness, no attributes, no abilities, no resources).
+
+This section is read by the GM only when the active character is in story mode. The character sheet block injected by the extension explicitly tells the GM which mode is active and which section of this overlay to follow; the other sections continue to apply to stat-mode characters.
+
+The section must cover:
+
+- How to lean on the character's strengths and weakness when judging outcomes.
+- How to translate this genre's signature mechanical pressures (corruption, heat, exposure, ship damage, etc.) into **narrative consequences** rather than resource ticks — a new scar, a debt owed, attention drawn, a creeping wrongness. Reference this pack's resources by name so the GM knows which mechanical pressures get translated.
+- When to commit to clear failure or partial success even without rolls (don't soften every outcome).
+- How the genre's tone, content-to-include, and content-to-avoid still apply.
+
+This section is **optional** for backward compatibility — packs authored before story mode was added still validate. New packs and regenerated packs should include it.
+
 The overlay must not override engine-level rules (resolution bands, STATUS_UPDATE format, OOC handling, etc.). Those are fixed.
 
 ---
