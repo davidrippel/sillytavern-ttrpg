@@ -49,13 +49,14 @@ async function confirmAuthorsNoteUpdate(title, nextSections, reason) {
     const context = getContext();
     const nextText = formatAuthorsNoteSections(nextSections);
     const popup = new context.Popup(
-        `<div class="solo-ttrpg-assistant solo-stack"><p>${escapeHtml(reason)}</p><label class="solo-stack"><span>Review Author's Note</span><textarea id="solo-an-edit" class="solo-code">${escapeHtml(nextText)}</textarea></label></div>`,
+        `<div class="solo-ttrpg-assistant solo-stack"><p>${escapeHtml(reason)}</p><label class="solo-stack"><span>Review Author's Note</span><textarea id="solo-an-edit" class="solo-code" rows="24" style="min-height: 60vh; width: 100%;">${escapeHtml(nextText)}</textarea></label></div>`,
         context.POPUP_TYPE.TEXT,
         title,
         {
             okButton: 'Apply',
             cancelButton: 'Cancel',
             wide: true,
+            large: true,
         },
     );
 
@@ -70,10 +71,39 @@ async function confirmAuthorsNoteUpdate(title, nextSections, reason) {
     return true;
 }
 
+function sanitizeProposal(raw) {
+    const text = String(raw ?? '').trim();
+    if (!text) {
+        return '';
+    }
+
+    const sectionHeadingPattern = new RegExp(
+        `^\\s*(?:${AUTHORS_NOTE_SECTIONS.map((label) => label.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|')})\\s*:`,
+        'i',
+    );
+
+    const cleaned = [];
+    for (const line of text.split('\n')) {
+        const trimmed = line.trim();
+        if (sectionHeadingPattern.test(trimmed)) {
+            break;
+        }
+        if (/^---+\s*$/.test(trimmed)) {
+            break;
+        }
+        if (/^\*\*[^*]+\*\*\s*[:?]/.test(trimmed)) {
+            break;
+        }
+        cleaned.push(line);
+    }
+
+    return cleaned.join('\n').trim();
+}
+
 async function runQuietPrompt(prompt, label) {
     try {
         const result = await getContext().generateQuietPrompt({ quietPrompt: prompt });
-        return String(result ?? '').trim();
+        return sanitizeProposal(result);
     } catch (error) {
         log(`${label} generation failed.`, 'warn', error.message);
         return '';
@@ -91,8 +121,12 @@ async function generateRecentBeatsProposal() {
     const prompt = [
         'Summarize the most recent scene beats into 2-3 short bullet points.',
         'Keep spoilers out.',
-        'Return plain text bullets only.',
         '',
+        'Output format — STRICT:',
+        '- 2-3 short plain-text bullets, one beat per line.',
+        '- Nothing else. No headings. No narration. No story continuation. No "---" separators. No NPC dialogue.',
+        '',
+        '=== Recent chat ===',
         excerpt,
     ].join('\n');
 
@@ -120,11 +154,18 @@ async function generatePendingBeatsProposal(currentPendingBeats) {
     }
 
     const prompt = [
-        'You are tracking which authored beats of the current act are still unresolved.',
-        'Given the Current Act lorebook entry (authored beats) and the recent chat,',
-        'list the beats that remain UNRESOLVED — beats the player has not yet encountered or concluded.',
-        'Return 2-5 short plain-text bullets, no spoilers about future acts, no headings.',
-        'If all beats appear resolved, return the single line: (all beats resolved)',
+        'You diff authored act beats against what has actually happened in chat.',
+        '',
+        'For each beat in the Current Act lorebook entry, decide:',
+        '- ADDRESSED: the chat clearly shows the beat played out (player encountered it, it concluded, or its dramatic question was answered). DROP it.',
+        '- PENDING: the chat does not yet show this beat happening. KEEP it.',
+        '',
+        'Be willing to mark a beat ADDRESSED even if its phrasing is open-ended ("must decide", "may attend") — what matters is whether the in-fiction event has occurred.',
+        '',
+        'Output format — STRICT:',
+        '- One bullet per PENDING beat, copied verbatim from the lorebook (keep the beat number prefix like "1.2").',
+        '- Nothing else. No headings. No explanations. No narration. No story continuation. No "---" separators. No NPC dialogue.',
+        '- If every beat is addressed, return exactly: (all beats resolved)',
         '',
         '=== Current Act lorebook entry ===',
         actText || '(empty)',
@@ -148,10 +189,14 @@ async function generateActiveThreadsProposal(currentActiveThreads) {
     }
 
     const prompt = [
-        'You are tracking emergent active threads — open subplots, dangling NPC questions,',
+        'You track emergent active threads — open subplots, dangling NPC questions,',
         'unfulfilled promises, looming dangers — based on what has actually happened in chat.',
-        'Carry forward threads that are still open, drop threads that have resolved, add new ones that have emerged.',
-        'Return 2-5 short plain-text bullets, no headings, no spoilers.',
+        'Carry forward threads still open, drop threads that resolved, add new ones that emerged.',
+        '',
+        'Output format — STRICT:',
+        '- 2-5 short plain-text bullets, one thread per line.',
+        '- Each bullet is one sentence, under 30 words.',
+        '- Nothing else. No headings. No explanations. No narration. No story continuation. No "---" separators. No NPC dialogue blocks. Do NOT continue the scene.',
         '',
         '=== Previously listed Active threads ===',
         currentActiveThreads?.trim() || '(empty)',
@@ -186,8 +231,10 @@ async function generateRemindersProposal(currentReminders) {
         '- Do NOT include genre tone notes ("keep dread cold") — those belong elsewhere.',
         '- Do NOT include authored plot beats — those live in Pending beats.',
         '',
-        'Return 0-5 short plain-text bullets, no headings.',
-        'If nothing situational is currently in play, return the single line: (none)',
+        'Output format — STRICT:',
+        '- 0-5 short plain-text bullets, one reminder per line.',
+        '- Nothing else. No headings (do NOT write "Reminders:"). No explanations. No narration. No story continuation. No "---" separators. No NPC dialogue.',
+        '- If nothing situational is currently in play, return exactly: (none)',
         '',
         '=== Previously listed Reminders ===',
         currentReminders?.trim() || '(empty)',
