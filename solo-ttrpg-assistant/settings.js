@@ -661,13 +661,64 @@ async function handleCharacterImportSamples(event) {
 
         for (const sample of characters) {
             const archetype = sample?.archetype ?? 'Sample character';
-            const choice = await context.Popup.show.input(
-                `Import "${archetype}"`,
-                `${sample?.hook_into_campaign ?? ''}\n\nType "story" to create a story-based character, "stats" to create a stats-based character, or leave blank to skip.`,
-                '',
-            );
+            const hasStory = !!sample?.story;
+            const hasStats = !!sample?.pack;
 
-            const mode = String(choice ?? '').trim().toLowerCase();
+            const wrapper = document.createElement('div');
+            wrapper.className = 'solo-ttrpg-assistant solo-stack';
+
+            const heading = document.createElement('h4');
+            heading.textContent = `Import "${archetype}"`;
+            wrapper.append(heading);
+
+            if (sample?.hook_into_campaign) {
+                const hook = document.createElement('p');
+                hook.textContent = sample.hook_into_campaign;
+                wrapper.append(hook);
+            }
+
+            const label = document.createElement('label');
+            label.className = 'solo-stack';
+            const labelText = document.createElement('span');
+            labelText.textContent = 'Import as';
+            label.append(labelText);
+
+            const select = document.createElement('select');
+            select.className = 'text_pole wide100p';
+            const skipOpt = document.createElement('option');
+            skipOpt.value = 'skip';
+            skipOpt.textContent = '⏭ Skip this character';
+            skipOpt.selected = true;
+            select.append(skipOpt);
+            if (hasStats) {
+                const statsOpt = document.createElement('option');
+                statsOpt.value = 'stats';
+                statsOpt.textContent = '📊 Stats-Based character';
+                select.append(statsOpt);
+            }
+            if (hasStory) {
+                const storyOpt = document.createElement('option');
+                storyOpt.value = 'story';
+                storyOpt.textContent = '📖 Story-Based character';
+                select.append(storyOpt);
+            }
+            label.append(select);
+            wrapper.append(label);
+
+            let mode = 'skip';
+            select.addEventListener('change', () => {
+                mode = select.value;
+            });
+
+            const popup = new context.Popup(wrapper, context.POPUP_TYPE.CONFIRM, '', {
+                okButton: 'Import',
+                cancelButton: 'Cancel All',
+            });
+            const result = await popup.show();
+            if (result !== context.POPUP_RESULT.AFFIRMATIVE) {
+                break;
+            }
+
             if (mode === 'story' && sample?.story) {
                 createStoryCharacter({
                     name: sample.story.name ?? archetype,
