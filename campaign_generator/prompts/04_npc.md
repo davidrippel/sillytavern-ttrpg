@@ -13,7 +13,7 @@ Requirements:
 - whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name
 
 Length budgets (these entries live in the GM's context every time the NPC is mentioned — write tight, evocative lines, not paragraphs):
-- `role`: <= 80 characters, a short noun phrase ("the keeper of secrets", "exiled witch-hunter")
+- `role`: <= 80 characters, a short noun phrase that fits the campaign's genre (e.g. "the keeper of secrets", "the rival who never left town")
 - `physical_description`: <= 220 characters, 1-2 sentences with one or two distinctive details, not a portrait
 - `speaking_style`: <= 160 characters, voice and cadence in one sentence (a verbal tic or two is enough)
 - `motivation`: <= 220 characters, what they want and why — one sentence
