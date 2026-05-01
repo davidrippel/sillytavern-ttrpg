@@ -22,6 +22,17 @@ SillyTavern extension for solo narrative campaigns with pack-aware character she
 3. Open the extension drawer in the Extensions panel.
 4. Click `Load Pack` and choose a pack directory such as `genres/symbaroum_dark_fantasy/`.
 
+## Author's Note settings (recommended)
+
+For prompt-cache friendliness — the Author's Note changes every turn, so its placement determines how much of the prompt gets re-billed on each request — set in the Author's Note panel:
+
+- **Position:** `In-chat @ Depth`
+- **Depth:** `4`
+- **Role:** `System`
+- **Frequency:** `1`
+
+The extension's injected character sheet rides the same depth, so the system prompt, genre overlay, constant lorebook entries, and older chat history all stay in the cache prefix. Only the last few messages are uncached — which is unavoidable because the new user turn always invalidates the tail. See `Docs/07_GM_BASE_PROMPT.md` for the full rationale.
+
 ## Notes
 
 - Quick Reply sync is best-effort and only runs when the Quick Reply API is available.
