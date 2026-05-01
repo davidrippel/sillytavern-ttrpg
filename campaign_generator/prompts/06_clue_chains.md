@@ -12,3 +12,6 @@ Requirements:
 - ensure investigation redundancy and no dead ends
 - never invent extra NPCs, locations, beat ids, or special found_at types like `hook`, `item`, or `starting_clue`
 - whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name
+
+Length budget:
+- `reveals`: <= 280 characters, what the clue surfaces in 1-2 sentences. The graph is what matters; prose can stay terse — the GM will dramatize the find at the table.

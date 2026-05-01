@@ -11,3 +11,13 @@ Requirements:
 - ensure every name in `required_npc_names` appears somewhere in the final roster
 - in relationships, use only `{{user}}` or names that belong to the campaign's NPC roster
 - whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name
+
+Length budgets (these entries live in the GM's context every time the NPC is mentioned — write tight, evocative lines, not paragraphs):
+- `role`: <= 80 characters, a short noun phrase ("the keeper of secrets", "exiled witch-hunter")
+- `physical_description`: <= 220 characters, 1-2 sentences with one or two distinctive details, not a portrait
+- `speaking_style`: <= 160 characters, voice and cadence in one sentence (a verbal tic or two is enough)
+- `motivation`: <= 220 characters, what they want and why — one sentence
+- `secret`: <= 320 characters, the hidden truth in 1-2 sentences
+- each `relationships[].description`: <= 160 characters, the relationship in one sentence
+
+Prefer specificity over completeness. The GM will riff; you don't need to spell out every nuance.

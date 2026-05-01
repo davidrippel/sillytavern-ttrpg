@@ -96,12 +96,20 @@ class PlotSkeleton(BaseModel):
 
 class Faction(BaseModel):
     name: str
-    description: str
+    description: str = Field(max_length=300)
     goals: list[str] = Field(min_length=1)
     methods: list[str] = Field(min_length=1)
     internal_tensions: list[str] = Field(min_length=1)
-    relationship_to_plot: str
+    relationship_to_plot: str = Field(max_length=200)
     moral_alignment: str
+
+    @field_validator("goals", "methods", "internal_tensions")
+    @classmethod
+    def cap_list_items(cls, value: list[str]) -> list[str]:
+        for item in value:
+            if len(item) > 120:
+                raise ValueError("each goals/methods/tensions item must be <= 120 chars")
+        return value
 
 
 class FactionSet(BaseModel):
@@ -117,17 +125,17 @@ class FactionSet(BaseModel):
 
 class NPCRelationship(BaseModel):
     name: str
-    description: str
+    description: str = Field(max_length=160)
 
 
 class NPC(BaseModel):
     name: str
-    role: str
+    role: str = Field(max_length=80)
     faction_affiliation: str | None = None
-    physical_description: str
-    speaking_style: str
-    motivation: str
-    secret: str
+    physical_description: str = Field(max_length=220)
+    speaking_style: str = Field(max_length=160)
+    motivation: str = Field(max_length=220)
+    secret: str = Field(max_length=320)
     relationships: list[NPCRelationship] = Field(default_factory=list)
     abilities: list[str] = Field(default_factory=list)
     act_presence: list[str] = Field(default_factory=list)
@@ -145,9 +153,9 @@ class NPCRoster(BaseModel):
 
 
 class SensoryDescription(BaseModel):
-    sight: str | None = None
-    sound: str | None = None
-    smell: str | None = None
+    sight: str | None = Field(default=None, max_length=220)
+    sound: str | None = Field(default=None, max_length=220)
+    smell: str | None = Field(default=None, max_length=220)
 
     @model_validator(mode="after")
     def require_two_senses(self) -> "SensoryDescription":
@@ -159,12 +167,20 @@ class SensoryDescription(BaseModel):
 
 class Location(BaseModel):
     name: str
-    type: str
+    type: str = Field(max_length=60)
     sensory_description: SensoryDescription
     notable_features: list[str] = Field(min_length=1)
     hidden_elements: list[str] = Field(min_length=1)
     npc_names: list[str] = Field(default_factory=list)
     plot_beats: list[str] = Field(min_length=1)
+
+    @field_validator("notable_features", "hidden_elements")
+    @classmethod
+    def cap_list_items(cls, value: list[str]) -> list[str]:
+        for item in value:
+            if len(item) > 220:
+                raise ValueError("each notable_features/hidden_elements item must be <= 220 chars")
+        return value
 
 
 class LocationCatalog(BaseModel):
@@ -195,7 +211,7 @@ class Clue(BaseModel):
     id: str
     found_at_type: str
     found_at: str
-    reveals: str
+    reveals: str = Field(max_length=280)
     points_to: list[ClueTarget] = Field(min_length=1)
     supports_beats: list[str] = Field(min_length=1)
 
