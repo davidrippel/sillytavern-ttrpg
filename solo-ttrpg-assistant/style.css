@@ -130,37 +130,39 @@
     background: color-mix(in srgb, var(--SmartThemeBorderColor, #666) 45%, #2c2c2c 55%) !important;
 }
 
-.solo-ttrpg-assistant .solo-section textarea,
-.solo-ttrpg-assistant .solo-section input,
-.solo-ttrpg-assistant .solo-section select {
+.solo-ttrpg-assistant textarea,
+.solo-ttrpg-assistant input[type="text"],
+.solo-ttrpg-assistant input[type="number"],
+.solo-ttrpg-assistant input:not([type]),
+.solo-ttrpg-assistant select {
     width: 100%;
-    color: inherit !important;
-    -webkit-text-fill-color: currentColor !important;
-    caret-color: currentColor !important;
-    background: color-mix(in srgb, var(--SmartThemeBodyColor, #222) 12%, #fff 88%) !important;
-    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor, #666) 58%, transparent) !important;
+    color: #1a1a1a !important;
+    -webkit-text-fill-color: #1a1a1a !important;
+    caret-color: #1a1a1a !important;
+    background: #ffffff !important;
+    border: 1px solid #555 !important;
     text-shadow: none !important;
     opacity: 1 !important;
 }
 
-.solo-ttrpg-assistant .solo-section textarea::placeholder,
-.solo-ttrpg-assistant .solo-section input::placeholder {
-    color: color-mix(in srgb, currentColor 45%, transparent) !important;
-    -webkit-text-fill-color: color-mix(in srgb, currentColor 45%, transparent) !important;
+.solo-ttrpg-assistant textarea::placeholder,
+.solo-ttrpg-assistant input::placeholder {
+    color: #6b6b6b !important;
+    -webkit-text-fill-color: #6b6b6b !important;
     opacity: 1 !important;
 }
 
-.solo-ttrpg-assistant .solo-section textarea:focus,
-.solo-ttrpg-assistant .solo-section input:focus,
-.solo-ttrpg-assistant .solo-section select:focus {
+.solo-ttrpg-assistant textarea:focus,
+.solo-ttrpg-assistant input:focus,
+.solo-ttrpg-assistant select:focus {
     outline: 2px solid color-mix(in srgb, var(--solo-accent) 60%, transparent);
     outline-offset: 1px;
+    border-color: #1a1a1a !important;
 }
 
-.solo-ttrpg-assistant .solo-section input option,
-.solo-ttrpg-assistant .solo-section select option {
-    color: #1f1f1f !important;
-    background: #f4f3ef !important;
+.solo-ttrpg-assistant option {
+    color: #1a1a1a !important;
+    background: #ffffff !important;
 }
 
 .solo-ttrpg-assistant .solo-section textarea {
