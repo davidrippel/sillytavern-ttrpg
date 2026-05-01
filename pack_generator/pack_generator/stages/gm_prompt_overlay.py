@@ -106,10 +106,13 @@ def _find_reference_gaps(
         gaps["attribute_guidance"] = missing_attributes
 
     resource_section = overlay.resource_mechanics.lower()
+    narrative_kinds = {"pool", "pool_with_threshold", "counter", "tally"}
     missing_resources = [
         r.key
         for r in resources.resources
-        if r.key not in resource_section and r.display.lower() not in resource_section
+        if r.kind in narrative_kinds
+        and r.key not in resource_section
+        and r.display.lower() not in resource_section
     ]
     if missing_resources:
         gaps["resource_mechanics"] = missing_resources
