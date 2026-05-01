@@ -10,8 +10,5 @@ def render(plot: PlotSkeleton) -> InitialAuthorsNote:
         pending_beats=[beat.rendered for beat in act_one.beats[:3]],
         active_threads=[plot.hook, plot.driving_mystery, act_one.goal][:3],
         recent_beats=[],
-        reminders=[
-            "Stay within the opening situation and do not surface later-act antagonist secrets.",
-            "Escalate through clues, faction pressure, and the first act beats.",
-        ],
+        reminders=[],
     )
