@@ -30,6 +30,10 @@ function getCharacterTypeLabel(character) {
     return (character?.mode ?? 'pack') === 'story' ? 'Story-Based' : 'Stats-Based';
 }
 
+function getCharacterTypeIcon(character) {
+    return (character?.mode ?? 'pack') === 'story' ? '📖' : '📊';
+}
+
 function getAbilityLabel(ability) {
     if (typeof ability === 'string') {
         return ability;
@@ -179,10 +183,11 @@ async function openPackPicker() {
 
 function buildCharacterOptionLabel(character) {
     const base = character.name?.trim() || 'Unnamed character';
+    const icon = getCharacterTypeIcon(character);
     const type = getCharacterTypeLabel(character);
     const personaInfo = getPersonaLinkInfo(character);
     const personaSuffix = personaInfo.linkedName ? ` - ${personaInfo.linkedName}` : '';
-    return `${base} - ${type}${personaSuffix}`;
+    return `${icon} ${base} - ${type}${personaSuffix}`;
 }
 
 function renderPackSummary() {
@@ -269,17 +274,17 @@ function renderCharacterStatus() {
     }
 
     const character = getActiveCharacter();
-    const pack = getActivePack();
     const typeLabel = getCharacterTypeLabel(character);
-    const detail = character
-        ? ((character.mode ?? 'pack') === 'story' ? 'Narrative play' : (pack?.displayName || 'No pack loaded'))
-        : 'No character';
+    const typeIcon = getCharacterTypeIcon(character);
+    const isStory = (character?.mode ?? 'pack') === 'story';
 
     const $root = $(settingsRoot);
-    $root.find('#solo-character-type-badge').text(typeLabel);
+    const $badge = $root.find('#solo-character-type-badge');
+    $badge.text(`${typeIcon} ${typeLabel}`);
+    $badge.toggleClass('solo-badge--story', !!character && isStory);
+    $badge.toggleClass('solo-badge--stats', !!character && !isStory);
     $root.find('#solo-play-character-type').text(typeLabel);
-    $root.find('#solo-sheet-mode').text(detail);
-    $root.find('#solo-character-mode-select').val((character?.mode ?? 'pack') === 'story' ? 'story' : 'pack');
+    $root.find('#solo-character-convert').prop('disabled', !character);
 }
 
 function renderPlayConditions(character) {
@@ -521,47 +526,95 @@ async function handleCharacterSwitch(event) {
     }
 }
 
-async function handleCharacterModeSwitch(event) {
+async function handleCharacterNew() {
+    if (!isExtensionEnabled()) {
+        return;
+    }
+
+    const context = getContext();
+    const wrapper = document.createElement('div');
+    wrapper.className = 'solo-ttrpg-assistant solo-stack';
+
+    const intro = document.createElement('p');
+    intro.textContent = 'Choose a character type. You can convert later, but conversion is lossy.';
+    wrapper.append(intro);
+
+    const label = document.createElement('label');
+    label.className = 'solo-stack';
+    const labelText = document.createElement('span');
+    labelText.textContent = 'Type';
+    label.append(labelText);
+
+    const select = document.createElement('select');
+    select.className = 'text_pole wide100p';
+    const statsOpt = document.createElement('option');
+    statsOpt.value = 'pack';
+    statsOpt.textContent = '📊 Stats-Based — attributes, abilities, equipment (uses active pack)';
+    statsOpt.selected = true;
+    select.append(statsOpt);
+    const storyOpt = document.createElement('option');
+    storyOpt.value = 'story';
+    storyOpt.textContent = '📖 Story-Based — description, strengths, weakness (no pack required)';
+    select.append(storyOpt);
+    label.append(select);
+    wrapper.append(label);
+
+    let chosenType = 'pack';
+    select.addEventListener('change', () => {
+        chosenType = select.value === 'story' ? 'story' : 'pack';
+    });
+
+    const popup = new context.Popup(wrapper, context.POPUP_TYPE.CONFIRM, '', {
+        okButton: 'Create',
+        cancelButton: 'Cancel',
+    });
+    const result = await popup.show();
+    if (result !== context.POPUP_RESULT.AFFIRMATIVE) {
+        return;
+    }
+
+    if (chosenType === 'story') {
+        createStoryCharacter({ name: '' });
+    } else {
+        const settings = getSettings();
+        createCharacter({ name: '', packName: settings.activePackName ?? null });
+    }
+}
+
+async function handleCharacterConvert() {
     if (!isExtensionEnabled()) {
         return;
     }
 
     const active = getActiveCharacter();
     if (!active) {
+        toastr.info('Select a character first.');
         return;
     }
 
-    const nextMode = String(event.target.value || 'pack');
     const currentMode = (active.mode ?? 'pack') === 'story' ? 'story' : 'pack';
-    if (nextMode === currentMode) {
+    const nextMode = currentMode === 'story' ? 'pack' : 'story';
+    const nextLabel = nextMode === 'story' ? 'Story-Based' : 'Stats-Based';
+    const lossDescription = nextMode === 'story'
+        ? 'attributes, abilities, equipment, and conditions'
+        : 'strengths and weakness';
+
+    const context = getContext();
+    const confirmed = await context.Popup.show.confirm(
+        `Convert "${active.name || 'Unnamed character'}" to ${nextLabel}?`,
+        `This will discard ${lossDescription}. Description and notes are preserved.\n\nThis cannot be undone.`,
+    );
+    if (confirmed !== context.POPUP_RESULT.AFFIRMATIVE) {
         return;
     }
 
     try {
         convertCharacterMode(active.id, nextMode);
         renderPlayDashboard();
-        toastr.success(`Character switched to ${nextMode === 'story' ? 'story-based' : 'stats-based'} mode.`);
+        toastr.success(`Character converted to ${nextLabel}.`);
     } catch (error) {
         toastr.error(error.message);
-        renderCharacterStatus();
     }
-}
-
-function handleCharacterNewStats() {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const settings = getSettings();
-    createCharacter({ name: '', packName: settings.activePackName ?? null });
-}
-
-function handleCharacterNewStory() {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    createStoryCharacter({ name: '' });
 }
 
 async function handleCharacterRename() {
@@ -840,9 +893,8 @@ export async function mountSettingsPanel() {
     const samplesInput = $(settingsRoot).find('#solo-character-samples-input').get(0);
 
     $(settingsRoot).find('#solo-character-select, #solo-play-character-select').on('change', handleCharacterSwitch);
-    $(settingsRoot).find('#solo-character-mode-select').on('change', (event) => handleCharacterModeSwitch(event).catch((error) => toastr.error(error.message)));
-    $(settingsRoot).find('#solo-character-new-stats').on('click', handleCharacterNewStats);
-    $(settingsRoot).find('#solo-character-new-story').on('click', handleCharacterNewStory);
+    $(settingsRoot).find('#solo-character-new').on('click', () => handleCharacterNew().catch((error) => toastr.error(error.message)));
+    $(settingsRoot).find('#solo-character-convert').on('click', () => handleCharacterConvert().catch((error) => toastr.error(error.message)));
     $(settingsRoot).find('#solo-character-rename').on('click', () => handleCharacterRename().catch((error) => toastr.error(error.message)));
     $(settingsRoot).find('#solo-character-duplicate').on('click', handleCharacterDuplicate);
     $(settingsRoot).find('#solo-character-delete').on('click', () => handleCharacterDelete().catch((error) => toastr.error(error.message)));
@@ -873,10 +925,12 @@ export async function mountSettingsPanel() {
     });
     subscribeCharacters(() => {
         renderCharacterPicker();
+        renderCharacterStatus();
         renderPlayDashboard();
     });
     subscribeCharacterMeta(() => {
         renderCharacterPicker();
+        renderCharacterStatus();
         renderPlayDashboard();
     });
     subscribeSheetState(() => renderPlayDashboard());

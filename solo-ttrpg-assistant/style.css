@@ -97,6 +97,14 @@
     white-space: nowrap;
 }
 
+.solo-ttrpg-assistant .solo-badge--stats {
+    background: color-mix(in srgb, #4a90e2 22%, transparent);
+}
+
+.solo-ttrpg-assistant .solo-badge--story {
+    background: color-mix(in srgb, #c084fc 22%, transparent);
+}
+
 .solo-ttrpg-assistant .solo-actions {
     display: flex;
     flex-wrap: wrap;

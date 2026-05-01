@@ -96,26 +96,25 @@
                     <div class="solo-disclosure-body inline-drawer-content" style="display: none;">
                         <div class="solo-grid">
                             <section class="solo-section solo-stack">
+                                <label class="solo-stack">
+                                    <span>Active character</span>
+                                    <select id="solo-character-select" class="solo-requires-enabled"></select>
+                                </label>
                                 <div class="solo-row spread solo-row-start">
-                                    <label class="solo-stack solo-grow">
-                                        <span>Active character</span>
-                                        <select id="solo-character-select" class="solo-requires-enabled"></select>
-                                    </label>
-                                    <div class="solo-badge-column">
-                                        <span class="solo-badge" id="solo-character-type-badge">Stats-Based</span>
-                                        <span class="solo-muted" id="solo-sheet-mode"></span>
+                                    <div class="solo-stack solo-grow">
+                                        <span class="solo-muted">Type</span>
+                                        <div class="solo-row solo-row-start">
+                                            <span class="solo-badge" id="solo-character-type-badge">Stats-Based</span>
+                                            <button id="solo-character-convert" class="menu_button solo-requires-enabled" type="button">Convert type&hellip;</button>
+                                        </div>
+                                    </div>
+                                    <div class="solo-stack">
+                                        <span class="solo-muted">Sheet</span>
+                                        <span id="solo-sheet-mode"></span>
                                     </div>
                                 </div>
-                                <label class="solo-stack">
-                                    <span>Character type</span>
-                                    <select id="solo-character-mode-select" class="solo-requires-enabled">
-                                        <option value="pack">Stats-Based</option>
-                                        <option value="story">Story-Based</option>
-                                    </select>
-                                </label>
                                 <div class="solo-actions">
-                                    <button id="solo-character-new-stats" class="menu_button solo-requires-enabled" type="button">New Stats Character</button>
-                                    <button id="solo-character-new-story" class="menu_button solo-requires-enabled" type="button">New Story Character</button>
+                                    <button id="solo-character-new" class="menu_button solo-requires-enabled" type="button">+ New character&hellip;</button>
                                     <button id="solo-character-rename" class="menu_button solo-requires-enabled" type="button">Rename</button>
                                     <button id="solo-character-duplicate" class="menu_button solo-requires-enabled" type="button">Duplicate</button>
                                     <button id="solo-character-delete" class="menu_button solo-requires-enabled" type="button">Delete</button>
