@@ -249,7 +249,8 @@ class BranchPlan(BaseModel):
 
 class InitialAuthorsNote(BaseModel):
     current_act: str
-    pending_beats: list[str] = Field(default_factory=list)
+    current_beat: str
+    next_beat: str | None = None
     active_threads: list[str] = Field(default_factory=list)
     recent_beats: list[str] = Field(default_factory=list)
     reminders: list[str] = Field(default_factory=list)
@@ -258,8 +259,10 @@ class InitialAuthorsNote(BaseModel):
         recent_beats = [f"- {beat}" for beat in self.recent_beats] if self.recent_beats else ["- (empty at start)"]
         sections = [
             f"Current Act: {self.current_act}",
-            "Pending beats:",
-            *(f"- {beat}" for beat in self.pending_beats),
+            f"Current beat: - {self.current_beat}",
+            f"Next beat: - {self.next_beat}" if self.next_beat else "Next beat: (none)",
+            "Discovered clues: (none)",
+            "Available clues: (none)",
             "Active threads:",
             *(f"- {thread}" for thread in self.active_threads),
             "Recent beats:",

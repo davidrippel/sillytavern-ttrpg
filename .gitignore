@@ -26,5 +26,8 @@ campaign_generator/.venv/
 pack_generator/.venv/
 
 # Output folders
-campaign_generator/campaigns/
+campaigns/
 genres/
+
+# Opens file
+opens.txt

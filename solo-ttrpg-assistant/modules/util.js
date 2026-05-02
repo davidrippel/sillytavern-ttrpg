@@ -1,4 +1,4 @@
-import { AUTHORS_NOTE_KEYS, DEFAULT_SETTINGS, MODULE_NAME } from './constants.js';
+import { AUTHORS_NOTE_KEYS, DEFAULT_SETTINGS, MODULE_NAME, STORY_STATE_KEY, STORY_STATE_SCHEMA_VERSION } from './constants.js';
 
 export function getContext() {
     return globalThis.SillyTavern.getContext();
@@ -150,6 +150,37 @@ export async function writeAuthorsNote(text) {
     const context = getContext();
     context.chatMetadata[AUTHORS_NOTE_KEYS.prompt] = String(text ?? '');
     await context.saveMetadata();
+}
+
+function defaultStoryState() {
+    return {
+        schemaVersion: STORY_STATE_SCHEMA_VERSION,
+        actNumber: 1,
+        currentBeatLabel: null,
+        nextBeatLabel: null,
+        resolvedBeatLabels: [],
+        completedActs: [],
+        discoveredClues: [],
+    };
+}
+
+export function readStoryState() {
+    const context = getContext();
+    const stored = context.chatMetadata?.[STORY_STATE_KEY];
+    if (!stored || typeof stored !== 'object') return null;
+    return stored;
+}
+
+export async function writeStoryState(state) {
+    const context = getContext();
+    if (!context.chatMetadata) return;
+    context.chatMetadata[STORY_STATE_KEY] = state;
+    await context.saveMetadata();
+}
+
+export function ensureStoryStateShape(state) {
+    const base = defaultStoryState();
+    return { ...base, ...(state ?? {}) };
 }
 
 export function getNoteDepth() {

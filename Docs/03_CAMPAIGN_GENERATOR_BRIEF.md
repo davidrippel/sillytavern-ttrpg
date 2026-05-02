@@ -297,11 +297,19 @@ Current implementation constraints:
 Input: plot skeleton, opening hook content.
 
 Output: the Author's Note text for Act 1 state. Sections:
-- Current Act: Act 1 — [title]
-- Pending beats: first 2-3 beats from Act 1, rendered with explicit numbering (`1.1`, `1.2`, ...)
+- Current Act: `Act 1: [title]`
+- Current beat: rendered text of beat `1.1`
+- Next beat: rendered text of beat `1.2` (or empty if act has only one beat)
+- Discovered clues: `(none)` at start
+- Available clues: `(none)` at start; populated at runtime from clue chain reachability
 - Active threads: 2-3 initial hooks
 - Recent beats: (empty at start)
 - Reminders: anything the GM must not forget from the opening situation
+
+The extension advances Current beat / Next beat at runtime by parsing
+GM-emitted closure tags (`<<beat:LABEL:resolved>>`). The 2-beat window
+is the spoiler-isolation mechanism — the GM never sees beats further
+ahead than Next beat.
 
 This becomes `initial_authors_note.txt` in the output.
 

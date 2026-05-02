@@ -217,7 +217,7 @@ README.txt                      # auto-generated explanation
 
 Filename convention: `campaign_<slug>_<YYYYMMDD_HHMMSS>.zip` where `<slug>` is derived from the chat name.
 
-Settings option: auto-export on `/scene-end`, on session end (how? detect inactivity timer), or never.
+Settings option: auto-export on act transition (detected via closure tags), on session end (how? detect inactivity timer), or never.
 
 **Import flow:**
 1. User runs `/backup-import`, picks a file
@@ -256,22 +256,35 @@ On accept: apply deltas atomically. If a threshold is crossed (e.g., `corruption
 
 The AN has structured sections. The extension parses and writes each independently.
 
-Expected sections (matching `08_EXAMPLE_PACK_SYMBAROUM.md` format):
-- Current Act
-- Pending beats
+Expected sections:
+- Current Act (header only)
+- Current beat (the single beat the GM is currently driving toward)
+- Next beat (the immediate next beat — spoiler-bounded 2-beat window)
+- Discovered clues (clue IDs the GM has surfaced via tags)
+- Available clues (computed; one-hop reachable from discovered)
 - Active threads
 - Recent beats
 - Reminders
 
 **Operations:**
 
-- **`/scene-end`** — prompts GM to wrap scene, then triggers recent-beats update + status-update parse + optional summarize
-- **`/act-transition`** — user-initiated. Reads current-act lorebook entry, advances it per the campaign's plot skeleton (reads from `spoilers/full_campaign.md` if available, else prompts user), updates both the constant lorebook entry AND the AN's Current Act section
-- **Recent beats auto-update** — triggered on scene-end or every N messages (configurable). Reads last K messages, calls LLM to distill 2-3 bullet points. Presents diff view. User accepts or edits.
-- **Active threads update** — lower-confidence. Extension proposes thread additions and retirements based on recent messages. Always requires user review. Threads are harder to detect — may require LLM call with longer context.
-- **Pending beats** — not auto-updated. Advanced only on `/act-transition`.
-
-Never auto-apply any AN update. Always show a diff and require user confirmation.
+- **GM closure tags** — on every assistant message, the extension parses
+  `<<beat:LABEL:resolved>>`, `<<act:N:complete>>`, `<<clue:found:ID>>`
+  tags, strips them from display, and advances `solo_ttrpg_story_state`
+  in `chatMetadata`. The Author's Note is regenerated from state +
+  lorebook on every change. No user click required.
+- **Beat advancement** — on `<<beat:LABEL:resolved>>` the extension
+  marks the labeled beat (and any earlier unresolved beats) as resolved
+  and promotes Next beat to Current beat. Resolving the last beat of an
+  act auto-advances to act N+1 by rewriting the `Current Act` lorebook
+  entry from the next-act entry already shipped in the campaign lorebook.
+- **Silent summary refresh** — Recent beats / Active threads / Reminders
+  are regenerated silently every N assistant messages (configurable,
+  default 3). No popup, no diff. The user can inspect the result via
+  SillyTavern's native Author's Note editor.
+- **"Move plot forward" button** — manual immersion-safe nudge. Marks
+  the Current beat resolved exactly as a `<<beat:current:resolved>>`
+  tag would. No spoiler text, no popup. Used when fiction stalls.
 
 #### 2.3 Canon detection
 
@@ -294,7 +307,7 @@ Cooldown: after a user ignores a proposed entry, the extension should not re-pro
 
 #### 3.1 Scene transition helper
 
-Already covered by `/scene-end` above — this is just the button/Quick Reply wrapper.
+Replaced by closure-tag flow above. The "Move plot forward" button is the only remaining manual scene helper.
 
 #### 3.2 Lorebook hygiene
 
@@ -395,8 +408,8 @@ Manual test checklist in `TESTING.md`:
 - `/backup-import` into a fresh chat, verify state matches and compatibility check fires if pack is not loaded
 - Send a GM message with a STATUS_UPDATE block, verify parse + modal; verify the field whitelist from `resources.yaml` is enforced
 - Send a GM message with a new NPC, verify canon detection proposal
-- Run `/scene-end`, verify AN diff view
-- Run `/act-transition`, verify both lorebook and AN update
+- Send GM messages containing closure tags, verify state advances and tags are stripped from display
+- Click "Move plot forward", verify Current beat advances to Next beat and AN re-renders
 - Stress-test with 200+ message chat, check performance
 
 ---

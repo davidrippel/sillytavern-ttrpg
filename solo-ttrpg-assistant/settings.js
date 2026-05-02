@@ -1,5 +1,6 @@
 import { exportBackupBundle, importBackupBundle } from './modules/backup.js';
-import { runActTransitionFlow, runSceneEndFlow } from './modules/authors_note.js';
+import { getStoryStatusForUi } from './modules/authors_note.js';
+import { moveBeatForwardManually } from './modules/closure_tags.js';
 import {
     convertCharacterMode,
     createCharacter,
@@ -961,8 +962,30 @@ export async function mountSettingsPanel() {
     $(settingsRoot).find('#solo-backup-import').on('click', () => backupInput.click());
     $(backupInput).on('change', handleBackupImport);
 
-    $(settingsRoot).find('#solo-scene-end, #solo-play-scene-end').on('click', () => runSceneEndFlow().catch((error) => toastr.error(error.message)));
-    $(settingsRoot).find('#solo-act-transition, #solo-play-act-transition').on('click', () => runActTransitionFlow().catch((error) => toastr.error(error.message)));
+    async function handleMovePlotForward() {
+        try {
+            await moveBeatForwardManually();
+            toastr.info('Plot nudged forward.', 'Solo TTRPG Assistant', { timeOut: 2000 });
+            await refreshStoryStatusRow();
+        } catch (error) {
+            toastr.error(error.message);
+        }
+    }
+    $(settingsRoot).find('#solo-move-plot-forward, #solo-play-move-plot-forward').on('click', handleMovePlotForward);
+
+    async function refreshStoryStatusRow() {
+        const status = await getStoryStatusForUi();
+        const text = status
+            ? `Act ${status.actNumber} — beat ${status.currentBeatLabel}`
+            : '';
+        $(settingsRoot).find('#solo-story-status, #solo-play-story-status').text(text);
+    }
+    refreshStoryStatusRow().catch(() => {});
+    const context = globalThis.SillyTavern?.getContext?.();
+    context?.eventSource?.on?.(context.eventTypes.MESSAGE_RECEIVED, () => {
+        setTimeout(() => refreshStoryStatusRow().catch(() => {}), 500);
+    });
+    context?.eventSource?.on?.(context.eventTypes.CHAT_CHANGED, () => refreshStoryStatusRow().catch(() => {}));
 
     mountSheet(
         $(settingsRoot).find('#solo-sheet-root').get(0),

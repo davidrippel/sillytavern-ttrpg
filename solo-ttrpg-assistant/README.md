@@ -12,8 +12,9 @@ SillyTavern extension for solo narrative campaigns with pack-aware character she
   - Backup export/import ZIP bundle
 - Tier 2:
   - `STATUS_UPDATE` block parsing with confirmation/edit flow
-  - `/scene-end` recent-beats proposal
-  - `/act-transition` Current Act update for Author's Note and lorebook
+  - GM closure-tag parsing (`<<beat:LABEL:resolved>>`, `<<act:N:complete>>`, `<<clue:found:ID>>`) — auto-advances story state and rewrites the Author's Note
+  - Silent debounced summary refresh (Recent beats / Active threads / Reminders)
+  - "Move plot forward" manual nudge button when fiction stalls
 
 ## Install
 

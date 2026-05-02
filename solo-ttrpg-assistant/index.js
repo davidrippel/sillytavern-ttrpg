@@ -3,6 +3,11 @@ import { initDiceModule } from './modules/dice.js';
 import { maybeHandleStatusUpdate } from './modules/status_update.js';
 import { runCompatibilityCheck } from './modules/pack.js';
 import { formatCharacterSheetForPrompt } from './modules/sheet.js';
+import { handleAssistantMessage as handleClosureTags } from './modules/closure_tags.js';
+import {
+    ensureStoryStateInitialized,
+    refreshSummariesSilently,
+} from './modules/authors_note.js';
 import {
     findCharacterForPersona,
     getActiveCharacter,
@@ -71,11 +76,35 @@ context.eventSource.on(context.eventTypes.CHAT_CHANGED, async () => {
     }
     await runCompatibilityCheck();
 });
+let assistantMessageCount = 0;
+
 context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, async (message) => {
+    if (!isExtensionEnabled()) return;
     const settings = getSettings();
-    if (isExtensionEnabled() && settings.statusUpdate?.enabled !== false) {
+
+    if (settings.statusUpdate?.enabled !== false) {
         await maybeHandleStatusUpdate(message);
     }
+
+    if (!message?.is_user) {
+        try {
+            await ensureStoryStateInitialized();
+        } catch (error) {
+            // best effort
+        }
+
+        await handleClosureTags(message);
+
+        assistantMessageCount += 1;
+        const cadence = Math.max(1, Number(settings.authorsNote?.autoSummaryEvery ?? 3));
+        if (assistantMessageCount % cadence === 0) {
+            refreshSummariesSilently().catch(() => {});
+        }
+    }
+});
+
+context.eventSource.on(context.eventTypes.CHAT_CHANGED, () => {
+    assistantMessageCount = 0;
 });
 
 let lastSeenUserAvatar = null;

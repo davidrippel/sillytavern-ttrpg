@@ -21,11 +21,17 @@ export const AUTHORS_NOTE_KEYS = Object.freeze({
 
 export const AUTHORS_NOTE_SECTIONS = Object.freeze([
     'Current Act',
-    'Pending beats',
+    'Current beat',
+    'Next beat',
+    'Discovered clues',
+    'Available clues',
     'Active threads',
     'Recent beats',
     'Reminders',
 ]);
+
+export const STORY_STATE_KEY = 'solo_ttrpg_story_state';
+export const STORY_STATE_SCHEMA_VERSION = 1;
 
 export const DEFAULT_SETTINGS = Object.freeze({
     enabled: true,
@@ -44,6 +50,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     },
     authorsNote: {
         recentBeatsMessages: 8,
+        autoSummaryEvery: 3,
     },
     statusUpdate: {
         enabled: true,
