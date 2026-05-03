@@ -7,7 +7,10 @@ import { handleAssistantMessage as handleClosureTags } from './modules/closure_t
 import {
     ensureStoryStateInitialized,
     refreshSummariesSilently,
+    renderAuthorsNoteFromState,
 } from './modules/authors_note.js';
+import { writeStoryState, readStoryState } from './modules/util.js';
+import { STORY_STATE_KEY } from './modules/constants.js';
 import {
     findCharacterForPersona,
     getActiveCharacter,
@@ -58,6 +61,25 @@ globalThis.soloTtrpgGenerateInterceptor = async function soloTtrpgGenerateInterc
     chat.splice(getInjectionIndex(chat), 0, message);
 };
 
+// Debug helpers exposed on globalThis for browser-console use.
+globalThis.soloTtrpgResetStoryState = async function soloTtrpgResetStoryState() {
+    const ctx = globalThis.SillyTavern.getContext();
+    if (ctx.chatMetadata) {
+        delete ctx.chatMetadata[STORY_STATE_KEY];
+        await ctx.saveMetadata();
+    }
+    log(`Story state cleared from chatMetadata. Next GM tag will re-seed it.`, 'info');
+    await ensureStoryStateInitialized();
+    await renderAuthorsNoteFromState({ preserveSummaries: false });
+    log(`Story state re-initialized and AN re-rendered.`, 'info');
+};
+
+globalThis.soloTtrpgDumpStoryState = function soloTtrpgDumpStoryState() {
+    const state = readStoryState();
+    log(`Story state dump: ${JSON.stringify(state)}`, 'info');
+    return state;
+};
+
 async function initUi() {
     if (initialized) {
         return;
@@ -70,27 +92,43 @@ async function initUi() {
 }
 
 context.eventSource.on(context.eventTypes.APP_READY, initUi);
+let assistantMessageCount = 0;
+
 context.eventSource.on(context.eventTypes.CHAT_CHANGED, async () => {
+    assistantMessageCount = 0;
     if (!isExtensionEnabled()) {
         return;
     }
     await runCompatibilityCheck();
 });
-let assistantMessageCount = 0;
 
-context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, async (message) => {
+function resolveChatMessage(arg) {
+    if (arg && typeof arg === 'object' && 'mes' in arg) {
+        return arg;
+    }
+    const chat = context.chat;
+    if (!Array.isArray(chat)) return null;
+    if (typeof arg === 'number' && arg >= 0 && arg < chat.length) {
+        return chat[arg];
+    }
+    return chat[chat.length - 1] ?? null;
+}
+
+context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, async (arg) => {
     if (!isExtensionEnabled()) return;
     const settings = getSettings();
+    const message = resolveChatMessage(arg);
+    if (!message) return;
 
     if (settings.statusUpdate?.enabled !== false) {
         await maybeHandleStatusUpdate(message);
     }
 
-    if (!message?.is_user) {
+    if (!message.is_user) {
         try {
             await ensureStoryStateInitialized();
         } catch (error) {
-            // best effort
+            log(`ensureStoryStateInitialized threw: ${error.message}`, 'warn');
         }
 
         await handleClosureTags(message);
@@ -101,10 +139,6 @@ context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, async (message) => {
             refreshSummariesSilently().catch(() => {});
         }
     }
-});
-
-context.eventSource.on(context.eventTypes.CHAT_CHANGED, () => {
-    assistantMessageCount = 0;
 });
 
 let lastSeenUserAvatar = null;

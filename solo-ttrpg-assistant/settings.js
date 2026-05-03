@@ -1,6 +1,6 @@
 import { exportBackupBundle, importBackupBundle } from './modules/backup.js';
 import { getStoryStatusForUi } from './modules/authors_note.js';
-import { moveBeatForwardManually } from './modules/closure_tags.js';
+import { moveBeatForwardManually, resetCampaignState } from './modules/closure_tags.js';
 import {
     convertCharacterMode,
     createCharacter,
@@ -973,6 +973,32 @@ export async function mountSettingsPanel() {
     }
     $(settingsRoot).find('#solo-move-plot-forward, #solo-play-move-plot-forward').on('click', handleMovePlotForward);
 
+    async function handleResetCampaign() {
+        try {
+            const popup = new context.Popup(
+                'Reset story progress to Act 1, beat 1.1?\n\n' +
+                'This clears the discovered clues list and the current/next beat tracking, then re-renders the Author\'s Note from the campaign lorebook. ' +
+                'Your chat messages are not affected — only the story-state metadata.',
+                context.POPUP_TYPE.CONFIRM,
+                'Reset campaign',
+                { okButton: 'Reset', cancelButton: 'Cancel' },
+            );
+            const result = await popup.show();
+            if (result !== context.POPUP_RESULT.AFFIRMATIVE) return;
+
+            const ok = await resetCampaignState();
+            if (ok) {
+                toastr.success('Campaign reset. Author\'s Note re-rendered.', 'Solo TTRPG Assistant', { timeOut: 2500 });
+                await refreshStoryStatusRow();
+            } else {
+                toastr.warning('Could not reset — make sure the campaign lorebook is bound to this chat or the GM character.', 'Solo TTRPG Assistant');
+            }
+        } catch (error) {
+            toastr.error(error.message);
+        }
+    }
+    $(settingsRoot).find('#solo-reset-campaign, #solo-play-reset-campaign').on('click', handleResetCampaign);
+
     async function refreshStoryStatusRow() {
         const status = await getStoryStatusForUi();
         const text = status
@@ -981,8 +1007,8 @@ export async function mountSettingsPanel() {
         $(settingsRoot).find('#solo-story-status, #solo-play-story-status').text(text);
     }
     refreshStoryStatusRow().catch(() => {});
-    const context = globalThis.SillyTavern?.getContext?.();
     context?.eventSource?.on?.(context.eventTypes.MESSAGE_RECEIVED, () => {
+        // Some builds pass a chat index; just refresh the status row regardless of the payload.
         setTimeout(() => refreshStoryStatusRow().catch(() => {}), 500);
     });
     context?.eventSource?.on?.(context.eventTypes.CHAT_CHANGED, () => refreshStoryStatusRow().catch(() => {}));

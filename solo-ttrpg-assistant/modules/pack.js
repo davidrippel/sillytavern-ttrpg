@@ -280,19 +280,57 @@ export function getCurrentChatLorebookName() {
     return null;
 }
 
+function getCharacterLorebookName(context) {
+    try {
+        const id = context.characterId;
+        if (id == null) return null;
+        const character = context.characters?.[id];
+        if (!character) return null;
+        const candidates = [
+            character.data?.extensions?.world,
+            character.data?.character_book?.name,
+            character.character_book?.name,
+            character.world,
+        ];
+        for (const candidate of candidates) {
+            if (typeof candidate === 'string' && candidate.trim()) {
+                return candidate;
+            }
+        }
+    } catch {
+        // best-effort
+    }
+    return null;
+}
+
 export async function loadCurrentLorebook() {
     const context = getContext();
-    const lorebookName = getCurrentChatLorebookName();
-    if (!lorebookName) {
-        return null;
+    const tried = [];
+
+    const chatName = getCurrentChatLorebookName();
+    if (chatName) {
+        tried.push(`chat:${chatName}`);
+        try {
+            const book = await context.loadWorldInfo(chatName);
+            if (book) return book;
+        } catch (error) {
+            log(`Failed to load chat lorebook "${chatName}".`, 'warn', error.message);
+        }
     }
 
-    try {
-        return await context.loadWorldInfo(lorebookName);
-    } catch (error) {
-        log(`Failed to load lorebook "${lorebookName}".`, 'warn', error.message);
-        return null;
+    const characterName = getCharacterLorebookName(context);
+    if (characterName) {
+        tried.push(`character:${characterName}`);
+        try {
+            const book = await context.loadWorldInfo(characterName);
+            if (book) return book;
+        } catch (error) {
+            log(`Failed to load character lorebook "${characterName}".`, 'warn', error.message);
+        }
     }
+
+    log(`loadCurrentLorebook: no lorebook found. Tried: [${tried.join(', ') || 'nothing — neither chat nor character lorebook bound'}]`, 'warn');
+    return null;
 }
 
 function getLorebookEntries(lorebook) {
@@ -376,9 +414,9 @@ export function findAbilityDefinition(name, pack = getActivePack()) {
 
 export async function saveLorebook(lorebook) {
     const context = getContext();
-    const lorebookName = getCurrentChatLorebookName();
+    const lorebookName = getCurrentChatLorebookName() ?? getCharacterLorebookName(context);
     if (!lorebookName) {
-        throw new Error('No active chat lorebook is bound to the current chat.');
+        throw new Error('No active lorebook is bound to the current chat or character.');
     }
 
     await context.saveWorldInfo(lorebookName, lorebook);
