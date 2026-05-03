@@ -305,11 +305,9 @@ function getCharacterLorebookName(context) {
 
 export async function loadCurrentLorebook() {
     const context = getContext();
-    const tried = [];
 
     const chatName = getCurrentChatLorebookName();
     if (chatName) {
-        tried.push(`chat:${chatName}`);
         try {
             const book = await context.loadWorldInfo(chatName);
             if (book) return book;
@@ -320,7 +318,6 @@ export async function loadCurrentLorebook() {
 
     const characterName = getCharacterLorebookName(context);
     if (characterName) {
-        tried.push(`character:${characterName}`);
         try {
             const book = await context.loadWorldInfo(characterName);
             if (book) return book;
@@ -329,7 +326,6 @@ export async function loadCurrentLorebook() {
         }
     }
 
-    log(`loadCurrentLorebook: no lorebook found. Tried: [${tried.join(', ') || 'nothing — neither chat nor character lorebook bound'}]`, 'warn');
     return null;
 }
 

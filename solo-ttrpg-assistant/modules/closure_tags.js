@@ -123,13 +123,7 @@ export async function applyTagsToState(tags) {
     }
 
     let { acts } = await loadAllActs();
-    log(`applyTagsToState: loaded ${acts.length} acts; state.actNumber=${state.actNumber}; state.currentBeatLabel=${state.currentBeatLabel}`, 'info');
     let currentAct = acts.find((a) => a.actNumber === state.actNumber) ?? null;
-    if (currentAct) {
-        log(`applyTagsToState: currentAct beats = ${currentAct.beats.map((b) => b.label).join(', ')}`, 'info');
-    } else {
-        log(`applyTagsToState: NO currentAct matched. Acts found: ${acts.map((a) => `${a.actNumber}(current=${a.isCurrentAct})`).join(', ')}`, 'warn');
-    }
     let anyChanged = false;
 
     for (const tag of tags) {
@@ -165,15 +159,12 @@ export async function applyTagsToState(tags) {
     }
 
     if (anyChanged) {
-        log(`applyTagsToState: anyChanged=true, persisting state and re-rendering AN.`, 'info');
         await writeStoryState(state);
         try {
             await renderAuthorsNoteFromState({ preserveSummaries: true });
         } catch (error) {
-            log(`applyTagsToState: renderAuthorsNoteFromState threw: ${error.message}`, 'warn');
+            log(`renderAuthorsNoteFromState threw: ${error.message}`, 'warn');
         }
-    } else {
-        log(`applyTagsToState: anyChanged=false, no write or render performed.`, 'info');
     }
     return { state, changed: anyChanged };
 }
@@ -212,8 +203,6 @@ export async function handleAssistantMessage(message) {
     const tags = parseClosureTags(text);
     if (tags.length === 0) return;
 
-    log(`Closure tags detected: ${tags.map((t) => `${t.kind}:${t.key}:${t.value}`).join(', ')}`, 'info');
-
     const stripped = stripClosureTags(text, tags);
     if (stripped !== text) {
         message.mes = stripped;
@@ -221,7 +210,9 @@ export async function handleAssistantMessage(message) {
 
     try {
         const result = await applyTagsToState(tags);
-        log(`Closure tags applied: changed=${result.changed}, currentBeat=${result.state.currentBeatLabel}, nextBeat=${result.state.nextBeatLabel}`, 'info');
+        if (result.changed) {
+            log(`Closure tags applied: currentBeat=${result.state.currentBeatLabel}, nextBeat=${result.state.nextBeatLabel}`, 'info');
+        }
     } catch (error) {
         log('Closure-tag handler failed.', 'warn', error.message);
     }

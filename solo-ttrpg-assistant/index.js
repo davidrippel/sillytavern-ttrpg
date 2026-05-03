@@ -7,10 +7,7 @@ import { handleAssistantMessage as handleClosureTags } from './modules/closure_t
 import {
     ensureStoryStateInitialized,
     refreshSummariesSilently,
-    renderAuthorsNoteFromState,
 } from './modules/authors_note.js';
-import { writeStoryState, readStoryState } from './modules/util.js';
-import { STORY_STATE_KEY } from './modules/constants.js';
 import {
     findCharacterForPersona,
     getActiveCharacter,
@@ -61,25 +58,6 @@ globalThis.soloTtrpgGenerateInterceptor = async function soloTtrpgGenerateInterc
     chat.splice(getInjectionIndex(chat), 0, message);
 };
 
-// Debug helpers exposed on globalThis for browser-console use.
-globalThis.soloTtrpgResetStoryState = async function soloTtrpgResetStoryState() {
-    const ctx = globalThis.SillyTavern.getContext();
-    if (ctx.chatMetadata) {
-        delete ctx.chatMetadata[STORY_STATE_KEY];
-        await ctx.saveMetadata();
-    }
-    log(`Story state cleared from chatMetadata. Next GM tag will re-seed it.`, 'info');
-    await ensureStoryStateInitialized();
-    await renderAuthorsNoteFromState({ preserveSummaries: false });
-    log(`Story state re-initialized and AN re-rendered.`, 'info');
-};
-
-globalThis.soloTtrpgDumpStoryState = function soloTtrpgDumpStoryState() {
-    const state = readStoryState();
-    log(`Story state dump: ${JSON.stringify(state)}`, 'info');
-    return state;
-};
-
 async function initUi() {
     if (initialized) {
         return;
@@ -127,8 +105,9 @@ context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, async (arg) => {
     if (!message.is_user) {
         try {
             await ensureStoryStateInitialized();
-        } catch (error) {
-            log(`ensureStoryStateInitialized threw: ${error.message}`, 'warn');
+        } catch {
+            // Best effort. If init fails (e.g., lorebook not yet bound), the
+            // next assistant message will retry.
         }
 
         await handleClosureTags(message);

@@ -50,22 +50,12 @@ function actNumberFromComment(comment) {
 
 export async function loadAllActs() {
     const lorebook = await loadCurrentLorebook();
-    const allEntries = entriesOf(lorebook);
-    log(`loadAllActs: lorebook present=${!!lorebook}, total entries=${allEntries.length}`, 'info');
-    if (allEntries.length > 0) {
-        const sampleComments = allEntries.slice(0, 8).map((e) => String(e?.comment ?? '(no comment)')).join(' | ');
-        log(`loadAllActs: first comments = ${sampleComments}`, 'info');
-    }
-    const entries = allEntries.filter(isActEntry);
-    log(`loadAllActs: entries matching act regex = ${entries.length}`, 'info');
+    const entries = entriesOf(lorebook).filter(isActEntry);
     const acts = [];
     for (const entry of entries) {
         const parsed = parseActFromContent(entry.content);
         const actNumber = parsed.actNumber ?? actNumberFromComment(entry.comment);
-        if (actNumber == null) {
-            log(`loadAllActs: skipped entry "${entry.comment}" — no act number found in content or comment.`, 'warn');
-            continue;
-        }
+        if (actNumber == null) continue;
         acts.push({
             actNumber,
             title: parsed.title,
@@ -73,7 +63,6 @@ export async function loadAllActs() {
             entry,
             isCurrentAct: String(entry.comment ?? '').startsWith('Current Act:'),
         });
-        log(`loadAllActs: parsed Act ${actNumber} "${parsed.title}" with ${parsed.beats.length} beats: ${parsed.beats.map((b) => b.label).join(', ')}`, 'info');
     }
     acts.sort((a, b) => a.actNumber - b.actNumber);
     return { lorebook, acts };

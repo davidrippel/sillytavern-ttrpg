@@ -248,27 +248,16 @@ export async function renderAuthorsNoteFromState({ preserveSummaries = true } = 
     const ctx = getContext();
     const substitute = ctx.substituteParams ?? ((s) => s);
     const finalText = substitute(text);
-    log(`renderAuthorsNoteFromState: about to write AN. Current beat=${state.currentBeatLabel}, Next beat=${state.nextBeatLabel}, length=${finalText.length}`, 'info');
     await writeAuthorsNote(finalText);
-    const verify = String(ctx.chatMetadata?.note_prompt ?? '');
-    log(`renderAuthorsNoteFromState: post-write chatMetadata.note_prompt length=${verify.length}, first 80 chars="${verify.slice(0, 80).replace(/\n/g, ' ⏎ ')}"`, 'info');
 
     try {
         const $ = globalThis.$;
         if ($) {
-            // The floating-prompt extension's textarea. Updating .val() and
-            // firing 'input' triggers its onChange handler, which re-registers
-            // the AN as an extension prompt so the next generation uses the
-            // fresh content. Works whether the drawer is open or not — the
-            // textarea is in the DOM either way once the extension has mounted.
             const $textarea = $('#extension_floating_prompt');
             if ($textarea.length) {
                 $textarea.val(finalText);
                 $textarea[0].dispatchEvent(new Event('input', { bubbles: true }));
                 $textarea[0].dispatchEvent(new Event('change', { bubbles: true }));
-                log(`AN textarea refreshed (${finalText.length} chars).`, 'info');
-            } else {
-                log(`AN textarea #extension_floating_prompt not found in DOM — drawer may not be initialized yet.`, 'warn');
             }
         }
     } catch (error) {
