@@ -1,6 +1,11 @@
 import { exportBackupBundle, importBackupBundle } from './modules/backup.js';
 import { getStoryStatusForUi } from './modules/authors_note.js';
-import { moveBeatForwardManually, resetCampaignState } from './modules/closure_tags.js';
+import {
+    moveBeatForwardManually,
+    resetCampaignState,
+    revertLastBeatAdvance,
+    canRevertLastAdvance,
+} from './modules/closure_tags.js';
 import {
     convertCharacterMode,
     createCharacter,
@@ -973,6 +978,21 @@ export async function mountSettingsPanel() {
     }
     $(settingsRoot).find('#solo-move-plot-forward, #solo-play-move-plot-forward').on('click', handleMovePlotForward);
 
+    async function handleMovePlotBack() {
+        try {
+            const ok = await revertLastBeatAdvance();
+            if (ok) {
+                toastr.info('Plot stepped back.', 'Solo TTRPG Assistant', { timeOut: 2000 });
+                await refreshStoryStatusRow();
+            } else {
+                toastr.warning('Nothing to revert.', 'Solo TTRPG Assistant', { timeOut: 2000 });
+            }
+        } catch (error) {
+            toastr.error(error.message);
+        }
+    }
+    $(settingsRoot).find('#solo-move-plot-back, #solo-play-move-plot-back').on('click', handleMovePlotBack);
+
     async function handleResetCampaign() {
         try {
             const popup = new context.Popup(
@@ -1005,6 +1025,8 @@ export async function mountSettingsPanel() {
             ? `Act ${status.actNumber} — beat ${status.currentBeatLabel}`
             : '';
         $(settingsRoot).find('#solo-story-status, #solo-play-story-status').text(text);
+        const canRevert = canRevertLastAdvance();
+        $(settingsRoot).find('#solo-move-plot-back, #solo-play-move-plot-back').prop('disabled', !canRevert);
     }
     refreshStoryStatusRow().catch(() => {});
     context?.eventSource?.on?.(context.eventTypes.MESSAGE_RECEIVED, () => {

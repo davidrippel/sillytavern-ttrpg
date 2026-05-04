@@ -169,6 +169,86 @@ export async function applyTagsToState(tags) {
     return { state, changed: anyChanged };
 }
 
+export function canRevertLastAdvance() {
+    const state = ensureStoryStateShape(readStoryState());
+    return (state.resolvedBeatLabels?.length ?? 0) > 0 || (state.completedActs?.length ?? 0) > 0;
+}
+
+export async function revertLastBeatAdvance() {
+    const state = ensureStoryStateShape(readStoryState());
+    if ((state.resolvedBeatLabels?.length ?? 0) === 0 && (state.completedActs?.length ?? 0) === 0) {
+        log('Move plot back ignored — no advances to revert.', 'info');
+        return false;
+    }
+
+    // Case A: most recent advance was an act-advance (currentBeatLabel is the
+    // first beat of the current act, AND there is a completed act to roll back to).
+    const { acts } = await loadAllActs();
+    const currentAct = acts.find((a) => a.actNumber === state.actNumber);
+    const isAtFirstBeat = currentAct && currentAct.beats[0]?.label === state.currentBeatLabel;
+    const hasCompletedAct = (state.completedActs?.length ?? 0) > 0;
+
+    if (isAtFirstBeat && hasCompletedAct) {
+        const prevActNumber = state.completedActs[state.completedActs.length - 1];
+        const prevAct = acts.find((a) => a.actNumber === prevActNumber);
+        if (!prevAct) {
+            log(`Move plot back: prior Act ${prevActNumber} not found in lorebook.`, 'warn');
+            return false;
+        }
+
+        await rewriteCurrentActLorebookEntry(prevActNumber);
+
+        const lastResolvedOfPrev = prevAct.beats[prevAct.beats.length - 1]?.label ?? null;
+        const next = {
+            ...state,
+            actNumber: prevActNumber,
+            completedActs: state.completedActs.slice(0, -1),
+            // Restore prior act's last beat as Current; keep its resolvedBeatLabels
+            // as-is — the player decides whether to undo within-act steps after.
+            currentBeatLabel: lastResolvedOfPrev,
+            nextBeatLabel: null,
+        };
+        // Pop the last-beat resolution of the prior act so the within-act undo
+        // is consistent (prior act's last beat is now "current", not resolved).
+        if (lastResolvedOfPrev && next.resolvedBeatLabels.includes(lastResolvedOfPrev)) {
+            next.resolvedBeatLabels = next.resolvedBeatLabels.filter((l) => l !== lastResolvedOfPrev);
+        }
+        await writeStoryState(next);
+        await renderAuthorsNoteFromState({ preserveSummaries: true });
+        log(`Reverted act advance: now at Act ${prevActNumber}, beat ${lastResolvedOfPrev}.`, 'info');
+        return true;
+    }
+
+    // Case B: undo within-act beat advance.
+    if (!currentAct) {
+        log('Move plot back ignored — current act not loadable.', 'warn');
+        return false;
+    }
+    if ((state.resolvedBeatLabels?.length ?? 0) === 0) {
+        log('Move plot back ignored — no resolved beats in current act.', 'info');
+        return false;
+    }
+
+    const beatLabels = currentAct.beats.map((b) => b.label);
+    const lastResolved = state.resolvedBeatLabels[state.resolvedBeatLabels.length - 1];
+    const lastResolvedIdx = beatLabels.indexOf(lastResolved);
+    if (lastResolvedIdx < 0) {
+        log(`Move plot back ignored — last resolved beat ${lastResolved} not found in current act.`, 'warn');
+        return false;
+    }
+
+    const next = {
+        ...state,
+        resolvedBeatLabels: state.resolvedBeatLabels.slice(0, -1),
+        currentBeatLabel: lastResolved,
+        nextBeatLabel: beatLabels[lastResolvedIdx + 1] ?? null,
+    };
+    await writeStoryState(next);
+    await renderAuthorsNoteFromState({ preserveSummaries: true });
+    log(`Reverted beat advance: now at beat ${lastResolved}.`, 'info');
+    return true;
+}
+
 export async function resetCampaignState() {
     const ctx = (await import('./util.js')).getContext();
     if (ctx.chatMetadata) {

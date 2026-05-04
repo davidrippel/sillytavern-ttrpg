@@ -145,9 +145,13 @@ Tags (exact format):
 Rules:
 - Use the LABEL/ID exactly as shown in the AN. Never tag the Next beat
   — it advances automatically.
-- Resolution = the event happened in this message's fiction. Agreeing
-  to attend ≠ attending. If unsure, omit the tag (the player has a
-  "Move plot forward" button).
+- Resolution test (must pass ALL): (a) your prose THIS turn narrated
+  the beat's central physical event, (b) {{user}} was depicted in or
+  reacting to that event, (c) the event is described as having
+  happened, not as upcoming/anticipated/agreed-to. Talking about the
+  Polaroid ≠ finding it. Agreeing to attend ≠ attending. Hearing about
+  the salon ≠ being at the salon. If any (a)/(b)/(c) is unclear, omit
+  the tag.
 - Never narrate or reference tags. One tag of each kind per message max.
 
 Example. AN shows `Current beat: - 1.1 Felix wakes alone and finds the
