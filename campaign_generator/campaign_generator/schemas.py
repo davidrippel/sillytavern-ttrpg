@@ -306,6 +306,7 @@ class OpeningHookDocument(BaseModel):
     tone_statement: str
     character_creation_guidance: list[str] = Field(default_factory=list)
     opening_scene: str
+    pc_prior_knowledge: str | None = None
 
     def render(self) -> str:
         lines = [
@@ -321,4 +322,6 @@ class OpeningHookDocument(BaseModel):
             "Opening Scene",
             self.opening_scene,
         ]
+        if self.pc_prior_knowledge and self.pc_prior_knowledge.strip():
+            lines.extend(["", "What you already know", self.pc_prior_knowledge.strip()])
         return "\n".join(lines)

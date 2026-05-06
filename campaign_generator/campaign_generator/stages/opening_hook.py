@@ -13,6 +13,9 @@ from ..validation import ValidationLog
 
 
 PROMPT_FILE = "09_opening_hook.md"
+PRIOR_KNOWLEDGE_PROMPT_FILE = "09b_pc_prior_knowledge.md"
+
+_USER_ALIASES = {"{{user}}", "user", "protagonist", "pc", "the protagonist", "the pc", "player"}
 
 _DANGLING_VERB_PATTERNS = [
     re.compile(r"\bwith\s+a\s+\w+\s+delivers\b", re.IGNORECASE),
@@ -25,6 +28,128 @@ _MAX_LENGTH = 800
 
 class _OpeningSceneResponse(BaseModel):
     opening_scene: str = Field(min_length=20)
+
+
+class _PriorKnowledgeResponse(BaseModel):
+    pc_prior_knowledge: str = Field(min_length=20)
+
+
+def _is_user_alias(name: str | None) -> bool:
+    if not name:
+        return False
+    return name.strip().lower() in _USER_ALIASES
+
+
+def _collect_pc_prior_knowledge(
+    *,
+    npcs: NPCRoster | None,
+    locations: LocationCatalog | None,
+    opening_scene: str,
+    seed: CampaignSeed,
+) -> dict[str, list[dict[str, str]] | list[str]]:
+    """Extract structured PC prior-knowledge facts from existing campaign data.
+
+    - known_npcs: NPCs whose `relationships` contain an entry keyed to {{user}}.
+    - known_locations: locations whose `name` appears in the opening scene text.
+    - background_facts: pass-through of seed.protagonist_known_facts.
+    """
+    known_npcs: list[dict[str, str]] = []
+    if npcs is not None:
+        for npc in npcs.npcs:
+            for relation in npc.relationships:
+                if _is_user_alias(relation.name):
+                    known_npcs.append(
+                        {
+                            "name": npc.name,
+                            "role": npc.role,
+                            "relation": relation.description,
+                        }
+                    )
+                    break
+
+    known_locations: list[dict[str, str]] = []
+    if locations is not None and opening_scene:
+        for location in locations.locations:
+            if not location.name:
+                continue
+            if re.search(rf"\b{re.escape(location.name)}\b", opening_scene, flags=re.IGNORECASE):
+                known_locations.append(
+                    {
+                        "name": location.name,
+                        "type": location.type,
+                        "why_known": "Named in the opening scene; the PC begins or wakes here.",
+                    }
+                )
+
+    background_facts: list[str] = list(seed.protagonist_known_facts or [])
+
+    return {
+        "known_npcs": known_npcs,
+        "known_locations": known_locations,
+        "background_facts": background_facts,
+    }
+
+
+def _llm_pc_prior_knowledge(
+    *,
+    client: LLMClient,
+    system_prompt: str,
+    structured: dict[str, list[dict[str, str]] | list[str]],
+    premise: PremiseDocument,
+    opening_scene: str,
+    model: str,
+    temperature: float,
+    validation_log: ValidationLog,
+) -> str | None:
+    context = {
+        "tone_statement": premise.tone_statement,
+        "opening_scene": opening_scene,
+        "known_npcs": structured["known_npcs"],
+        "known_locations": structured["known_locations"],
+        "background_facts": structured["background_facts"],
+    }
+    try:
+        response = generate_structured(
+            client=client,
+            stage_name="opening_hook_prior_knowledge",
+            system_prompt=system_prompt,
+            user_prompt=__import__("json").dumps(context, indent=2),
+            schema=_PriorKnowledgeResponse,
+            model=model,
+            temperature=temperature,
+            validation_log=validation_log,
+        )
+    except LLMError as exc:
+        validation_log.write(f"[opening_hook_prior_knowledge] failed: {exc}")
+        return None
+    return response.pc_prior_knowledge.strip()
+
+
+def _deterministic_pc_prior_knowledge(
+    structured: dict[str, list[dict[str, str]] | list[str]],
+) -> str:
+    """Plain-text fallback when no LLM is available — bullet list of facts."""
+    sections: list[str] = []
+    known_npcs = structured["known_npcs"]
+    if known_npcs:
+        sections.append("People you know:")
+        for entry in known_npcs:
+            sections.append(f"- {entry['name']} ({entry['role']}): {entry['relation']}")
+    known_locations = structured["known_locations"]
+    if known_locations:
+        if sections:
+            sections.append("")
+        sections.append("Places you know:")
+        for entry in known_locations:
+            sections.append(f"- {entry['name']}: {entry['why_known']}")
+    background_facts = structured["background_facts"]
+    if background_facts:
+        if sections:
+            sections.append("")
+        sections.append("Background:")
+        for fact in background_facts:
+            sections.append(f"- {fact}")
+    return "\n".join(sections)
 
 
 def _collect_proper_nouns(
@@ -184,6 +309,7 @@ def render(
     locations: LocationCatalog | None = None,
     client: LLMClient | None = None,
     system_prompt: str | None = None,
+    prior_knowledge_system_prompt: str | None = None,
     model: str | None = None,
     temperature: float | None = None,
     validation_log: ValidationLog | None = None,
@@ -220,9 +346,46 @@ def render(
                     + "; ".join(issues)
                 )
 
+    structured_prior_knowledge = _collect_pc_prior_knowledge(
+        npcs=npcs,
+        locations=locations,
+        opening_scene=opening_scene,
+        seed=seed,
+    )
+    has_prior_knowledge = (
+        bool(structured_prior_knowledge["known_npcs"])
+        or bool(structured_prior_knowledge["known_locations"])
+        or bool(structured_prior_knowledge["background_facts"])
+    )
+
+    pc_prior_knowledge: str | None = None
+    if has_prior_knowledge:
+        if (
+            client is not None
+            and prior_knowledge_system_prompt is not None
+            and validation_log is not None
+            and model is not None
+            and temperature is not None
+        ):
+            if progress_callback is not None:
+                progress_callback("Generating PC prior-knowledge section")
+            pc_prior_knowledge = _llm_pc_prior_knowledge(
+                client=client,
+                system_prompt=prior_knowledge_system_prompt,
+                structured=structured_prior_knowledge,
+                premise=premise,
+                opening_scene=opening_scene,
+                model=model,
+                temperature=temperature,
+                validation_log=validation_log,
+            )
+        if pc_prior_knowledge is None:
+            pc_prior_knowledge = _deterministic_pc_prior_knowledge(structured_prior_knowledge)
+
     return OpeningHookDocument(
         premise=premise.premise_text,
         tone_statement=premise.tone_statement,
         character_creation_guidance=_character_guidance(seed),
         opening_scene=opening_scene,
+        pc_prior_knowledge=pc_prior_knowledge,
     )

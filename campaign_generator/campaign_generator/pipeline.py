@@ -427,6 +427,7 @@ def run_pipeline(
         locations=locations,
         client=client,
         system_prompt=_load_prompt(opening_hook_stage.PROMPT_FILE),
+        prior_knowledge_system_prompt=_load_prompt(opening_hook_stage.PRIOR_KNOWLEDGE_PROMPT_FILE),
         model=resolved_model,
         temperature=temperature,
         validation_log=validation_log,
