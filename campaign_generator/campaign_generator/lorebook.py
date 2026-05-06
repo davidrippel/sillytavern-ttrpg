@@ -386,14 +386,15 @@ def assemble_lorebook(
         for target in clue.points_to:
             value = plot.format_beat_reference(target.value) if target.type == "beat" else target.value
             rendered_targets.append(f"- {target.type}: {value}")
-        content = "\n\n".join(
-            [
-                f"Clue {clue.id}",
-                f"Found at: {clue.found_at_type} {clue.found_at}",
-                f"Reveals: {clue.reveals}",
-                "Points to:\n" + "\n".join(rendered_targets),
-            ]
-        )
+        sections = [
+            f"Clue {clue.id}",
+            f"Found at: {clue.found_at_type} {clue.found_at}",
+        ]
+        if clue.hint:
+            sections.append(f"Hint: {clue.hint}")
+        sections.append(f"Reveals: {clue.reveals}")
+        sections.append("Points to:\n" + "\n".join(rendered_targets))
+        content = "\n\n".join(sections)
         uid += 1
         add(
             _entry(

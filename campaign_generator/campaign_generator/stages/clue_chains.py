@@ -28,6 +28,7 @@ class StageClue(BaseModel):
     id: str
     found_at_type: Literal["npc", "location"]
     found_at: str
+    hint: str = ""
     reveals: str
     points_to: list[StageClueTarget] = Field(min_length=1)
     supports_beats: list[str] = Field(min_length=1)
@@ -71,6 +72,7 @@ def _convert_stage_graph(stage_graph: StageClueGraph, beat_lookup: dict[str, str
                 id=clue.id,
                 found_at_type=clue.found_at_type,
                 found_at=clue.found_at,
+                hint=clue.hint,
                 reveals=clue.reveals,
                 points_to=converted_targets,
                 supports_beats=converted_supports,
@@ -131,6 +133,12 @@ def _synthetic_reveals(plot: PlotSkeleton, beat_text: str, slot_label: str) -> s
     return f"A second lead reinforces '{beat_text}' and adds pressure from the campaign's factions and witnesses."
 
 
+def _synthetic_hint(slot_label: str) -> str:
+    if slot_label == "a":
+        return "Physical evidence on site, easy to overlook."
+    return "A second lead worth chasing here."
+
+
 def _build_synthetic_clue(
     *,
     plot: PlotSkeleton,
@@ -160,6 +168,7 @@ def _build_synthetic_clue(
         id=_next_synthetic_id(used_ids, beat_index, slot_label),
         found_at_type=found_at_type,
         found_at=found_at,
+        hint=_synthetic_hint(slot_label),
         reveals=_synthetic_reveals(plot, beat_text, slot_label),
         points_to=[ClueTarget(type="beat", value=beat_id)],
         supports_beats=[beat_id],
@@ -314,6 +323,7 @@ def build_clue_skeleton(
             id=f"__skeleton_seed_{index}__",
             found_at_type=anchor_type,
             found_at=anchor_name,
+            hint=_synthetic_hint("a" if index % 2 == 0 else "b"),
             reveals=_synthetic_reveals(plot, first_beat_text, "a" if index % 2 == 0 else "b"),
             points_to=[ClueTarget(type="beat", value=first_beat_id)],
             supports_beats=[first_beat_id],

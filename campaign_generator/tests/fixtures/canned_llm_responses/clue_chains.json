@@ -7,6 +7,7 @@
       "id": "c_bridge",
       "found_at_type": "location",
       "found_at": "Gloam Bridge",
+      "hint": "Boot prints and a torn satchel strap on the bridge timbers.",
       "reveals": "The ferryman died protecting a satchel tied to guild transport marks, and at least one trained surveyor came here after the killing.",
       "points_to": [
         {
@@ -76,6 +77,7 @@
       "id": "c_ledger",
       "found_at_type": "npc",
       "found_at": "Dren Halvek",
+      "hint": "A waterlogged satchel Dren guards behind his counter.",
       "reveals": "The satchel carries route permits, donor names, and a coded ledger tying the guild to the watchtower excavation.",
       "points_to": [
         {
@@ -149,6 +151,7 @@
       "id": "c_bell",
       "found_at_type": "location",
       "found_at": "Sunken Watchtower",
+      "hint": "A bell that hums with no wind in the watchtower's lower vault.",
       "reveals": "The watchtower hums because the sealed chamber is partly open already, and the Circle plans to finish the rite at midnight.",
       "points_to": [
         {
@@ -170,6 +173,7 @@
       "id": "c_shard",
       "found_at_type": "location",
       "found_at": "Root-Glass Chapel",
+      "hint": "A shard of dark glass wedged in the chapel's altar stone.",
       "reveals": "Elira left proof that donors from the guild and church both fed the ruin, and destroying the ledger will save reputations but not lives.",
       "points_to": [
         {

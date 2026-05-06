@@ -14,6 +14,7 @@ function parseClueEntry(entry) {
     const id = idMatch[1].trim();
 
     const content = String(entry?.content ?? '');
+    const hint = (content.match(/^Hint:\s*(.+)$/m)?.[1] ?? '').trim();
     const reveals = (content.match(/^Reveals:\s*(.+)$/m)?.[1] ?? '').trim();
 
     const pointsTo = [];
@@ -24,7 +25,7 @@ function parseClueEntry(entry) {
         pointsTo.push({ type: m[1].toLowerCase().trim(), value: m[2].trim() });
     }
 
-    return { id, reveals, pointsTo };
+    return { id, hint, reveals, pointsTo };
 }
 
 export async function loadAllClues() {
@@ -70,10 +71,20 @@ export function reachableClues(clues, discoveredIds, { maxResults = 5 } = {}) {
     for (const id of reachable) {
         const clue = byId.get(id);
         if (!clue) continue;
-        const firstSentence = String(clue.reveals).split(/(?<=[.!?])\s/)[0] ?? '';
-        const truncated = firstSentence.length > 120 ? `${firstSentence.slice(0, 117)}...` : firstSentence;
-        result.push({ id, label: truncated });
+        const label = clue.hint?.trim() ? clue.hint.trim() : fallbackLabelFromReveals(clue.reveals);
+        result.push({ id, label });
         if (result.length >= maxResults) break;
     }
     return result;
+}
+
+function fallbackLabelFromReveals(reveals) {
+    const text = String(reveals ?? '').trim();
+    if (!text) return '';
+    const firstSentence = text.split(/(?<=[.!?])\s/)[0] ?? text;
+    if (firstSentence.length <= 120) return firstSentence;
+    const window = firstSentence.slice(0, 117);
+    const lastBoundary = window.search(/[\s,;:—–-][^\s,;:—–-]*$/);
+    const cut = lastBoundary > 60 ? window.slice(0, lastBoundary) : window;
+    return `${cut.replace(/[\s,;:—–-]+$/, '')}…`;
 }

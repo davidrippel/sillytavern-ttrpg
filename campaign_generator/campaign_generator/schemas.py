@@ -211,6 +211,7 @@ class Clue(BaseModel):
     id: str
     found_at_type: str
     found_at: str
+    hint: str = Field(default="", max_length=120)
     reveals: str = Field(max_length=280)
     points_to: list[ClueTarget] = Field(min_length=1)
     supports_beats: list[str] = Field(min_length=1)

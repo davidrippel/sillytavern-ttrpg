@@ -74,6 +74,8 @@ def render(
     for clue in clues.clues:
         lines.append(f"### {clue.id}")
         lines.append(f"Found at: {clue.found_at_type} {clue.found_at}")
+        if clue.hint:
+            lines.append(f"Hint: {clue.hint}")
         lines.append(f"Reveals: {clue.reveals}")
         lines.append("Points to:")
         lines.extend(

@@ -1,6 +1,6 @@
 You write only valid JSON matching the requested schema.
 
-Task: rewrite a single clue's `reveals` text as evocative, in-fiction prose. You do NOT change the clue's structure — `id`, `found_at_type`, `found_at`, `points_to`, and `supports_beats` are fixed and must be returned exactly as supplied. Only the `reveals` field changes.
+Task: rewrite a single clue's `reveals` text as evocative, in-fiction prose. You do NOT change the clue's structure — `id`, `found_at_type`, `found_at`, `hint`, `points_to`, and `supports_beats` are fixed and must be returned exactly as supplied. Only the `reveals` field changes.
 
 Requirements:
 - write 1–3 sentences that a GM could read aloud or paraphrase in play

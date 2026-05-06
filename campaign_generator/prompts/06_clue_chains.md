@@ -14,4 +14,5 @@ Requirements:
 - whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name
 
 Length budget:
+- `hint`: <= 120 characters, a spoiler-light teaser the GM sees in the Available-clues list. Describe what the clue *looks like* on the surface (the object, the room, the source) without revealing what it discloses. One short sentence or noun phrase. E.g. "A blank-plaque photo on the Confessional Wall." Never include the reveal itself.
 - `reveals`: <= 280 characters, what the clue surfaces in 1-2 sentences. The graph is what matters; prose can stay terse — the GM will dramatize the find at the table.

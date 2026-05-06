@@ -74,6 +74,13 @@ def test_lorebook_contains_pack_entries():
     assert location_entry["comment"].split(": ", 1)[1] in location_entry["content"]
     clue_entry = next(e for e in entry_list if e["comment"].startswith("Clue:"))
     assert clue_entry["comment"].split(": ", 1)[1] in clue_entry["content"]
+    # When a clue carries a hint, the lorebook content must include a Hint: line
+    # so the runtime parser can surface it in Available clues.
+    clue_entries_with_hint = [
+        e for e in entry_list
+        if e["comment"].startswith("Clue:") and "Hint:" in e["content"]
+    ]
+    assert clue_entries_with_hint, "expected at least one clue entry to carry a Hint: line"
 
     # Faction/NPC/location entries carry trigger keys and are not constant.
     faction_entry = next(e for e in entry_list if e["comment"].startswith("Faction:"))
