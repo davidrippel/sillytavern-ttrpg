@@ -19,5 +19,6 @@ Length budgets (these entries live in the GM's context every time the NPC is men
 - `motivation`: <= 220 characters, what they want and why — one sentence
 - `secret`: <= 320 characters, the hidden truth in 1-2 sentences
 - each `relationships[].description`: <= 160 characters, the relationship in one sentence
+- `image_generation_prompt`: <= 600 characters, a self-contained text-to-image prompt for a portrait of this NPC. The image model will not see any other campaign context, so this prompt must stand alone. Include: subject (age, gender presentation, ethnicity if implied by the genre, visible features and clothing taken from `physical_description`), framing (e.g. "head-and-shoulders portrait", "three-quarter portrait"), lighting and mood (matched to the campaign's tone), and a consistent visual style/medium that suits the genre (e.g. "moody noir oil painting", "gritty pulp comic illustration", "high-contrast charcoal sketch"). Do NOT include aspect ratio, resolution, megapixels, or "--ar" style directives — those are applied at render time. Do NOT include the NPC's name, secrets, or plot information. Keep the style descriptor consistent in spirit across the roster so portraits look like a coherent set.
 
 Prefer specificity over completeness. The GM will riff; you don't need to spell out every nuance.

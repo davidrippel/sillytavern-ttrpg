@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+import json
+import re
+from collections.abc import Callable, Iterable
+from datetime import datetime, timezone
+from pathlib import Path
+
+from common.settings import (
+    get_image_aspect_ratio,
+    get_image_dimension,
+    get_image_model,
+)
+
+from .client import ImageGenError, OpenRouterImageClient, resolve_size
+
+
+ProgressCallback = Callable[[str], None]
+
+
+def _slugify(name: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", name.strip()).strip("_").lower()
+    return slug or "npc"
+
+
+def _load_npcs(campaign_dir: Path) -> list[dict]:
+    npcs_path = campaign_dir / "stages" / "npcs.json"
+    if not npcs_path.exists():
+        raise ImageGenError(f"no NPC roster found at {npcs_path}")
+    with npcs_path.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    npcs = data.get("npcs")
+    if not isinstance(npcs, list):
+        raise ImageGenError(f"unexpected npcs.json shape at {npcs_path}")
+    return npcs
+
+
+def _filter_only(npcs: list[dict], only: Iterable[str] | None) -> list[dict]:
+    if not only:
+        return npcs
+    wanted = {name.strip() for name in only if name.strip()}
+    if not wanted:
+        return npcs
+    return [npc for npc in npcs if npc.get("name") in wanted]
+
+
+def render_campaign(
+    campaign_dir: Path,
+    *,
+    model: str | None = None,
+    overwrite: bool = False,
+    only: Iterable[str] | None = None,
+    progress_callback: ProgressCallback | None = None,
+    client: OpenRouterImageClient | None = None,
+) -> Path:
+    """Render NPC portraits for a generated campaign directory.
+
+    Returns the path to the npc_images directory.
+    """
+    campaign_dir = Path(campaign_dir).resolve()
+    npcs = _filter_only(_load_npcs(campaign_dir), only)
+
+    resolved_model = model or get_image_model()
+    width, height = resolve_size(get_image_dimension(), get_image_aspect_ratio())
+
+    images_dir = campaign_dir / "npc_images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = images_dir / "index.json"
+    manifest: dict[str, dict] = {}
+    if manifest_path.exists():
+        try:
+            with manifest_path.open("r", encoding="utf-8") as handle:
+                manifest = json.load(handle)
+        except json.JSONDecodeError:
+            manifest = {}
+
+    image_client = client or OpenRouterImageClient()
+
+    if progress_callback is not None:
+        progress_callback(
+            f"Rendering portraits for {len(npcs)} NPC(s) at {width}x{height} with {resolved_model}"
+        )
+
+    used_slugs: set[str] = set()
+    for npc in npcs:
+        name = npc.get("name") or "Unnamed"
+        prompt = (npc.get("image_generation_prompt") or "").strip()
+        slug = _slugify(name)
+        candidate = slug
+        suffix = 2
+        while candidate in used_slugs:
+            candidate = f"{slug}_{suffix}"
+            suffix += 1
+        used_slugs.add(candidate)
+        out_path = images_dir / f"{candidate}.png"
+
+        if not prompt:
+            if progress_callback is not None:
+                progress_callback(f"Skipped {name}: no image_generation_prompt (re-run --stages npcs to populate)")
+            continue
+        if out_path.exists() and not overwrite:
+            if progress_callback is not None:
+                progress_callback(f"Skipped {name}: {out_path.name} already exists (use --overwrite to regenerate)")
+            continue
+
+        if progress_callback is not None:
+            progress_callback(f"Generating portrait for {name}")
+        try:
+            image_bytes = image_client.generate(
+                model=resolved_model,
+                prompt=prompt,
+                width=width,
+                height=height,
+            )
+        except ImageGenError as exc:
+            if progress_callback is not None:
+                progress_callback(f"Failed to generate portrait for {name}: {exc}")
+            continue
+
+        out_path.write_bytes(image_bytes)
+        manifest[name] = {
+            "file": out_path.name,
+            "prompt": prompt,
+            "model": resolved_model,
+            "width": width,
+            "height": height,
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+        with manifest_path.open("w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, indent=2, ensure_ascii=False)
+        if progress_callback is not None:
+            progress_callback(f"Wrote {out_path.relative_to(campaign_dir)}")
+
+    return images_dir

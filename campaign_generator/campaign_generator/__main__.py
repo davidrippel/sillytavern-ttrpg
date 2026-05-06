@@ -34,6 +34,7 @@ def main(
     dry_run: bool = typer.Option(False, "--dry-run"),
     random_seed: int | None = typer.Option(None, "--random-seed"),
     init_seed: Path | None = typer.Option(None, "--init-seed"),
+    with_images: bool = typer.Option(False, "--with-images", help="Render NPC portraits after generation."),
 ) -> None:
     if init_seed is not None:
         if genre is None:
@@ -65,6 +66,14 @@ def main(
         progress_callback=_progress,
     )
     console.print(f"Campaign written to {result.output_dir}")
+
+    if with_images:
+        try:
+            from image_generator import render_campaign
+
+            render_campaign(result.output_dir, progress_callback=_progress)
+        except Exception as exc:  # noqa: BLE001 - image gen failure must not fail campaign gen
+            console.print(f"[yellow]Image generation failed: {exc}[/yellow]")
 
 
 if __name__ == "__main__":

@@ -91,3 +91,21 @@ def get_genres_base_dir() -> Path | None:
 def get_campaigns_base_dir() -> Path | None:
     value = _get_env_optional_str("CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR")
     return Path(value).expanduser().resolve() if value else None
+
+
+def get_image_model() -> str:
+    value = _get_env_optional_str("IMAGE_GEN_MODEL")
+    if value is None:
+        raise RuntimeError(
+            "IMAGE_GEN_MODEL is not set. Add it to your .env "
+            "(e.g. IMAGE_GEN_MODEL=google/gemini-3-pro-image-preview)."
+        )
+    return value
+
+
+def get_image_dimension() -> int:
+    return _get_env_int("IMAGE_GEN_DIMENSION", 1024)
+
+
+def get_image_aspect_ratio() -> str:
+    return _get_env_str("IMAGE_GEN_ASPECT_RATIO", "9:16")

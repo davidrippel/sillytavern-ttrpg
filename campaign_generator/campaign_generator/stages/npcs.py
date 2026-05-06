@@ -144,6 +144,10 @@ def run(
                 "outstanding_required_npc_names": outstanding_required,
                 "must_use_one_of_names": sorted(must_use_names),
                 "ability_catalog": sorted(pack.ability_names),
+                "genre": {
+                    "name": pack.metadata.display_name,
+                    "tone": pack.tone,
+                },
                 "target_index": index + 1,
                 "target_count": target_count,
                 "repair_note": repair_note,
@@ -206,6 +210,10 @@ def run(
                         "outstanding_required_npc_names": [],
                         "must_use_one_of_names": [current_npc.name],
                         "ability_catalog": sorted(pack.ability_names),
+                        "genre": {
+                            "name": pack.metadata.display_name,
+                            "tone": pack.tone,
+                        },
                         "allowed_relationship_names": sorted(roster_names | {"{{user}}"}),
                         "target_index": index + 1,
                         "target_count": target_count,

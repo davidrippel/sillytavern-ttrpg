@@ -139,6 +139,7 @@ class NPC(BaseModel):
     relationships: list[NPCRelationship] = Field(default_factory=list)
     abilities: list[str] = Field(default_factory=list)
     act_presence: list[str] = Field(default_factory=list)
+    image_generation_prompt: str = Field(default="", max_length=600)
 
 
 class NPCRoster(BaseModel):
