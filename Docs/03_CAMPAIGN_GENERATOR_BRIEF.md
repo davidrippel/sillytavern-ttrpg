@@ -252,7 +252,8 @@ Generate an explicit clue graph as structured JSON, not prose.
 Each clue:
 - `id` (unique)
 - `found_at` — location or NPC reference
-- `reveals` — what the clue tells the protagonist
+- `hint` — short (≤120 char) spoiler-light teaser describing what the clue *looks like* on the surface (the object, the room, the source) without revealing what it discloses. Surfaced to the GM in the Author's Note's `Available clues` section so the GM can steer toward it. Never include the reveal itself.
+- `reveals` — the spoiler prose, surfaced only after the clue is discovered (≤280 char)
 - `points_to` — next clue id(s), NPC, location, or beat
 - `supports_beats` — canonical beat ids that this clue materially supports
 
@@ -265,7 +266,7 @@ Constraints (validated by pydantic):
 **Generation strategy: deterministic skeleton + per-clue LLM prose enrichment** (default). LLMs do not reliably satisfy global graph constraints (every beat reached twice, no orphans, valid cross-references). Asking the LLM to author the whole graph and falling back to a synthesizer when it failed produced silent quality degradation. The pipeline now inverts the order:
 
 1. **Skeleton (deterministic)**: `build_clue_skeleton` produces a structurally valid graph from the plot beats, NPCs, and locations alone. Every beat receives exactly two clues anchored to a real NPC or location, with reachability wired to satisfy connectivity. The skeleton can never fail validation.
-2. **Prose enrichment (LLM, per-clue)**: each clue's `reveals` field is rewritten in isolation by an LLM call (prompt `06b_clue_prose.md`). The model sees the clue's structural slot and the relevant NPC/location/beat context but cannot alter `id`, `found_at_type`, `found_at`, `points_to`, or `supports_beats`. If the call fails or returns empty prose, the clue keeps its templated `reveals` text — the graph stays valid.
+2. **Prose enrichment (LLM, per-clue)**: each clue's `reveals` field is rewritten in isolation by an LLM call (prompt `06b_clue_prose.md`). The model sees the clue's structural slot and the relevant NPC/location/beat context but cannot alter `id`, `found_at_type`, `found_at`, `hint`, `points_to`, or `supports_beats`. If the call fails or returns empty prose, the clue keeps its templated `reveals` text — the graph stays valid.
 3. **Visibility**: the validation log emits a summary line `Clue graph: skeleton produced N clues, M enriched by LLM, K used template fallback`. The same line is sent through the progress callback. Never silent.
 
 **Opt-in legacy LLM-first mode**: setting `CG_LLM_CLUE_GRAPH=1` reactivates the older flow where the LLM tries to author the entire graph (prompt `06_clue_chains.md`) with up to 3 repair-loop attempts. If it succeeds, that graph is used; if it fails, the pipeline falls through to the deterministic skeleton + prose enrichment path. This flag is for experimentation only — production runs should leave it unset.

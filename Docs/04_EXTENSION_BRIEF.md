@@ -261,7 +261,7 @@ Expected sections:
 - Current beat (the single beat the GM is currently driving toward)
 - Next beat (the immediate next beat — spoiler-bounded 2-beat window)
 - Discovered clues (clue IDs the GM has surfaced via tags)
-- Available clues (computed; one-hop reachable from discovered)
+- Available clues (computed; one-hop reachable from discovered). Each entry renders as `- ID — hint`, where `hint` is the clue's spoiler-light teaser from the lorebook (the `Hint:` line in the clue entry). Older campaigns without hints fall back to a word-boundary-trimmed prefix of `reveals`.
 - Active threads
 - Recent beats
 - Reminders
