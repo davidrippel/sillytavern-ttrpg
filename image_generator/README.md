@@ -16,9 +16,12 @@ OPENROUTER_API_KEY=...
 IMAGE_GEN_MODEL=google/gemini-3-pro-image-preview
 IMAGE_GEN_DIMENSION=1024     # long-edge size in pixels (default: 1024)
 IMAGE_GEN_ASPECT_RATIO=9:16  # W:H ratio (default: 9:16, portrait)
+IMAGE_GEN_STYLE_OVERRIDE=Full-body photorealistic character portrait, realistic skin texture, natural anatomy, cinematic lighting.
 ```
 
 The short-edge dimension is derived from the long edge and the aspect ratio (e.g. `1024` + `9:16` → `576x1024`), then snapped to the nearest multiple of 8.
+
+`IMAGE_GEN_STYLE_OVERRIDE` is optional. When set, the renderer strips conflicting medium cues like `charcoal sketch` or `comic illustration` from each stored prompt, appends your override, and adds a negative guardrail against illustration/cartoon output. Use it to re-render an existing campaign in one consistent style without regenerating the campaign data.
 
 ## Usage
 
@@ -32,8 +35,18 @@ Flags:
 
 - `--campaign PATH` (required) — directory of a generated campaign (must contain `stages/npcs.json`). If the given path doesn't exist and `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set in `.env`, the value is also tried as a campaign name relative to that base directory — so you can pass `--campaign my_first_campaign` instead of the full path.
 - `--model STR` — override `IMAGE_GEN_MODEL` for this run only.
+- `--style-override TEXT` — force a single visual style for this render pass. Useful when the stored prompts mix media like sketch/comic/oil painting and you want a photorealistic re-render.
 - `--overwrite` — regenerate portraits even if the PNG file already exists. Without this, existing files are skipped, so repeated runs are cheap.
 - `--only NAME[,NAME,...]` — render only the listed NPC names (matched exactly against `name` in `npcs.json`). Useful for re-rendering a single character.
+
+Example: re-render an existing campaign photorealistically.
+
+```bash
+python -m image_generator \
+    --campaign 20s_drama_2 \
+    --style-override "Full-body photorealistic character portrait, realistic skin texture, natural anatomy, cinematic lighting." \
+    --overwrite
+```
 
 ### As part of a fresh campaign run
 
@@ -61,7 +74,7 @@ Image generation failures are logged but do **not** fail the campaign run — th
 
 File names are slugified from each NPC's `name`. Collisions (rare) get `_2`, `_3`, etc. suffixes.
 
-`index.json` is updated incrementally after each successful render, so a partial run leaves a usable manifest behind.
+`index.json` is updated incrementally after each successful render, so a partial run leaves a usable manifest behind. It stores the effective prompt actually sent to the model for that render pass; if you use `--style-override` or `IMAGE_GEN_STYLE_OVERRIDE`, the original source prompt still remains in `<campaign_dir>/stages/npcs.json`.
 
 ## Loading into SillyTavern
 

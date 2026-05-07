@@ -50,6 +50,11 @@ tone_modifiers:
   - a_touch_more_tragic_than_default
   - patient_horror_in_the_first_half
 
+image_style_hint: >
+  Full-body photorealistic character portrait, realistic skin texture,
+  natural anatomy, cinematic lighting, grounded wardrobe detail,
+  no illustration, comic, painting, or sketch look.
+
 num_acts: 4
 num_npcs: 11
 num_locations: 9

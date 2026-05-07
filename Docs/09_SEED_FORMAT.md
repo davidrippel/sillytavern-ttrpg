@@ -173,6 +173,18 @@ tone_modifiers:
   - quieter_in_the_opening_acts
 ```
 
+**`image_style_hint`** *(string, optional)*
+Hard visual direction for NPC portraits. This is passed into the NPC stage and is the main control for keeping every generated `image_generation_prompt` in one consistent medium.
+
+```yaml
+image_style_hint: >
+  Full-body photorealistic character portrait, realistic skin texture,
+  natural anatomy, cinematic lighting. No illustration, comic,
+  painting, or sketch look.
+```
+
+Use this when you care about portrait consistency. Leave it blank if you want the generator to use its default fallback, which now biases toward full-body photorealistic portraits instead of illustration-style media.
+
 ### Generation control fields
 
 **`random_seed`** *(integer, optional)*

@@ -33,3 +33,19 @@ def test_seed_merges_exclusions_and_strictness(tmp_path):
     assert "torture_as_spectacle" in (loaded.resolved.themes_exclude or [])
     assert loaded.resolved.strictness is not None
     assert loaded.resolved.strictness.canon_consistency == "strict"
+
+
+def test_seed_accepts_image_style_hint(tmp_path):
+    pack = load_pack("genres/symbaroum_dark_fantasy")
+    seed_path = tmp_path / "seed.yaml"
+    seed_path.write_text(
+        yaml.safe_dump(
+            {
+                "genre": "symbaroum_dark_fantasy",
+                "image_style_hint": "Full-body photorealistic character portrait.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded = load_seed(seed_path, pack)
+    assert loaded.resolved.image_style_hint == "Full-body photorealistic character portrait."

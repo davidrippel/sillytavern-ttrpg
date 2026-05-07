@@ -7,6 +7,7 @@ def test_seed_template_contains_pack_specific_menu(tmp_path):
     pack = load_pack("genres/symbaroum_dark_fantasy")
     content = build_seed_template(pack)
     assert "corrupt_inquisitor" in content
+    assert "image_style_hint" in content
     path = tmp_path / "seed_template.yaml"
     path.write_text(content, encoding="utf-8")
     loaded = load_seed(path, pack)

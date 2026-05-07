@@ -43,7 +43,7 @@ The user is expected to run this blind: they read only `opening_hook.txt` and `i
   - `CAMPAIGN_GENERATOR_GENRES_BASE_DIR`
   - `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR`
   - `CG_LLM_CLUE_GRAPH` — when set to `1` (default `0`), opt back into the legacy behaviour where the LLM tries to author the entire clue graph in one call. Default flow generates a deterministic skeleton and uses the LLM only to enrich each clue's prose.
-  - `IMAGE_GEN_MODEL`, `IMAGE_GEN_DIMENSION`, `IMAGE_GEN_ASPECT_RATIO` — used by the sibling `image_generator` tool when rendering NPC portraits (also reachable via `--with-images`). `IMAGE_GEN_MODEL` is required when rendering and has no fallback.
+  - `IMAGE_GEN_MODEL`, `IMAGE_GEN_DIMENSION`, `IMAGE_GEN_ASPECT_RATIO`, `IMAGE_GEN_STYLE_OVERRIDE` — used by the sibling `image_generator` tool when rendering NPC portraits (also reachable via `--with-images`). `IMAGE_GEN_MODEL` is required when rendering and has no fallback. `IMAGE_GEN_STYLE_OVERRIDE` is optional and exists mainly to re-render an existing campaign in one consistent style without regenerating the pipeline output.
 
 Web search during development to confirm: current OpenRouter API shape, current SillyTavern lorebook JSON schema, current model slug for `anthropic/claude-sonnet-4.5`.
 
@@ -219,6 +219,7 @@ Each NPC:
 - Relationships to other NPCs (cite by name)
 - Abilities from pack catalog if supernatural/specialized (cite by name from `abilities.yaml`)
 - `image_generation_prompt` — a self-contained text-to-image prompt (≤600 chars) used by the sibling [`image_generator`](../image_generator/README.md) tool to render an NPC portrait. The prompt must stand alone (no campaign context), match the genre's tone/style, and omit aspect-ratio or resolution directives (those are applied at render time from env config so the same prompt can be re-rendered at different sizes).
+- `image_style_hint` in the seed YAML is an optional hard style constraint for those portrait prompts. When present, the NPC stage should keep the same medium/look across the entire roster instead of drifting between sketch, painting, comic, cartoon, and photo language. When absent, the default fallback should bias toward full-body photorealistic portraits rather than illustration-style media.
 
 The generator keeps a running roster and forbids duplicate names. NPCs should have varied demographics, voices, and agendas — if the first 3 NPCs are all wizened old men, reject and regenerate.
 

@@ -11,17 +11,42 @@ from common.settings import (
     get_image_aspect_ratio,
     get_image_dimension,
     get_image_model,
+    get_image_style_override,
 )
 
 from .client import ImageGenError, OpenRouterImageClient, resolve_size
 
 
 ProgressCallback = Callable[[str], None]
+_STYLE_MEDIUM_RE = re.compile(
+    r"\b(?:photoreal(?:istic)?|photo(?:graphy|graphic)?|illustration|comic|cartoon|painting|painted|"
+    r"sketch|drawing|anime|manga|watercolor|charcoal|oil(?:\s+painting)?|pulp|inked|vector|cel[- ]shaded|"
+    r"3d render|digital painting)\b",
+    flags=re.IGNORECASE,
+)
 
 
 def _slugify(name: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9]+", "_", name.strip()).strip("_").lower()
     return slug or "npc"
+
+
+def _apply_style_override(prompt: str, style_override: str | None) -> str:
+    base_prompt = prompt.strip()
+    if not base_prompt or not style_override:
+        return base_prompt
+
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", base_prompt) if part.strip()]
+    filtered = [sentence for sentence in sentences if not _STYLE_MEDIUM_RE.search(sentence)]
+    cleaned = " ".join(filtered).strip()
+    if not cleaned:
+        cleaned = base_prompt
+
+    override = style_override.strip()
+    if override and override[-1] not in ".!?":
+        override = f"{override}."
+    guardrail = "Do not render as an illustration, painting, sketch, comic, or cartoon."
+    return f"{cleaned} {override} {guardrail}".strip()
 
 
 def resolve_campaign_dir(campaign: str | Path) -> Path:
@@ -74,6 +99,7 @@ def render_campaign(
     campaign_dir: Path,
     *,
     model: str | None = None,
+    style_override: str | None = None,
     overwrite: bool = False,
     only: Iterable[str] | None = None,
     progress_callback: ProgressCallback | None = None,
@@ -87,6 +113,7 @@ def render_campaign(
     npcs = _filter_only(_load_npcs(campaign_dir), only)
 
     resolved_model = model or get_image_model()
+    resolved_style_override = style_override or get_image_style_override()
     width, height = resolve_size(get_image_dimension(), get_image_aspect_ratio())
 
     images_dir = campaign_dir / "npc_images"
@@ -111,6 +138,7 @@ def render_campaign(
     for npc in npcs:
         name = npc.get("name") or "Unnamed"
         prompt = (npc.get("image_generation_prompt") or "").strip()
+        effective_prompt = _apply_style_override(prompt, resolved_style_override)
         slug = _slugify(name)
         candidate = slug
         suffix = 2
@@ -120,7 +148,7 @@ def render_campaign(
         used_slugs.add(candidate)
         out_path = images_dir / f"{candidate}.png"
 
-        if not prompt:
+        if not effective_prompt:
             if progress_callback is not None:
                 progress_callback(f"Skipped {name}: no image_generation_prompt (re-run --stages npcs to populate)")
             continue
@@ -134,7 +162,7 @@ def render_campaign(
         try:
             image_bytes = image_client.generate(
                 model=resolved_model,
-                prompt=prompt,
+                prompt=effective_prompt,
                 width=width,
                 height=height,
             )
@@ -146,7 +174,7 @@ def render_campaign(
         out_path.write_bytes(image_bytes)
         manifest[name] = {
             "file": out_path.name,
-            "prompt": prompt,
+            "prompt": effective_prompt,
             "model": resolved_model,
             "width": width,
             "height": height,

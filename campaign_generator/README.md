@@ -86,7 +86,7 @@ Example: `20260421_153000_symbaroum_dark_fantasy_my_seed`
 - `CAMPAIGN_GENERATOR_GENRES_BASE_DIR` can provide the default root for `--genre`.
 - `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` can provide the default root for generated campaign outputs.
 - Optional transport/retry settings can also come from `.env`: `OPENROUTER_API_URL`, `OPENROUTER_TIMEOUT_SECONDS`, `OPENROUTER_MAX_RETRIES`, and `CAMPAIGN_GENERATOR_STAGE_MAX_RETRIES`.
-- Image generation (used by `--with-images` and `python -m image_generator`): `IMAGE_GEN_MODEL` (required when rendering — no fallback), `IMAGE_GEN_DIMENSION` (default `1024`), `IMAGE_GEN_ASPECT_RATIO` (default `9:16`).
+- Image generation (used by `--with-images` and `python -m image_generator`): `IMAGE_GEN_MODEL` (required when rendering — no fallback), `IMAGE_GEN_DIMENSION` (default `1024`), `IMAGE_GEN_ASPECT_RATIO` (default `9:16`), `IMAGE_GEN_STYLE_OVERRIDE` (optional hard override for re-rendering an existing campaign in one consistent style).
 
 ## Naming Diversity
 
@@ -118,6 +118,18 @@ The effective model is resolved in this order:
 
 The NPC stage emits an `image_generation_prompt` for every NPC. Rendering those prompts into PNGs is a separate step handled by the [`image_generator`](../image_generator/README.md) tool, since image generation is slow and expensive and not every campaign needs portraits.
 
+If you want the whole roster to share one look at generation time, add `image_style_hint` to the seed:
+
+```yaml
+image_style_hint: >
+  Full-body photorealistic character portrait, realistic skin texture,
+  natural anatomy, cinematic lighting. No illustration, comic,
+  painting, or sketch look.
+```
+
+That hint is treated as a hard style requirement for every NPC portrait prompt in the roster.
+Without a hint, the default prompt guidance now biases the roster toward full-body photorealistic portraits rather than sketch/comic/painting media.
+
 Two ways to run it:
 
 ```bash
@@ -130,6 +142,13 @@ python -m campaign_generator \
 # Render (or re-render) portraits for an existing campaign directory.
 # (Bare campaign names also work when CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR is set.)
 python -m image_generator --campaign my_first_campaign
+
+# Re-render an existing campaign in one photorealistic style without
+# regenerating the campaign data.
+python -m image_generator \
+    --campaign my_first_campaign \
+    --style-override "Full-body photorealistic character portrait, realistic skin texture, natural anatomy, cinematic lighting." \
+    --overwrite
 ```
 
 Required env (set in the repo-root `.env`):
@@ -138,6 +157,7 @@ Required env (set in the repo-root `.env`):
 IMAGE_GEN_MODEL=google/gemini-3-pro-image-preview
 IMAGE_GEN_DIMENSION=1024
 IMAGE_GEN_ASPECT_RATIO=9:16
+IMAGE_GEN_STYLE_OVERRIDE=Full-body photorealistic character portrait, realistic skin texture, natural anatomy, cinematic lighting.
 ```
 
 Portraits land in `<campaign_dir>/npc_images/<slug>.png`, with a manifest at `<campaign_dir>/npc_images/index.json`. See the [image_generator README](../image_generator/README.md) for full flag reference.

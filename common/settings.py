@@ -109,3 +109,7 @@ def get_image_dimension() -> int:
 
 def get_image_aspect_ratio() -> str:
     return _get_env_str("IMAGE_GEN_ASPECT_RATIO", "9:16")
+
+
+def get_image_style_override() -> str | None:
+    return _get_env_optional_str("IMAGE_GEN_STYLE_OVERRIDE")

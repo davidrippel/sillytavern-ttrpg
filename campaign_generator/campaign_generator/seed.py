@@ -36,6 +36,7 @@ class CampaignSeed(BaseModel):
     opening_hook_seed: str | None = None
     tone_modifiers: list[str] | None = None
     tone: list[str] | None = None
+    image_style_hint: str | None = None
     num_acts: int | None = None
     num_npcs: int | None = None
     num_locations: int | None = None

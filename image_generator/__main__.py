@@ -33,6 +33,11 @@ def main(
         ),
     ),
     model: str | None = typer.Option(None, "--model", help="Override IMAGE_GEN_MODEL from env."),
+    style_override: str | None = typer.Option(
+        None,
+        "--style-override",
+        help="Force a consistent visual style for this render pass (for example: photorealistic portrait photography).",
+    ),
     overwrite: bool = typer.Option(False, "--overwrite", help="Regenerate portraits even if they already exist."),
     only: str | None = typer.Option(
         None,
@@ -44,6 +49,7 @@ def main(
     images_dir = render_campaign(
         campaign,
         model=model,
+        style_override=style_override,
         overwrite=overwrite,
         only=only_list,
         progress_callback=_progress,
