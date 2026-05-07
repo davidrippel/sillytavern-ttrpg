@@ -89,5 +89,15 @@ def run(
     )
     normalized_payload = raw_plan.model_dump()
     for branch in normalized_payload["branches"]:
-        branch["references"] = [_normalize_reference(reference, reference_token_map) for reference in branch["references"]]
+        cleaned: list[str] = []
+        for raw_reference in branch["references"]:
+            normalized = _normalize_reference(raw_reference, reference_token_map)
+            if normalized in reference_token_map.values():
+                cleaned.append(normalized)
+            else:
+                validation_log.write(
+                    f"[branches] dropped unresolvable reference {raw_reference!r} from branch "
+                    f"{branch['name']!r} (not in reference_menu)"
+                )
+        branch["references"] = cleaned
     return BranchPlan.model_validate(normalized_payload)

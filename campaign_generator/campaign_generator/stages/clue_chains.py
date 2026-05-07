@@ -28,8 +28,8 @@ class StageClue(BaseModel):
     id: str
     found_at_type: Literal["npc", "location"]
     found_at: str
-    hint: str = ""
-    reveals: str
+    hint: str = Field(default="", max_length=120)
+    reveals: str = Field(max_length=280)
     points_to: list[StageClueTarget] = Field(min_length=1)
     supports_beats: list[str] = Field(min_length=1)
 
@@ -127,10 +127,35 @@ def _next_synthetic_id(used_ids: set[str], beat_index: int, slot_label: str) -> 
     return candidate
 
 
+_REVEALS_MAX = 280
+
+
+def _truncate(value: str, limit: int) -> str:
+    """Trim a string to `limit` characters, ending on a word boundary with an ellipsis."""
+    if len(value) <= limit:
+        return value
+    cut = value[: max(0, limit - 1)].rstrip()
+    if " " in cut:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut + "…"
+
+
 def _synthetic_reveals(plot: PlotSkeleton, beat_text: str, slot_label: str) -> str:
     if slot_label == "a":
-        return f"Evidence tied to '{beat_text}' points toward a larger pattern behind {plot.driving_mystery.lower()}"
-    return f"A second lead reinforces '{beat_text}' and adds pressure from the campaign's factions and witnesses."
+        prefix = "Evidence tied to '"
+        suffix_template = "' points toward a larger pattern behind {mystery}"
+        mystery = plot.driving_mystery.lower()
+        budget = _REVEALS_MAX - len(prefix) - len(suffix_template.format(mystery=""))
+        if budget < 1:
+            return _truncate(f"{prefix}{beat_text}{suffix_template.format(mystery=mystery)}", _REVEALS_MAX)
+        beat_part = _truncate(beat_text, max(1, budget))
+        candidate = f"{prefix}{beat_part}{suffix_template.format(mystery=mystery)}"
+        return _truncate(candidate, _REVEALS_MAX)
+    prefix = "A second lead reinforces '"
+    suffix = "' and adds pressure from the campaign's factions and witnesses."
+    budget = _REVEALS_MAX - len(prefix) - len(suffix)
+    beat_part = _truncate(beat_text, max(1, budget))
+    return _truncate(f"{prefix}{beat_part}{suffix}", _REVEALS_MAX)
 
 
 def _synthetic_hint(slot_label: str) -> str:
@@ -435,8 +460,14 @@ def _enrich_clue_prose(
             f"[clue_chains] prose enrichment for {clue.id} returned empty reveals; keeping templated text."
         )
         return clue, False
+    if len(new_reveals) > 280:
+        validation_log.write(
+            f"[clue_chains] prose enrichment for {clue.id} returned {len(new_reveals)}-char reveals "
+            f"(cap 280); keeping templated text."
+        )
+        return clue, False
 
-    return clue.model_copy(update={"reveals": new_reveals}), True
+    return Clue.model_validate({**clue.model_dump(), "reveals": new_reveals}), True
 
 
 def _run_legacy_llm_first(

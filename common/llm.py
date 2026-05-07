@@ -225,6 +225,33 @@ def generate_structured(
             return schema.model_validate(payload)
         except (ValidationError, LLMError) as exc:
             validation_log.write(f"[{stage_name}] attempt {attempt} failed: {exc}")
-            repair_note = f"Previous response failed validation. Repair these issues and try again:\n{exc}\n"
+            repair_note = _build_repair_note(exc)
 
     raise LLMError(f"{stage_name} failed after {attempts} attempts")
+
+
+def _build_repair_note(exc: Exception) -> str:
+    """Build a repair note that calls out length overshoots explicitly so the
+    model treats them as hard constraints rather than soft hints."""
+    base = f"Previous response failed validation. Repair these issues and try again:\n{exc}\n"
+    if not isinstance(exc, ValidationError):
+        return base
+    overshoot_lines: list[str] = []
+    for error in exc.errors():
+        if error.get("type") != "string_too_long":
+            continue
+        ctx = error.get("ctx") or {}
+        max_length = ctx.get("max_length")
+        input_value = error.get("input")
+        if not isinstance(max_length, int) or not isinstance(input_value, str):
+            continue
+        loc = ".".join(str(part) for part in error.get("loc", ()))
+        overshoot = len(input_value) - max_length
+        overshoot_lines.append(
+            f"- `{loc}` is {len(input_value)} characters; max is {max_length}. "
+            f"Cut at least {overshoot} characters by removing adjectives and concrete details. "
+            f"This is a hard cap, not a target."
+        )
+    if overshoot_lines:
+        base += "\nLength overshoots (cut these aggressively):\n" + "\n".join(overshoot_lines) + "\n"
+    return base

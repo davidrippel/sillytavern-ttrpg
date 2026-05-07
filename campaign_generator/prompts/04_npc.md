@@ -19,7 +19,7 @@ Naming diversity:
 - avoid the model's default English-Latinate name attractors (Marcus, Elias, Lyra, Cassia, Anya, Vivian, Jasper, Caleb, Felix, Margot, Thorne, Vance, Reed, Petrova, Beaumont, Finch, etc.) unless the cultural register specifically calls for them
 - for required names already chosen by earlier stages, keep them as-is — the diversity hint applies to the names you newly invent
 
-Length budgets (these entries live in the GM's context every time the NPC is mentioned — write tight, evocative lines, not paragraphs):
+Length budgets are HARD CAPS, not targets. Count characters before you submit. The schema rejects any field that overshoots, and a rejected NPC blocks campaign generation. If you find yourself near the cap, cut adjectives and concrete details until you're comfortably under. These entries live in the GM's context every time the NPC is mentioned — write tight, evocative lines, not paragraphs:
 - `role`: <= 80 characters, a short noun phrase that fits the campaign's genre (e.g. "the keeper of secrets", "the rival who never left town")
 - `physical_description`: <= 220 characters, 1-2 sentences with one or two distinctive details, not a portrait
 - `speaking_style`: <= 160 characters, voice and cadence in one sentence (a verbal tic or two is enough)
