@@ -57,9 +57,9 @@ def test_pipeline_progress_callback_emits_stage_lines(tmp_path: Path) -> None:
 
     starting = [m for m in messages if m.startswith("Starting stage:")]
     completed = [m for m in messages if m.startswith("Completed stage:")]
-    # 11 LLM stages + character_template = 12 stage lines
-    assert len(starting) == 12, starting
-    assert len(completed) == 12, completed
+    # 12 LLM stages + character_template = 13 stage lines
+    assert len(starting) == 13, starting
+    assert len(completed) == 13, completed
     # Final summary mentions duration and credits
     assert any("Pack generation finished" in m for m in messages)
 

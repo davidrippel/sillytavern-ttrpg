@@ -94,11 +94,14 @@ Each run picks a per-campaign **diversity seed** (a cultural/linguistic register
 
 This keeps consecutive campaigns from converging on the same handful of attractor names ("Marcus", "Elias", "Anya", "Thorne", "The Velvet ___", "The Silk ___", etc.) and gives each campaign a more distinct cultural texture.
 
+The cultural-register and district-flavor lists come from the pack's optional `naming.yaml` (see [Genre Pack Spec](../Docs/02_GENRE_PACK_SPEC.md#namingyaml-optional)). When a pack omits this file, the campaign generator falls back to a built-in cross-genre default list — fine for Earth-historical or fantasy-adjacent packs, but likely to misfire on hard-SF, weird-fiction, or strongly-coded fantasy packs (e.g. picking "Byzantine Greek with court titles" for a space opera). Pack authors should provide `naming.yaml` whenever the genre's naming conventions don't match the defaults; the [pack_generator](../pack_generator/README.md) emits it automatically.
+
 To control it:
 
 - Leave `random_seed` unset for a fresh register every run.
 - Set `random_seed` in the seed YAML for reproducible naming.
 - The avoid list is computed automatically from sibling campaign directories — no maintenance needed.
+- Edit the pack's `naming.yaml` to change the available registers and district flavors for a given genre.
 
 A progress message at the start of the NPC stage logs the chosen register and the size of the avoid list.
 

@@ -21,6 +21,7 @@ from .schemas import (
     FailureMovesDraft,
     GeneratorSeedDraft,
     GMOverlay,
+    NamingDraft,
     PackDescription,
     ResourcesDraft,
     ReviewChecklistDraft,
@@ -49,6 +50,9 @@ from .stages import (
 )
 from .stages import (
     gm_prompt_overlay as gm_overlay_stage,
+)
+from .stages import (
+    naming as naming_stage,
 )
 from .stages import (
     pack_yaml as pack_yaml_stage,
@@ -80,6 +84,7 @@ STAGE_MODELS: dict[str, type[BaseModel]] = {
     "failure_moves": FailureMovesDraft,
     "example_hooks": ExampleHooksDraft,
     "generator_seed": GeneratorSeedDraft,
+    "naming": NamingDraft,
     "pack_yaml": PackDescription,
     "review_checklist": ReviewChecklistDraft,
 }
@@ -353,6 +358,22 @@ def run_pipeline(
     )
     assert isinstance(example_hooks, ExampleHooksDraft)
 
+    # ----- 9b. naming -----
+    naming = _run_or_load(
+        "naming",
+        lambda: naming_stage.run(
+            client=client,
+            system_prompt=_load_prompt(naming_stage.PROMPT_FILE),
+            brief=brief,
+            tone=tone,
+            overlay=overlay,
+            model=resolved_model,
+            temperature=temperature,
+            validation_log=validation_log,
+        ),
+    )
+    assert isinstance(naming, NamingDraft)
+
     # ----- 10. generator_seed -----
     generator_seed = _run_or_load(
         "generator_seed",
@@ -433,6 +454,7 @@ def run_pipeline(
         example_hooks=example_hooks,
         generator_seed=generator_seed,
         checklist=checklist,
+        naming=naming,
     )
     try:
         validate_written_pack(output_dir)

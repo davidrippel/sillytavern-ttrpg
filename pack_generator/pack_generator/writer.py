@@ -18,6 +18,7 @@ from .schemas import (
     FailureMovesDraft,
     GeneratorSeedDraft,
     GMOverlay,
+    NamingDraft,
     ResourcesDraft,
     ReviewChecklistDraft,
     ToneAndPillars,
@@ -171,6 +172,14 @@ def render_pack_yaml(metadata: dict[str, Any]) -> str:
     return _yaml_dump_with_blocks(payload)
 
 
+def render_naming_yaml(naming: NamingDraft) -> str:
+    payload = {
+        "naming_registers": [_wrap_long(entry) for entry in naming.naming_registers],
+        "district_flavors": [_wrap_long(entry) for entry in naming.district_flavors],
+    }
+    return _yaml_dump_with_blocks(payload)
+
+
 def render_generator_seed_yaml(seed: GeneratorSeedDraft, pack_name: str) -> str:
     payload = {"genre": pack_name, **seed.model_dump()}
     return _yaml_dump(payload)
@@ -278,6 +287,7 @@ def write_pack_files(
     example_hooks: ExampleHooksDraft,
     generator_seed: GeneratorSeedDraft,
     checklist: ReviewChecklistDraft,
+    naming: NamingDraft,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -299,6 +309,7 @@ def write_pack_files(
     (output_dir / "generator_seed.yaml").write_text(
         render_generator_seed_yaml(generator_seed, pack_metadata["pack_name"]), encoding="utf-8"
     )
+    (output_dir / "naming.yaml").write_text(render_naming_yaml(naming), encoding="utf-8")
     (output_dir / "REVIEW_CHECKLIST.md").write_text(
         render_review_checklist_md(pack_metadata["display_name"], checklist), encoding="utf-8"
     )

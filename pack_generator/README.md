@@ -36,7 +36,7 @@ Each stage prints a progress line with elapsed time and OpenRouter usage:
 
 ## Pipeline
 
-13 stages, run in order. Each LLM stage validates against a pydantic schema and retries with a repair prompt on failure.
+14 stages, run in order. Each LLM stage validates against a pydantic schema and retries with a repair prompt on failure.
 
 1. `tone_and_pillars` — setting statement, 3-5 thematic pillars, content include/exclude
 2. `attributes` — exactly 6 attributes
@@ -47,10 +47,11 @@ Each stage prints a progress line with elapsed time and OpenRouter usage:
 7. `gm_prompt_overlay` — 9 markdown sections; a repair pass adds any missing references to attributes, resources, or categories
 8. `failure_moves` — 8-12 genre-flavored moves plus the universal block
 9. `example_hooks` — 2-3 opening hooks
-10. `generator_seed` — default campaign seed for this pack
-11. `pack_yaml` — LLM writes the description; the rest is templated
-12. `review_checklist` — pack-specific items, weighted by which stages had to retry
-13. **Final validation** — the produced directory is parsed by `common.pack.load_pack`; the pack is only declared "done" if validation passes.
+10. `naming` — 8-14 naming registers + 8-16 district flavors used by the campaign generator's NPC/location stages
+11. `generator_seed` — default campaign seed for this pack
+12. `pack_yaml` — LLM writes the description; the rest is templated
+13. `review_checklist` — pack-specific items, weighted by which stages had to retry
+14. **Final validation** — the produced directory is parsed by `common.pack.load_pack`; the pack is only declared "done" if validation passes.
 
 Per-stage outputs are cached in `<output>/_stages/`, alongside `calls.jsonl` (every LLM call), `validation_log.txt` (every retry reason), and `retries_log.txt` (retry counts by stage).
 

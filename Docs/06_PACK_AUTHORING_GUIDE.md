@@ -147,6 +147,20 @@ The defaults a campaign generator uses when you run it with no seed file. Be spe
 
 The campaign-level seed file overrides these. The pack seed is a starting point.
 
+### `naming.yaml` (optional)
+
+Two lists of one-sentence prompts the campaign generator uses to keep NPC and location naming diverse and on-genre across runs:
+
+- `naming_registers`: 8-14 entries, each a culturally or stylistically distinct naming convention an LLM can sample names from. Cover the genre's social spectrum (insiders, outsiders, underclass, institutions). For real-world-coded registers, name the source culture(s) concretely. For invented-culture registers, describe the *pattern* (compound construction, honorific particles, generational markers), not just vibes.
+- `district_flavors`: 8-16 entries, each a kind of neighborhood, deck, settlement, or precinct cluster the genre actually has. Concrete and rooted in the genre — "diplomatic envoy berths at a neutral station" beats "embassy row".
+
+When in doubt, **author this file**. The campaign generator has cross-genre fallbacks but they're Earth-historical-coded and will misfire on hard-SF, weird-fiction, or strongly-coded fantasy packs (Symbaroum-Ambrian, Eberron, post-apocalyptic). Five minutes of authoring here saves the user from seeing the same five attractor names across three campaigns.
+
+Anti-patterns:
+- Listing real-world ethnicities for a SF or high-fantasy pack ("Italian-American immigrant" in a space opera).
+- Two entries that say the same thing in different words.
+- Vague entries ("the rich neighborhood") with no concrete texture.
+
 ### `REVIEW_CHECKLIST.md`
 
 When hand-authoring, write this last. It should contain items *specific to the pack* that a reviewer should check, not generic process items. Examples:

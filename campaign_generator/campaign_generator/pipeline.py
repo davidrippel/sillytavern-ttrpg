@@ -280,7 +280,7 @@ def run_pipeline(
         campaigns_dir=output_dir.parent,
         current_dir=output_dir,
     )
-    diversity_seed = pick_diversity_seed(loaded_seed.resolved.random_seed)
+    diversity_seed = pick_diversity_seed(loaded_seed.resolved.random_seed, pack=pack)
     if progress_callback is not None:
         progress_callback(
             f"Diversity seed: register={diversity_seed['cultural_register']}; "

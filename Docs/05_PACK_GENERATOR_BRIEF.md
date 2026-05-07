@@ -220,6 +220,16 @@ Input: all prior.
 
 Output: `example_hooks.md` with 2-3 example opening hooks. Each is a 2-3 paragraph scene the player might open a campaign with, in the pack's tone. These are NOT used at runtime — they're reference material.
 
+### 9b. `naming`
+
+Input: brief + tone + GM overlay (setting/tone + NPC conventions).
+
+Output: `naming.yaml` — two lists used by the campaign generator's NPC and location stages:
+- `naming_registers` (8-14 entries): genre-appropriate naming conventions an LLM can sample names from. The campaign generator picks one primary and one secondary register per campaign.
+- `district_flavors` (8-16 entries): genre-appropriate neighborhood/precinct/deck archetypes. The campaign generator picks one per campaign.
+
+If this stage is skipped, the campaign generator falls back to its built-in cross-genre defaults (Earth-historical-coded), which misfire on hard-SF, weird-fiction, or strongly-coded fantasy packs. Generated packs should always include this file.
+
 ### 10. `generator_seed`
 
 Input: all prior.
@@ -276,6 +286,7 @@ On success, write all files to the output directory.
 ├── failure_moves.md
 ├── example_hooks.md
 ├── generator_seed.yaml
+├── naming.yaml
 ├── REVIEW_CHECKLIST.md
 └── _stages/                   # intermediate outputs, for debugging
     ├── tone_and_pillars.json
@@ -286,6 +297,7 @@ On success, write all files to the output directory.
     ├── gm_prompt_overlay.json
     ├── failure_moves.json
     ├── example_hooks.json
+    ├── naming.json
     ├── generator_seed.json
     ├── calls.jsonl
     └── retries_log.txt

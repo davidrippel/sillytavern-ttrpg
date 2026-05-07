@@ -20,10 +20,11 @@ genres/<pack_name>/
 ├── failure_moves.md             # genre-flavored GM moves
 ├── example_hooks.md             # 2-3 example opening scenes
 ├── generator_seed.yaml          # default seed for campaign generator
+├── naming.yaml                  # optional — naming-diversity hints (registers + districts)
 └── REVIEW_CHECKLIST.md          # generated with the pack; used for QA
 ```
 
-All files must be present for a pack to validate.
+All files must be present for a pack to validate, except `naming.yaml`, which is optional and treated as empty when missing.
 
 ---
 
@@ -43,6 +44,7 @@ The pack is consumed by different systems, each reading only what it needs. File
 | `failure_moves.md` | — | ✅ writes | ❌ | ✅ embedded in lorebook |
 | `example_hooks.md` | ✅ hook calibration | ✅ writes | ❌ | ❌ |
 | `generator_seed.yaml` | ✅ defaults | ✅ writes | ❌ | ❌ |
+| `naming.yaml` | ✅ NPC/location naming diversity | ✅ writes | ❌ | ❌ |
 | `REVIEW_CHECKLIST.md` | ❌ | ✅ writes | ❌ | ❌ |
 
 Key points:
@@ -420,6 +422,30 @@ num_npcs: 10
 num_locations: 8
 antagonist_archetypes_preferred: [corrupt_inquisitor, ancient_sorcerer, cult_leader]
 ```
+
+---
+
+## `naming.yaml` (optional)
+
+Naming-diversity hints consumed by the campaign generator's NPC and location stages. Both lists are optional; the generator falls back to its own genre-agnostic defaults when a list is empty or the file is absent. Provide them when the genre has specific naming/locale conventions that the cross-genre defaults wouldn't honor (a hard-SF pack should not roll "Byzantine Greek with court titles" as its primary register).
+
+```yaml
+naming_registers:
+  - "post-Earth creole drift — recognizable Earth roots fused or vowel-shifted across generations (Yuko-Ade, Marisol-7, Jaq, Nnedi-Vance)"
+  - "corporate-bloc surnames — surname is the corp or the corp-issued employee block, given name is normal (Adaeze HelionCorp)"
+  - "..."
+district_flavors:
+  - "habitation-ring deck levels — gravity falls off the higher you live, and so does respectability"
+  - "ship-breaker yard around a derelict megastructure with families living inside the cooling hulks"
+  - "..."
+```
+
+Per run, the campaign generator picks one primary and one secondary `naming_registers` entry plus one `district_flavors` entry (sampled from the seed's `random_seed`) and injects them into the NPC and location prompts. A short list (5-6 entries) reduces variety; an overly long list (50+) dilutes the LLM's ability to follow any single register convincingly. Aim for 8-14 registers and 8-16 district flavors.
+
+Style:
+- Each entry is a one-sentence description specific enough that an LLM, given just that sentence, can sample plausible names or imagine the location archetype.
+- Cover the genre's social spectrum: rich/poor, insider/outsider, the establishment and the people it excludes.
+- For invented-culture registers in fantasy or SF, describe the *pattern* (compound construction, honorific particles, generational markers), not just vibes.
 
 ---
 

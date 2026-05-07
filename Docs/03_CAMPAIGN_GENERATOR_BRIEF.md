@@ -226,7 +226,7 @@ Current implementation constraints that must be treated as spec:
 - Plot-critical named characters inferred from the plot skeleton must appear in the final NPC roster. This prevents later stages from referencing off-roster core characters.
 - `{{user}}` is the only valid protagonist placeholder. Never invent a protagonist name.
 - NPC relationships may reference `{{user}}`, the NPC themself, or another roster NPC. They should not introduce free-floating non-roster relationship targets.
-- Each run computes a `diversity_seed` (cultural register + secondary register) from the seed's `random_seed` and an `avoid_names` list drawn from the most recent sibling campaigns under the campaigns base directory. Both are injected into the NPC prompt to push naming away from the model's default English-Latinate attractors and to prevent the same names recurring across consecutive campaigns. Implemented in `campaign_generator/diversity.py`.
+- Each run computes a `diversity_seed` (cultural register + secondary register) from the seed's `random_seed` and an `avoid_names` list drawn from the most recent sibling campaigns under the campaigns base directory. Both are injected into the NPC prompt to push naming away from the model's default English-Latinate attractors and to prevent the same names recurring across consecutive campaigns. Implemented in `campaign_generator/diversity.py`. Registers are sampled from `pack.naming.naming_registers` (the pack's optional `naming.yaml`); when the pack omits the file, the module falls back to its built-in cross-genre default list.
 
 ### 5. `locations`
 
@@ -246,7 +246,7 @@ Current implementation constraints:
 - Locations are generated one at a time.
 - `plot_beats` are normalized to canonical beat ids.
 - `npc_names` must reference roster NPCs only; if the model invents a name, regenerate/repair the location instead of letting the bad reference through.
-- The same `diversity_seed` used by the NPC stage (district flavor + naming style) and a location-specific `avoid_names` list (location names from the most recent sibling campaigns) are injected into the location prompt to steer away from repeated atmospheric English compounds ("The Velvet ___", "The Silk ___") and toward names rooted in the campaign's chosen cultural register.
+- The same `diversity_seed` used by the NPC stage (district flavor + naming style) and a location-specific `avoid_names` list (location names from the most recent sibling campaigns) are injected into the location prompt to steer away from repeated atmospheric English compounds ("The Velvet ___", "The Silk ___") and toward names rooted in the campaign's chosen cultural register. District flavors are sampled from `pack.naming.district_flavors`; naming styles remain in `diversity.py` as cross-genre defaults because they describe genre-agnostic *patterns* (trade + topographic feature, proprietor-possessive, etc.) rather than content.
 
 ### 6. `clue_chains`
 

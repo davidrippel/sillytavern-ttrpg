@@ -124,6 +124,17 @@ class AbilitiesFile(BaseModel):
         return self
 
 
+class NamingFile(BaseModel):
+    """Optional naming-diversity hints for the campaign generator.
+
+    Both fields default to empty lists; the campaign generator falls back to
+    its built-in defaults when a list is empty or the file is absent.
+    """
+
+    naming_registers: list[str] = Field(default_factory=list)
+    district_flavors: list[str] = Field(default_factory=list)
+
+
 class GenrePack(BaseModel):
     path: Path
     metadata: PackMetadata
@@ -137,6 +148,7 @@ class GenrePack(BaseModel):
     example_hooks: str
     generator_seed_defaults: dict[str, Any]
     review_checklist: str
+    naming: NamingFile = Field(default_factory=NamingFile)
 
     @property
     def ability_names(self) -> set[str]:
@@ -216,6 +228,12 @@ def load_pack(path: str | Path) -> GenrePack:
             "generator_seed.yaml genre must match pack.yaml pack_name"
         )
 
+    naming_path = pack_path / "naming.yaml"
+    if naming_path.exists():
+        naming = NamingFile.model_validate(_read_yaml(naming_path))
+    else:
+        naming = NamingFile()
+
     return GenrePack(
         path=pack_path,
         metadata=metadata,
@@ -229,4 +247,5 @@ def load_pack(path: str | Path) -> GenrePack:
         example_hooks=_read_text(pack_path / "example_hooks.md"),
         generator_seed_defaults=generator_seed_defaults,
         review_checklist=_read_text(pack_path / "REVIEW_CHECKLIST.md"),
+        naming=naming,
     )

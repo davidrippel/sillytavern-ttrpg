@@ -478,6 +478,35 @@ class PackDescription(BaseModel):
         return cleaned
 
 
+class NamingDraft(BaseModel):
+    naming_registers: list[str]
+    district_flavors: list[str]
+
+    @model_validator(mode="after")
+    def _validate(self) -> "NamingDraft":
+        if not (8 <= len(self.naming_registers) <= 14):
+            raise ValueError(
+                f"naming_registers must have 8-14 entries (got {len(self.naming_registers)})"
+            )
+        if not (8 <= len(self.district_flavors) <= 16):
+            raise ValueError(
+                f"district_flavors must have 8-16 entries (got {len(self.district_flavors)})"
+            )
+        for entry in self.naming_registers:
+            if len(entry) < 30:
+                raise ValueError(
+                    f"naming register entry too short ({entry!r}); each entry should describe a "
+                    f"naming convention specifically enough that an LLM can sample names from it"
+                )
+        for entry in self.district_flavors:
+            if len(entry) < 20:
+                raise ValueError(
+                    f"district flavor entry too short ({entry!r}); each entry should be a concrete "
+                    f"neighborhood or precinct archetype that fits the genre"
+                )
+        return self
+
+
 class ChecklistItem(BaseModel):
     section: str
     text: str

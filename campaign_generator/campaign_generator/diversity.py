@@ -4,7 +4,9 @@ import json
 import random
 from pathlib import Path
 
-CULTURAL_REGISTERS = [
+from common.pack import GenrePack
+
+DEFAULT_CULTURAL_REGISTERS = [
     "Slavic-coded (Polish, Czech, Russian roots)",
     "Mediterranean port-city (Italian, Greek, Maltese)",
     "Levantine and Anatolian (Turkish, Lebanese, Armenian)",
@@ -31,7 +33,7 @@ CULTURAL_REGISTERS = [
     "Byzantine Greek with court titles",
 ]
 
-DISTRICT_FLAVORS = [
+DEFAULT_DISTRICT_FLAVORS = [
     "working docks and warehouse blocks",
     "old religious quarter with overlapping shrines",
     "immigrant market streets named after trades",
@@ -65,12 +67,29 @@ NAMING_STYLES = [
 ]
 
 
-def pick_diversity_seed(random_seed: int | None) -> dict[str, str]:
+def pick_diversity_seed(
+    random_seed: int | None,
+    pack: GenrePack | None = None,
+) -> dict[str, str]:
+    """Sample one cultural register, one secondary register, one district
+    flavor, and one naming style. Pack-supplied lists from `naming.yaml`
+    override the cross-genre defaults; missing/empty lists fall back to the
+    defaults defined in this module."""
     rng = random.Random(random_seed)
+    registers = (
+        list(pack.naming.naming_registers)
+        if pack is not None and pack.naming.naming_registers
+        else DEFAULT_CULTURAL_REGISTERS
+    )
+    districts = (
+        list(pack.naming.district_flavors)
+        if pack is not None and pack.naming.district_flavors
+        else DEFAULT_DISTRICT_FLAVORS
+    )
     return {
-        "cultural_register": rng.choice(CULTURAL_REGISTERS),
-        "secondary_register": rng.choice(CULTURAL_REGISTERS),
-        "district_flavor": rng.choice(DISTRICT_FLAVORS),
+        "cultural_register": rng.choice(registers),
+        "secondary_register": rng.choice(registers),
+        "district_flavor": rng.choice(districts),
         "naming_style": rng.choice(NAMING_STYLES),
     }
 
