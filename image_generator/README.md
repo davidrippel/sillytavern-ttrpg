@@ -30,7 +30,7 @@ python -m image_generator --campaign ./campaigns/my_first_campaign/
 
 Flags:
 
-- `--campaign PATH` (required) — directory of a generated campaign (must contain `stages/npcs.json`).
+- `--campaign PATH` (required) — directory of a generated campaign (must contain `stages/npcs.json`). If the given path doesn't exist and `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set in `.env`, the value is also tried as a campaign name relative to that base directory — so you can pass `--campaign my_first_campaign` instead of the full path.
 - `--model STR` — override `IMAGE_GEN_MODEL` for this run only.
 - `--overwrite` — regenerate portraits even if the PNG file already exists. Without this, existing files are skipped, so repeated runs are cheap.
 - `--only NAME[,NAME,...]` — render only the listed NPC names (matched exactly against `name` in `npcs.json`). Useful for re-rendering a single character.

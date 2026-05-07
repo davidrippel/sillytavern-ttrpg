@@ -23,7 +23,15 @@ def _progress(message: str) -> None:
 
 @app.callback(invoke_without_command=True)
 def main(
-    campaign: Path = typer.Option(..., "--campaign", exists=True, file_okay=False, dir_okay=True),
+    campaign: Path = typer.Option(
+        ...,
+        "--campaign",
+        help=(
+            "Path to a generated campaign directory. If the path doesn't exist and "
+            "CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR is set in .env, it's resolved as a "
+            "campaign name under that base directory."
+        ),
+    ),
     model: str | None = typer.Option(None, "--model", help="Override IMAGE_GEN_MODEL from env."),
     overwrite: bool = typer.Option(False, "--overwrite", help="Regenerate portraits even if they already exist."),
     only: str | None = typer.Option(

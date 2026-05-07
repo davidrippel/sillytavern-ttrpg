@@ -128,7 +128,8 @@ python -m campaign_generator \
     --with-images
 
 # Render (or re-render) portraits for an existing campaign directory.
-python -m image_generator --campaign ./campaigns/my_first_campaign/
+# (Bare campaign names also work when CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR is set.)
+python -m image_generator --campaign my_first_campaign
 ```
 
 Required env (set in the repo-root `.env`):
