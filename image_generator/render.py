@@ -19,8 +19,8 @@ from .client import ImageGenError, OpenRouterImageClient, resolve_size
 
 ProgressCallback = Callable[[str], None]
 _STYLE_MEDIUM_RE = re.compile(
-    r"\b(?:photoreal(?:istic)?|photo(?:graphy|graphic)?|illustration|comic|cartoon|painting|painted|"
-    r"sketch|drawing|anime|manga|watercolor|charcoal|oil(?:\s+painting)?|pulp|inked|vector|cel[- ]shaded|"
+    r"\b(?:illustration|comic|cartoon|painting|painted|"
+    r"sketch|line drawing|anime|manga|watercolor|charcoal|oil(?:\s+painting)?|pulp|inked|vector|cel[- ]shaded|"
     r"3d render|digital painting)\b",
     flags=re.IGNORECASE,
 )

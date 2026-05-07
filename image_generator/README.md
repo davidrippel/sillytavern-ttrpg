@@ -21,7 +21,7 @@ IMAGE_GEN_STYLE_OVERRIDE=Full-body photorealistic character portrait, realistic 
 
 The short-edge dimension is derived from the long edge and the aspect ratio (e.g. `1024` + `9:16` → `576x1024`), then snapped to the nearest multiple of 8.
 
-`IMAGE_GEN_STYLE_OVERRIDE` is optional. When set, the renderer strips conflicting medium cues like `charcoal sketch` or `comic illustration` from each stored prompt, appends your override, and adds a negative guardrail against illustration/cartoon output. Use it to re-render an existing campaign in one consistent style without regenerating the campaign data.
+`IMAGE_GEN_STYLE_OVERRIDE` is optional. When set, the renderer strips conflicting medium cues like `charcoal sketch` or `comic illustration` from each stored prompt, keeps the subject description intact, appends your override, and adds a negative guardrail against illustration/cartoon output. Use it to re-render an existing campaign in one consistent style without regenerating the campaign data.
 
 ## Usage
 
