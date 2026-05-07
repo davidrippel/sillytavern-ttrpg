@@ -5,16 +5,21 @@ import yaml
 
 from common.llm import UsageStats
 from common.llm import ReplayLLMClient
+from common.pack import load_pack
 from campaign_generator.paths import build_auto_campaign_dir_name, resolve_output_path
 from campaign_generator.pipeline import run_pipeline
 from campaign_generator.pipeline import _format_duration
 from campaign_generator.pipeline import _format_usage_summary
 from campaign_generator.placeholders import sanitize_text
-from campaign_generator.schemas import Clue, ClueGraph, ClueTarget, LocationCatalog, NPCRoster, PlotSkeleton
+from campaign_generator.schemas import Clue, ClueGraph, ClueTarget, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
 from campaign_generator.stages.npcs import _extract_required_npc_names
 from campaign_generator.stages.clue_chains import _build_hybrid_fallback_clue_graph, build_clue_skeleton
-from campaign_generator.stages.opening_hook import _autofix_casing, _detect_issues
+from campaign_generator.stages.opening_hook import _autofix_casing, _character_guidance, _detect_issues
+from campaign_generator.seed import CampaignSeed
 from campaign_generator.validation import validate_clue_graph
+
+
+FIXTURE_DIR = Path(__file__).parent / "fixtures" / "canned_llm_responses"
 
 
 def test_pipeline_replay_writes_outputs(tmp_path):
@@ -33,7 +38,7 @@ def test_pipeline_replay_writes_outputs(tmp_path):
     )
 
     output_dir = tmp_path / "campaign"
-    client = ReplayLLMClient.from_fixture_dir("tests/fixtures/canned_llm_responses")
+    client = ReplayLLMClient.from_fixture_dir(FIXTURE_DIR)
     run_pipeline(
         genre_path="genres/symbaroum_dark_fantasy",
         seed_path=seed_path,
@@ -455,13 +460,13 @@ def test_hybrid_clue_fallback_preserves_valid_clues_and_synthesizes_missing_slot
 
 def _ferryman_plot_npcs_locations():
     plot = PlotSkeleton.model_validate(
-        json.loads(Path("tests/fixtures/canned_llm_responses/plot_skeleton.json").read_text())
+        json.loads((FIXTURE_DIR / "plot_skeleton.json").read_text())
     )
     npcs = NPCRoster.model_validate(
-        {"npcs": [json.loads(Path(f"tests/fixtures/canned_llm_responses/npc_{i}.json").read_text()) for i in range(1, 7)]}
+        {"npcs": [json.loads((FIXTURE_DIR / f"npc_{i}.json").read_text()) for i in range(1, 7)]}
     )
     locations = LocationCatalog.model_validate(
-        {"locations": [json.loads(Path(f"tests/fixtures/canned_llm_responses/location_{i}.json").read_text()) for i in range(1, 6)]}
+        {"locations": [json.loads((FIXTURE_DIR / f"location_{i}.json").read_text()) for i in range(1, 6)]}
     )
     return plot, npcs, locations
 
@@ -489,3 +494,43 @@ def test_opening_hook_autofix_corrects_casing_only():
     fixed = _autofix_casing(bad, {"Thistle Hold"})
     assert "Thistle Hold" in fixed
     assert "thistle hold" not in fixed
+
+
+def test_opening_hook_character_guidance_uses_pack_and_campaign_context():
+    pack = load_pack("genres/20s_drama")
+    premise = PremiseDocument.model_validate(
+        {
+            "title": "Trespassing the Silk Line",
+            "paragraphs": ["First paragraph.", "Second paragraph."],
+            "central_conflict": "{{user}} must decide whether to protect Leah or enter the circle of desire and leverage pulling him toward scandal.",
+            "tone_statement": "Charged social drama.",
+            "thematic_pillars": ["Desire as leverage", "Exposure", "Aftermath"],
+        }
+    )
+    plot = PlotSkeleton.model_validate(
+        {
+            "acts": [
+                {"title": "The Door Left Open", "goal": "Enter the first scene.", "beats": ["A", "B", "C"]},
+                {"title": "The Circle Tightens", "goal": "Follow the pressure.", "beats": ["A", "B", "C"]},
+                {"title": "The Reckoning", "goal": "Choose a cost.", "beats": ["A", "B", "C"]},
+            ],
+            "main_antagonist": {
+                "name": "Cassian Vane",
+                "motivation": "Control the circle.",
+                "secret": "He keeps an archive.",
+                "relationship_to_protagonist": "Threat.",
+            },
+            "driving_mystery": "What binds Leah to the circle?",
+            "hook": "A forgotten key pulls {{user}} into Leah's hidden nightlife.",
+            "escalation_arc": "Social pressure becomes personal exposure.",
+        }
+    )
+
+    guidance = _character_guidance(pack, premise, plot, CampaignSeed(genre="erotic_drama"))
+    rendered = "\n".join(guidance)
+
+    assert "Allure" in rendered
+    assert "Seductive Arts" in rendered
+    assert "Attachment" in rendered
+    assert "Leah" in rendered
+    assert "faith, taint, ruins, or frontier survival" not in rendered

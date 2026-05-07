@@ -322,12 +322,12 @@ This becomes `initial_authors_note.txt` in the output.
 
 ### 9. `opening_hook`
 
-Input: premise, Act 1 hook, tone, character creation guidance from pack, plus the full NPC roster and location catalog (used to build the proper-noun set for post-validation).
+Input: premise, Act 1 hook, tone, structured genre pack mechanics, seed protagonist hints, plus the full NPC roster and location catalog (used to build the proper-noun set for post-validation).
 
 Output: the `opening_hook.txt` the player reads. Contains:
 - Premise (safe to reveal)
 - Tone statement
-- Character creation guidance (specific to this campaign — what kinds of characters fit, what background elements to consider)
+- Character creation guidance (specific to this campaign and genre pack — central pressure, reason to care about the opener, relevant attributes, ability categories, and resources)
 - Opening scene (the first scene the GM will narrate, from the player's point of view — where they are, what they see, what prompts them to act)
 
 MUST NOT contain: antagonist identity, clue chain, plot beats beyond Act 1 opener, NPC secrets, branch contingencies.
@@ -340,7 +340,7 @@ MUST NOT contain: antagonist identity, clue chain, plot beats beyond Act 1 opene
 
 On post-validation failure, the LLM is retried up to 3 times with the specific issues fed back as a repair note. After 3 failures, a deterministic auto-fix applies case-insensitive proper-noun substitution; if that resolves all remaining issues (or only casing issues remain), the corrected text ships and a note is written to `validation_log.txt`. Otherwise the pipeline falls back to a deterministic templated opening scene, also auto-corrected for proper-noun casing.
 
-The other fields of the opening hook (premise, tone, character-creation guidance) are assembled deterministically from the premise and seed; only the opening scene is LLM-authored. The early-pipeline partial draft (`partials/opening_hook.partial.txt`) uses the deterministic path because NPCs and locations don't yet exist when it runs.
+The other fields of the opening hook (premise, tone, character-creation guidance) are assembled deterministically. Character-creation guidance combines any seed protagonist archetype, the campaign's central conflict, the Act 1 hook, and a compact summary of the selected pack's attributes, ability categories, and non-static resources. Only the opening scene is LLM-authored. The early-pipeline partial draft (`partials/opening_hook.partial.txt`) uses the deterministic path because NPCs and locations don't yet exist when it runs.
 
 Protagonist naming rule: every protagonist reference in all generated artifacts must use the exact SillyTavern placeholder `{{user}}`. Prompting should enforce this, and outputs should be sanitized afterward in case the model invents a protagonist name or uses generic phrases like "the protagonist" or "player character".
 

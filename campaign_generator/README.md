@@ -67,6 +67,8 @@ Successful runs write:
 - `stages/calls.jsonl`
 - `stages/validation_log.txt`
 
+`opening_hook.txt` includes player-facing character creation guidance derived from the current campaign premise, Act 1 hook, and the selected genre pack's attributes, ability categories, and non-static resources.
+
 `stages/npcs.json` includes a per-NPC `image_generation_prompt` field — a self-contained text-to-image prompt suitable for portrait generation. See [NPC Portraits](#npc-portraits) below.
 
 If `--output` is omitted and `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set, the generator creates a campaign directory automatically using:

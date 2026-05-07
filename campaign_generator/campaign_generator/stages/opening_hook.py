@@ -214,11 +214,51 @@ def _deterministic_opening_scene(plot: PlotSkeleton, seed: CampaignSeed) -> str:
     )
 
 
-def _character_guidance(seed: CampaignSeed) -> list[str]:
+def _shorten(text: str, *, limit: int = 420) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 3].rsplit(" ", 1)[0].rstrip(".,;:") + "..."
+
+
+def _join_displays(items: list[str], *, limit: int = 6) -> str:
+    names = [item for item in items if item]
+    if len(names) <= limit:
+        return ", ".join(names)
+    shown = ", ".join(names[:limit])
+    return f"{shown}, and {len(names) - limit} more"
+
+
+def _pack_character_summary(pack: GenrePack) -> str:
+    attributes = _join_displays([attribute.display for attribute in pack.attributes.attributes])
+    categories = _join_displays([category.display for category in pack.abilities.categories])
+    resources = _join_displays(
+        [
+            resource.display
+            for resource in pack.resources.resources
+            if resource.kind != "static_value"
+        ]
+    )
+
+    parts = [
+        f"Use the {pack.metadata.display_name} sheet",
+        f"build around attributes such as {attributes}" if attributes else "",
+        f"choose abilities from {categories}" if categories else "",
+        f"expect pressures like {resources}" if resources else "",
+    ]
+    return "; ".join(part for part in parts if part) + "."
+
+
+def _character_guidance(
+    pack: GenrePack,
+    premise: PremiseDocument,
+    plot: PlotSkeleton,
+    seed: CampaignSeed,
+) -> list[str]:
     guidance = [
-        "Create someone who belongs in this campaign's pressure points: faith, taint, ruins, or frontier survival.",
-        "Give your character one reason to care about the opening hook before the first scene begins.",
-        "Choose abilities and gear that let them investigate, survive, or negotiate under pressure.",
+        f"Create someone built for this campaign's central pressure: {_shorten(premise.central_conflict)}",
+        f"Give your character one personal reason to care about the opener: {_shorten(plot.hook)}",
+        _pack_character_summary(pack),
     ]
     if seed.protagonist_archetype:
         guidance.insert(0, f"Best fit: {seed.protagonist_archetype}")
@@ -385,7 +425,7 @@ def render(
     return OpeningHookDocument(
         premise=premise.premise_text,
         tone_statement=premise.tone_statement,
-        character_creation_guidance=_character_guidance(seed),
+        character_creation_guidance=_character_guidance(pack, premise, plot, seed),
         opening_scene=opening_scene,
         pc_prior_knowledge=pc_prior_knowledge,
     )
