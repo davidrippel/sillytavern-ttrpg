@@ -67,6 +67,8 @@ Successful runs write:
 - `stages/calls.jsonl`
 - `stages/validation_log.txt`
 
+`stages/npcs.json` includes a per-NPC `image_generation_prompt` field — a self-contained text-to-image prompt suitable for portrait generation. See [NPC Portraits](#npc-portraits) below.
+
 If `--output` is omitted and `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set, the generator creates a campaign directory automatically using:
 
 - current timestamp
@@ -84,6 +86,7 @@ Example: `20260421_153000_symbaroum_dark_fantasy_my_seed`
 - `CAMPAIGN_GENERATOR_GENRES_BASE_DIR` can provide the default root for `--genre`.
 - `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` can provide the default root for generated campaign outputs.
 - Optional transport/retry settings can also come from `.env`: `OPENROUTER_API_URL`, `OPENROUTER_TIMEOUT_SECONDS`, `OPENROUTER_MAX_RETRIES`, and `CAMPAIGN_GENERATOR_STAGE_MAX_RETRIES`.
+- Image generation (used by `--with-images` and `python -m image_generator`): `IMAGE_GEN_MODEL` (required when rendering — no fallback), `IMAGE_GEN_DIMENSION` (default `1024`), `IMAGE_GEN_ASPECT_RATIO` (default `9:16`).
 
 ## Model Precedence
 
@@ -93,6 +96,35 @@ The effective model is resolved in this order:
 2. `--model` on the CLI
 3. `CAMPAIGN_GENERATOR_DRY_RUN_MODEL` when `--dry-run` is set
 4. `CAMPAIGN_GENERATOR_DEFAULT_MODEL` from `.env`
+
+## NPC Portraits
+
+The NPC stage emits an `image_generation_prompt` for every NPC. Rendering those prompts into PNGs is a separate step handled by the [`image_generator`](../image_generator/README.md) tool, since image generation is slow and expensive and not every campaign needs portraits.
+
+Two ways to run it:
+
+```bash
+# Render portraits after generating a fresh campaign in one shot.
+python -m campaign_generator \
+    --genre symbaroum_dark_fantasy \
+    --seed my_seed.yaml \
+    --with-images
+
+# Render (or re-render) portraits for an existing campaign directory.
+python -m image_generator --campaign ./campaigns/my_first_campaign/
+```
+
+Required env (set in the repo-root `.env`):
+
+```bash
+IMAGE_GEN_MODEL=google/gemini-3-pro-image-preview
+IMAGE_GEN_DIMENSION=1024
+IMAGE_GEN_ASPECT_RATIO=9:16
+```
+
+Portraits land in `<campaign_dir>/npc_images/<slug>.png`, with a manifest at `<campaign_dir>/npc_images/index.json`. See the [image_generator README](../image_generator/README.md) for full flag reference.
+
+> Older campaigns generated before this feature was added will have empty `image_generation_prompt` fields. Re-run the NPC stage with `--stages npcs` to populate them, then run the image generator.
 
 ## Manual SillyTavern Verification
 

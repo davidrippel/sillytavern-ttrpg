@@ -72,7 +72,9 @@ Managed by SillyTavern and the custom extension (see `04_EXTENSION_BRIEF.md`).
 | Genre pack | Directory of text/YAML files | Local filesystem, fed to generators | Once per genre |
 | Pack generator | Python tool | Local machine | Once, reusable |
 | Campaign generator | Python tool | Local machine | Once, reusable |
+| Image generator | Python tool | Local machine | Once, reusable; runs against any campaign dir |
 | Campaign lorebook JSON | File | Imported into SillyTavern | Once per campaign |
+| NPC portrait PNGs | Files in `<campaign>/npc_images/` | Attached manually in SillyTavern | Optional, per campaign |
 | Opening hook text | File | Read once, then set aside | Once per campaign |
 | Initial Author's Note | File | Pasted into SillyTavern | Once per campaign |
 | GM character card | SillyTavern object | Inside SillyTavern | Once, reused across genres (overlay arrives via lorebook) |

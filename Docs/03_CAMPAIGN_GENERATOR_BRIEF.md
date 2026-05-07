@@ -43,6 +43,7 @@ The user is expected to run this blind: they read only `opening_hook.txt` and `i
   - `CAMPAIGN_GENERATOR_GENRES_BASE_DIR`
   - `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR`
   - `CG_LLM_CLUE_GRAPH` — when set to `1` (default `0`), opt back into the legacy behaviour where the LLM tries to author the entire clue graph in one call. Default flow generates a deterministic skeleton and uses the LLM only to enrich each clue's prose.
+  - `IMAGE_GEN_MODEL`, `IMAGE_GEN_DIMENSION`, `IMAGE_GEN_ASPECT_RATIO` — used by the sibling `image_generator` tool when rendering NPC portraits (also reachable via `--with-images`). `IMAGE_GEN_MODEL` is required when rendering and has no fallback.
 
 Web search during development to confirm: current OpenRouter API shape, current SillyTavern lorebook JSON schema, current model slug for `anthropic/claude-sonnet-4.5`.
 
@@ -69,6 +70,7 @@ Flags:
 - `--stages STR` — `all` or comma-separated list of stage names to run (uses cached outputs for others)
 - `--dry-run` — use a cheap model (e.g. `anthropic/claude-haiku-4.5`) for the whole pipeline
 - `--random-seed INT` — reproducibility seed
+- `--with-images` — after generation, call the image generator (see [`image_generator/README.md`](../image_generator/README.md)) to render NPC portraits into `<output>/npc_images/`. Requires `IMAGE_GEN_MODEL` in `.env`. Off by default. Image-gen failures are logged but do not fail the campaign run.
 
 Model precedence is:
 1. `model:` in the seed YAML
@@ -216,6 +218,7 @@ Each NPC:
 - Secret (what they're hiding)
 - Relationships to other NPCs (cite by name)
 - Abilities from pack catalog if supernatural/specialized (cite by name from `abilities.yaml`)
+- `image_generation_prompt` — a self-contained text-to-image prompt (≤600 chars) used by the sibling [`image_generator`](../image_generator/README.md) tool to render an NPC portrait. The prompt must stand alone (no campaign context), match the genre's tone/style, and omit aspect-ratio or resolution directives (those are applied at render time from env config so the same prompt can be re-rendered at different sizes).
 
 The generator keeps a running roster and forbids duplicate names. NPCs should have varied demographics, voices, and agendas — if the first 3 NPCs are all wizened old men, reject and regenerate.
 
@@ -432,16 +435,19 @@ Console/runtime behavior:
 │   └── clue_chains.partial.json
 ├── spoilers/
 │   └── full_campaign.md
-└── stages/
-    ├── premise.json
-    ├── plot_skeleton.json
-    ├── factions.json
-    ├── npcs.json
-    ├── locations.json
-    ├── clue_chains.json
-    ├── branches.json
-    ├── calls.jsonl            # all LLM calls logged, including usage
-    └── validation_log.txt
+├── stages/
+│   ├── premise.json
+│   ├── plot_skeleton.json
+│   ├── factions.json
+│   ├── npcs.json              # each NPC includes an `image_generation_prompt`
+│   ├── locations.json
+│   ├── clue_chains.json
+│   ├── branches.json
+│   ├── calls.jsonl            # all LLM calls logged, including usage
+│   └── validation_log.txt
+└── npc_images/                # only present after running `image_generator` (or `--with-images`)
+    ├── index.json
+    └── <slug>.png
 ```
 
 Artifact shape details that are now part of the spec:
