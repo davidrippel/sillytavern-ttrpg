@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from .artifacts import serialize_clue_graph, serialize_location_catalog, serialize_plot_skeleton
+from .diversity import collect_recent_names, pick_diversity_seed
 from common.llm import LLMClient, OpenRouterClient, UsageStats
 from .lorebook import assemble_lorebook
 from common.pack import GenrePack, load_pack
@@ -275,6 +276,19 @@ def run_pipeline(
     factions = sanitize_model(factions, protagonist_names=protagonist_names)
     _write_json(_stage_cache_path(stages_dir, "factions"), factions.model_dump())
 
+    recent_npc_names, recent_location_names = collect_recent_names(
+        campaigns_dir=output_dir.parent,
+        current_dir=output_dir,
+    )
+    diversity_seed = pick_diversity_seed(loaded_seed.resolved.random_seed)
+    if progress_callback is not None:
+        progress_callback(
+            f"Diversity seed: register={diversity_seed['cultural_register']}; "
+            f"district={diversity_seed['district_flavor']}; "
+            f"avoiding {len(recent_npc_names)} recent NPC names and "
+            f"{len(recent_location_names)} recent location names"
+        )
+
     npcs = _run_or_load_stage(
         name="npcs",
         selected=selected,
@@ -295,6 +309,8 @@ def run_pipeline(
             validation_log=validation_log,
             progress_callback=progress_callback,
             snapshot_path=partials_dir / "npcs.partial.json",
+            avoid_names=recent_npc_names,
+            diversity_seed=diversity_seed,
         ),
     )
     npcs = sanitize_model(npcs, protagonist_names=protagonist_names)
@@ -320,6 +336,8 @@ def run_pipeline(
             validation_log=validation_log,
             progress_callback=progress_callback,
             snapshot_path=partials_dir / "locations.partial.json",
+            avoid_names=recent_location_names,
+            diversity_seed=diversity_seed,
         ),
     )
     locations = sanitize_model(locations, protagonist_names=protagonist_names)

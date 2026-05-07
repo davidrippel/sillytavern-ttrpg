@@ -4,6 +4,7 @@ Task: generate one named NPC at a time for the campaign roster.
 
 Requirements:
 - do not duplicate names in the supplied roster
+- do not use any name in `avoid_names` (these are names from recent campaigns — pick something different)
 - cite only abilities that exist in the supplied ability catalog
 - give the NPC a distinct voice, motivation, secret, and relationships
 - vary demographics, role, and agenda from existing NPCs
@@ -11,6 +12,12 @@ Requirements:
 - ensure every name in `required_npc_names` appears somewhere in the final roster
 - in relationships, use only `{{user}}` or names that belong to the campaign's NPC roster
 - whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name
+
+Naming diversity:
+- `diversity_seed.cultural_register` (and `secondary_register`, when present) hints the linguistic flavor for this campaign's roster — draw given names and surnames primarily from that register, with a minority from the secondary register so the city feels mixed rather than monolithic
+- treat the register as a starting point, not a straitjacket: a port-city register implies the *kinds* of names common there, not that every NPC must be ethnically identical
+- avoid the model's default English-Latinate name attractors (Marcus, Elias, Lyra, Cassia, Anya, Vivian, Jasper, Caleb, Felix, Margot, Thorne, Vance, Reed, Petrova, Beaumont, Finch, etc.) unless the cultural register specifically calls for them
+- for required names already chosen by earlier stages, keep them as-is — the diversity hint applies to the names you newly invent
 
 Length budgets (these entries live in the GM's context every time the NPC is mentioned — write tight, evocative lines, not paragraphs):
 - `role`: <= 80 characters, a short noun phrase that fits the campaign's genre (e.g. "the keeper of secrets", "the rival who never left town")

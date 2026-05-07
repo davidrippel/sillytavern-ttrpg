@@ -226,6 +226,7 @@ Current implementation constraints that must be treated as spec:
 - Plot-critical named characters inferred from the plot skeleton must appear in the final NPC roster. This prevents later stages from referencing off-roster core characters.
 - `{{user}}` is the only valid protagonist placeholder. Never invent a protagonist name.
 - NPC relationships may reference `{{user}}`, the NPC themself, or another roster NPC. They should not introduce free-floating non-roster relationship targets.
+- Each run computes a `diversity_seed` (cultural register + secondary register) from the seed's `random_seed` and an `avoid_names` list drawn from the most recent sibling campaigns under the campaigns base directory. Both are injected into the NPC prompt to push naming away from the model's default English-Latinate attractors and to prevent the same names recurring across consecutive campaigns. Implemented in `campaign_generator/diversity.py`.
 
 ### 5. `locations`
 
@@ -245,6 +246,7 @@ Current implementation constraints:
 - Locations are generated one at a time.
 - `plot_beats` are normalized to canonical beat ids.
 - `npc_names` must reference roster NPCs only; if the model invents a name, regenerate/repair the location instead of letting the bad reference through.
+- The same `diversity_seed` used by the NPC stage (district flavor + naming style) and a location-specific `avoid_names` list (location names from the most recent sibling campaigns) are injected into the location prompt to steer away from repeated atmospheric English compounds ("The Velvet ___", "The Silk ___") and toward names rooted in the campaign's chosen cultural register.
 
 ### 6. `clue_chains`
 
@@ -509,6 +511,7 @@ campaign_generator/
 │   ├── pipeline.py              # stage orchestration
 │   ├── artifacts.py             # enriched serialized stage artifacts
 │   ├── placeholders.py          # protagonist placeholder normalization
+│   ├── diversity.py             # cross-campaign name ledger + per-run cultural/naming seed
 │   ├── stages/                  # one module per stage
 │   │   ├── premise.py
 │   │   ├── plot_skeleton.py

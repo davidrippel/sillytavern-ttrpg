@@ -88,6 +88,20 @@ Example: `20260421_153000_symbaroum_dark_fantasy_my_seed`
 - Optional transport/retry settings can also come from `.env`: `OPENROUTER_API_URL`, `OPENROUTER_TIMEOUT_SECONDS`, `OPENROUTER_MAX_RETRIES`, and `CAMPAIGN_GENERATOR_STAGE_MAX_RETRIES`.
 - Image generation (used by `--with-images` and `python -m image_generator`): `IMAGE_GEN_MODEL` (required when rendering — no fallback), `IMAGE_GEN_DIMENSION` (default `1024`), `IMAGE_GEN_ASPECT_RATIO` (default `9:16`).
 
+## Naming Diversity
+
+Each run picks a per-campaign **diversity seed** (a cultural/linguistic register, a secondary register, a district flavor, and a naming style) from the seed's `random_seed`, and scans up to the 5 most-recently-modified sibling campaigns under the campaigns base directory to build an **avoid list** of NPC and location names. Both are injected into the NPC and location prompts.
+
+This keeps consecutive campaigns from converging on the same handful of attractor names ("Marcus", "Elias", "Anya", "Thorne", "The Velvet ___", "The Silk ___", etc.) and gives each campaign a more distinct cultural texture.
+
+To control it:
+
+- Leave `random_seed` unset for a fresh register every run.
+- Set `random_seed` in the seed YAML for reproducible naming.
+- The avoid list is computed automatically from sibling campaign directories — no maintenance needed.
+
+A progress message at the start of the NPC stage logs the chosen register and the size of the avoid list.
+
 ## Model Precedence
 
 The effective model is resolved in this order:

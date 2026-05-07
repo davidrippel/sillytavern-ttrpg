@@ -122,6 +122,8 @@ def run(
     validation_log: ValidationLog,
     progress_callback: Callable[[str], None] | None = None,
     snapshot_path: Path | None = None,
+    avoid_names: list[str] | None = None,
+    diversity_seed: dict[str, str] | None = None,
 ) -> NPCRoster:
     required_names = _extract_required_npc_names(plot)
     target_count = max(seed.num_npcs or 10, len(required_names))
@@ -148,6 +150,8 @@ def run(
                     "name": pack.metadata.display_name,
                     "tone": pack.tone,
                 },
+                "avoid_names": avoid_names or [],
+                "diversity_seed": diversity_seed or {},
                 "target_index": index + 1,
                 "target_count": target_count,
                 "repair_note": repair_note,
@@ -215,6 +219,8 @@ def run(
                             "tone": pack.tone,
                         },
                         "allowed_relationship_names": sorted(roster_names | {"{{user}}"}),
+                        "avoid_names": avoid_names or [],
+                        "diversity_seed": diversity_seed or {},
                         "target_index": index + 1,
                         "target_count": target_count,
                         "repair_note": "Repair these constraint failures: "

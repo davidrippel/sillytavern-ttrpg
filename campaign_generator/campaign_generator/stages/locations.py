@@ -64,6 +64,8 @@ def run(
     validation_log: ValidationLog,
     progress_callback: Callable[[str], None] | None = None,
     snapshot_path: Path | None = None,
+    avoid_names: list[str] | None = None,
+    diversity_seed: dict[str, str] | None = None,
 ) -> LocationCatalog:
     target_count = seed.num_locations or 8
     catalog: list[Location] = []
@@ -82,6 +84,8 @@ def run(
                 "npc_name_menu": sorted(roster_names),
                 "existing_locations": [location.model_dump() for location in catalog],
                 "available_plot_beats": all_beats,
+                "avoid_names": avoid_names or [],
+                "diversity_seed": diversity_seed or {},
                 "target_index": index + 1,
                 "target_count": target_count,
                 "repair_note": repair_note,

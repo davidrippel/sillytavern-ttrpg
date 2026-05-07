@@ -176,7 +176,7 @@ tone_modifiers:
 ### Generation control fields
 
 **`random_seed`** *(integer, optional)*
-Seed for reproducibility. Same random_seed + same model + same prompts + same pack = same campaign. Useful for regenerating after editing the seed.
+Seed for reproducibility. Same random_seed + same model + same prompts + same pack = same campaign. Useful for regenerating after editing the seed. Also drives the naming-diversity register sampled for NPCs and locations — leave unset for a fresh cultural flavor on every run.
 
 **`model`** *(string, optional)*
 OpenRouter model slug. Overrides the `--model` CLI flag. Default: the pack's preferred model, or the CLI flag's value.
