@@ -1,4 +1,4 @@
-You are designing 3 ready-to-use sample player characters for a tabletop campaign that has already been fully generated. Each character must be presented in TWO shapes — a story-mode profile (description-only, no stats) and a pack-mode profile (genre-pack stats and abilities). Both shapes describe the SAME character.
+You are designing 5 ready-to-use sample player characters for a tabletop campaign that has already been fully generated. Each character must be presented in TWO shapes — a story-mode profile (description-only, no stats) and a pack-mode profile (genre-pack stats and abilities). Both shapes describe the SAME character.
 
 # Inputs
 
@@ -10,7 +10,7 @@ You receive a JSON object with:
 
 # Goals
 
-Produce exactly 3 sample characters that are:
+Produce exactly 5 sample characters that are:
 
 1. **Archetypally distinct** — different temperaments, social standings, and approaches. Avoid duplicates.
 2. **Plausibly hooked** into the campaign's premise, factions, NPCs, or locations. Each character's `hook_into_campaign` MUST mention at least one canonical faction, NPC, or location by name.
