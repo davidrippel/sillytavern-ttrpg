@@ -14,9 +14,19 @@ from common.llm import LLMClient, OpenRouterClient, UsageStats
 from .lorebook import assemble_lorebook
 from common.pack import GenrePack, load_pack
 from .placeholders import infer_protagonist_name_candidates, sanitize_model
-from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument, SampleCharacterSet
+from .schemas import (
+    BranchPlan,
+    ClueGraph,
+    FactionSet,
+    LocationCatalog,
+    NPCRoster,
+    PlotSkeleton,
+    PremiseDocument,
+    SampleCharacterSet,
+    SupportingCastMember,
+)
 from .seed import LoadedSeed, load_seed
-from .validation import ValidationLog, validate_cross_stage
+from .validation import ValidationLog, find_phantom_plot_names, validate_cross_stage
 from .stages import branches as branches_stage
 from .stages import clue_chains as clue_chains_stage
 from .stages import factions as factions_stage
@@ -315,6 +325,69 @@ def run_pipeline(
     )
     npcs = sanitize_model(npcs, protagonist_names=protagonist_names)
     _write_json(_stage_cache_path(stages_dir, "npcs"), npcs.model_dump())
+
+    for repair_attempt in range(1, 3):
+        phantoms = find_phantom_plot_names(
+            plot,
+            npcs,
+            factions=factions,
+            protagonist_names=protagonist_names,
+        )
+        if not phantoms:
+            break
+        validation_log.write(
+            f"[plot-prose-validation] phantom names found in plot prose: {phantoms}; "
+            f"re-running NPC stage with these names appended (attempt {repair_attempt})"
+        )
+        if progress_callback is not None:
+            progress_callback(
+                f"Plot prose mentions {phantoms} not in roster; regenerating NPCs to cover them "
+                f"(repair attempt {repair_attempt}/2)"
+            )
+        existing_cast_names = {member.name for member in plot.supporting_cast}
+        for phantom in phantoms:
+            if phantom in existing_cast_names:
+                continue
+            plot.supporting_cast.append(
+                SupportingCastMember(
+                    name=phantom,
+                    archetype="phantom-name auto-repair: archetype unspecified",
+                    narrative_role=(
+                        f"Mentioned in plot prose as {phantom!r} but not declared in supporting_cast; "
+                        "infer role from surrounding beats."
+                    ),
+                )
+            )
+        _write_json(_stage_cache_path(stages_dir, "plot_skeleton"), serialize_plot_skeleton(plot))
+        npcs = npcs_stage.run(
+            client=client,
+            system_prompt=_load_prompt(npcs_stage.PROMPT_FILE),
+            pack=pack,
+            premise=premise,
+            plot=plot,
+            factions=factions,
+            seed=loaded_seed.resolved,
+            model=resolved_model,
+            temperature=temperature,
+            validation_log=validation_log,
+            progress_callback=progress_callback,
+            snapshot_path=partials_dir / "npcs.partial.json",
+            avoid_names=recent_npc_names,
+            diversity_seed=diversity_seed,
+        )
+        npcs = sanitize_model(npcs, protagonist_names=protagonist_names)
+        _write_json(_stage_cache_path(stages_dir, "npcs"), npcs.model_dump())
+    else:
+        remaining_phantoms = find_phantom_plot_names(
+            plot,
+            npcs,
+            factions=factions,
+            protagonist_names=protagonist_names,
+        )
+        if remaining_phantoms:
+            raise ValueError(
+                f"plot prose still references names not in roster after 2 repair attempts: {remaining_phantoms}"
+            )
 
     locations = _run_or_load_stage(
         name="locations",

@@ -11,7 +11,48 @@ __all__ = [
     "ValidationLog",
     "validate_clue_graph",
     "validate_cross_stage",
+    "find_phantom_plot_names",
 ]
+
+
+def find_phantom_plot_names(
+    plot: PlotSkeleton,
+    npcs: NPCRoster,
+    *,
+    factions: FactionSet | None = None,
+    locations: LocationCatalog | None = None,
+    protagonist_names: set[str] | None = None,
+    extra_known_names: set[str] | None = None,
+) -> list[str]:
+    """Return supporting_cast names that the plot declared but the NPC roster
+    failed to produce, plus the main antagonist if missing.
+
+    The plot stage prompt requires that any named character in plot prose be
+    enumerated in `supporting_cast` (or be the main antagonist or `{{user}}`).
+    That declaration is the contract. This validator therefore checks the
+    contract against the roster: every name the plot promised must exist as
+    an NPC. Scanning prose directly would generate too many false positives
+    (sentence-initial words, beat-title casing, faction names) — we trust the
+    plot stage's structured declaration instead.
+
+    `factions`, `locations`, `protagonist_names`, `extra_known_names` are
+    accepted for forward-compatibility but currently unused; declared cast
+    failures are the only signal we act on.
+    """
+    del factions, locations, protagonist_names, extra_known_names  # reserved for future use
+
+    roster_names = {npc.name for npc in npcs.npcs}
+    declared = [plot.main_antagonist.name] + [member.name for member in plot.supporting_cast]
+
+    missing: list[str] = []
+    seen: set[str] = set()
+    for name in declared:
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        if name not in roster_names:
+            missing.append(name)
+    return missing
 
 
 def _token_aliases(value: str) -> set[str]:

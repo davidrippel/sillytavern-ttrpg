@@ -33,6 +33,11 @@ def _extract_required_npc_names(plot: PlotSkeleton) -> list[str]:
             names.append(name)
 
     add(plot.main_antagonist.name)
+    for member in plot.supporting_cast:
+        add(member.name)
+
+    # Fallback regex for cached plots without supporting_cast or stragglers the
+    # plot stage didn't list explicitly. Catches titled names like "Sister Orsa".
     text_blobs = [
         plot.hook,
         plot.driving_mystery,
@@ -50,6 +55,25 @@ def _extract_required_npc_names(plot: PlotSkeleton) -> list[str]:
             add(match)
 
     return names
+
+
+def _required_cast_briefs(plot: PlotSkeleton) -> list[dict[str, str]]:
+    briefs: list[dict[str, str]] = [
+        {
+            "name": plot.main_antagonist.name,
+            "archetype": "main antagonist",
+            "narrative_role": plot.main_antagonist.motivation,
+        }
+    ]
+    for member in plot.supporting_cast:
+        briefs.append(
+            {
+                "name": member.name,
+                "archetype": member.archetype,
+                "narrative_role": member.narrative_role,
+            }
+        )
+    return briefs
 
 
 _NULL_FACTION_TOKENS = {"", "none", "null", "n/a", "independent", "unaffiliated"}
@@ -126,6 +150,8 @@ def run(
     diversity_seed: dict[str, str] | None = None,
 ) -> NPCRoster:
     required_names = _extract_required_npc_names(plot)
+    cast_briefs = _required_cast_briefs(plot)
+    cast_brief_by_name = {brief["name"]: brief for brief in cast_briefs}
     target_count = max(seed.num_npcs or 10, len(required_names))
     roster: list[NPC] = []
     for index in range(target_count):
@@ -137,6 +163,9 @@ def run(
             outstanding_required = [name for name in required_names if name not in existing_names]
             slots_remaining = target_count - index
             must_use_names = set(outstanding_required) if slots_remaining == len(outstanding_required) else set()
+            outstanding_briefs = [
+                cast_brief_by_name[name] for name in outstanding_required if name in cast_brief_by_name
+            ]
             context = {
                 "premise": premise.model_dump(),
                 "plot": plot.model_dump(),
@@ -144,6 +173,7 @@ def run(
                 "existing_npcs": [npc.model_dump() for npc in roster],
                 "required_npc_names": required_names,
                 "outstanding_required_npc_names": outstanding_required,
+                "outstanding_required_cast_briefs": outstanding_briefs,
                 "must_use_one_of_names": sorted(must_use_names),
                 "ability_catalog": sorted(pack.ability_names),
                 "genre": {
@@ -213,6 +243,9 @@ def run(
                         "existing_npcs": [npc.model_dump() for npc in roster if npc.name != current_npc.name],
                         "required_npc_names": required_names,
                         "outstanding_required_npc_names": [],
+                        "outstanding_required_cast_briefs": (
+                            [cast_brief_by_name[current_npc.name]] if current_npc.name in cast_brief_by_name else []
+                        ),
                         "must_use_one_of_names": [current_npc.name],
                         "ability_catalog": sorted(pack.ability_names),
                         "genre": {

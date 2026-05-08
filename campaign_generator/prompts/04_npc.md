@@ -10,6 +10,7 @@ Requirements:
 - vary demographics, role, and agenda from existing NPCs
 - if `must_use_one_of_names` is non-empty, the NPC name must be one of those names exactly
 - ensure every name in `required_npc_names` appears somewhere in the final roster
+- when the chosen name appears in `outstanding_required_cast_briefs`, fit the NPC to that brief: their `archetype` (e.g. "young female confidant") sets gender presentation, age band, and social position; their `narrative_role` sets motivation and the part they play in the plot. Do not generate a generic NPC and ignore the brief — the plot was written assuming this archetype exists in the roster.
 - in relationships, use only `{{user}}` or names that belong to the campaign's NPC roster
 - whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name
 

@@ -57,12 +57,19 @@ class ActOutline(BaseModel):
     beats: list[Beat] = Field(min_length=3, max_length=5)
 
 
+class SupportingCastMember(BaseModel):
+    name: str = Field(min_length=1)
+    archetype: str = Field(min_length=1, max_length=120)
+    narrative_role: str = Field(min_length=1, max_length=240)
+
+
 class PlotSkeleton(BaseModel):
     acts: list[ActOutline] = Field(min_length=3, max_length=6)
     main_antagonist: Antagonist
     driving_mystery: str
     hook: str
     escalation_arc: str
+    supporting_cast: list[SupportingCastMember] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def assign_beat_ids(self) -> "PlotSkeleton":
