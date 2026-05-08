@@ -52,11 +52,30 @@ async function applyBeatResolved(label, state, act) {
 
     const next = { ...state };
     next.resolvedBeatLabels = [...state.resolvedBeatLabels];
-    for (let i = Math.max(0, currentIdx); i <= resolvedIdx; i++) {
+    next.pendingReveals = [...(state.pendingReveals ?? [])];
+    const queuedThisAdvance = [];
+
+    // Queue any beats between the current and resolved (exclusive of resolved) as
+    // pending reveals — content that the fiction skipped past but still owes the player.
+    // The resolved beat itself is recorded normally.
+    for (let i = Math.max(0, currentIdx); i < resolvedIdx; i++) {
         const lbl = beatLabels[i];
-        if (lbl && !next.resolvedBeatLabels.includes(lbl)) {
-            next.resolvedBeatLabels.push(lbl);
-        }
+        if (!lbl) continue;
+        if (next.resolvedBeatLabels.includes(lbl)) continue;
+        if (next.pendingReveals.some((r) => r.label === lbl)) continue;
+        const beat = act.beats.find((b) => b.label === lbl);
+        next.pendingReveals.push({
+            label: lbl,
+            text: beat?.text ?? lbl,
+            skippedAt: Date.now(),
+        });
+        queuedThisAdvance.push(lbl);
+        log(`Beat ${lbl} skipped — queued as pending reveal.`, 'warn');
+    }
+    next._lastAdvanceQueuedLabels = queuedThisAdvance;
+    next._lastAdvanceDrainedReveal = null;
+    if (!next.resolvedBeatLabels.includes(label)) {
+        next.resolvedBeatLabels.push(label);
     }
 
     const advancedAct = isLastBeatOfAct(act, label);
@@ -66,6 +85,9 @@ async function applyBeatResolved(label, state, act) {
 
     next.currentBeatLabel = beatLabels[resolvedIdx + 1] ?? null;
     next.nextBeatLabel = next.currentBeatLabel ? nextBeatLabel(act, next.currentBeatLabel) : null;
+    if ((next.pendingReveals?.length ?? 0) > 0) {
+        log(`Beat advanced with ${next.pendingReveals.length} pending reveal(s) still queued.`, 'info');
+    }
     return { state: next, changed: true, advancedAct: false };
 }
 
@@ -171,14 +193,32 @@ export async function applyTagsToState(tags) {
 
 export function canRevertLastAdvance() {
     const state = ensureStoryStateShape(readStoryState());
-    return (state.resolvedBeatLabels?.length ?? 0) > 0 || (state.completedActs?.length ?? 0) > 0;
+    return (state.resolvedBeatLabels?.length ?? 0) > 0
+        || (state.completedActs?.length ?? 0) > 0
+        || !!state._lastAdvanceDrainedReveal;
 }
 
 export async function revertLastBeatAdvance() {
     const state = ensureStoryStateShape(readStoryState());
-    if ((state.resolvedBeatLabels?.length ?? 0) === 0 && (state.completedActs?.length ?? 0) === 0) {
+    if ((state.resolvedBeatLabels?.length ?? 0) === 0
+        && (state.completedActs?.length ?? 0) === 0
+        && !state._lastAdvanceDrainedReveal) {
         log('Move plot back ignored — no advances to revert.', 'info');
         return false;
+    }
+
+    // Case 0: last action was draining a pending reveal — push it back to the front.
+    if (state._lastAdvanceDrainedReveal) {
+        const next = {
+            ...state,
+            pendingReveals: [state._lastAdvanceDrainedReveal, ...(state.pendingReveals ?? [])],
+            _lastAdvanceDrainedReveal: null,
+            _lastAdvanceQueuedLabels: [],
+        };
+        await writeStoryState(next);
+        await renderAuthorsNoteFromState({ preserveSummaries: true });
+        log(`Reverted pending-reveal drain: ${state._lastAdvanceDrainedReveal.label} restored to queue.`, 'info');
+        return true;
     }
 
     // Case A: most recent advance was an act-advance (currentBeatLabel is the
@@ -237,11 +277,20 @@ export async function revertLastBeatAdvance() {
         return false;
     }
 
+    // Drop any pending reveals that were queued during the advance we're undoing.
+    const queuedLabels = new Set(state._lastAdvanceQueuedLabels ?? []);
+    const restoredPending = queuedLabels.size > 0
+        ? (state.pendingReveals ?? []).filter((r) => !queuedLabels.has(r.label))
+        : (state.pendingReveals ?? []);
+
     const next = {
         ...state,
         resolvedBeatLabels: state.resolvedBeatLabels.slice(0, -1),
         currentBeatLabel: lastResolved,
         nextBeatLabel: beatLabels[lastResolvedIdx + 1] ?? null,
+        pendingReveals: restoredPending,
+        _lastAdvanceQueuedLabels: [],
+        _lastAdvanceDrainedReveal: null,
     };
     await writeStoryState(next);
     await renderAuthorsNoteFromState({ preserveSummaries: true });
@@ -270,6 +319,23 @@ export async function moveBeatForwardManually() {
     const state = ensureStoryStateShape(readStoryState());
     if (!state.currentBeatLabel) {
         await ensureStoryStateInitialized();
+        return;
+    }
+    if ((state.pendingReveals?.length ?? 0) > 0) {
+        const [drained, ...rest] = state.pendingReveals;
+        const next = {
+            ...state,
+            pendingReveals: rest,
+            _lastAdvanceQueuedLabels: [],
+            _lastAdvanceDrainedReveal: drained,
+        };
+        await writeStoryState(next);
+        try {
+            await renderAuthorsNoteFromState({ preserveSummaries: true });
+        } catch (error) {
+            log(`renderAuthorsNoteFromState threw: ${error.message}`, 'warn');
+        }
+        log(`Drained pending reveal: ${drained.label}.`, 'info');
         return;
     }
     await applyTagsToState([{ kind: 'beat', key: state.currentBeatLabel, value: 'resolved', raw: '' }]);

@@ -161,6 +161,7 @@ function defaultStoryState() {
         resolvedBeatLabels: [],
         completedActs: [],
         discoveredClues: [],
+        pendingReveals: [],
     };
 }
 

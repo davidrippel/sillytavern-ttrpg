@@ -23,6 +23,7 @@ export const AUTHORS_NOTE_SECTIONS = Object.freeze([
     'Current Act',
     'Current beat',
     'Next beat',
+    'Pending reveals',
     'Discovered clues',
     'Available clues',
     'Active threads',

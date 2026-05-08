@@ -232,6 +232,11 @@ export async function renderAuthorsNoteFromState({ preserveSummaries = true } = 
     sections['Current beat'] = act && state.currentBeatLabel ? formatBeatBullet(act, state.currentBeatLabel) : '(none)';
     sections['Next beat'] = act && state.nextBeatLabel ? formatBeatBullet(act, state.nextBeatLabel) : '(none)';
 
+    const pending = state.pendingReveals ?? [];
+    sections['Pending reveals'] = pending.length
+        ? pending.map((r) => `- ${r.label}: ${r.text}`).join('\n')
+        : '(none)';
+
     const discoveredBullets = (state.discoveredClues ?? []).map((id) => `- ${id}`);
     sections['Discovered clues'] = discoveredBullets.length ? discoveredBullets.join('\n') : '(none)';
 
