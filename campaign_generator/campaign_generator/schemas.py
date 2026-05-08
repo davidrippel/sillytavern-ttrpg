@@ -133,6 +133,7 @@ class FactionSet(BaseModel):
 class NPCRelationship(BaseModel):
     name: str
     description: str = Field(max_length=160)
+    known_at_start: bool = True
 
 
 class NPC(BaseModel):

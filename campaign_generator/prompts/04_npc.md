@@ -13,6 +13,7 @@ Requirements:
 - when the chosen name appears in `outstanding_required_cast_briefs`, fit the NPC to that brief: their `archetype` (e.g. "young female confidant") sets gender presentation, age band, and social position; their `narrative_role` sets motivation and the part they play in the plot. Do not generate a generic NPC and ignore the brief — the plot was written assuming this archetype exists in the roster.
 - in relationships, use only `{{user}}` or names that belong to the campaign's NPC roster
 - whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name
+- for any relationship whose `name` is `{{user}}`, set `known_at_start` to `true` only if the PC already knows this NPC when the campaign opens (a parent, an old friend, a current employer, the person standing next to them in the opening scene). Set `known_at_start` to `false` for bonds that will form during play — the rival the PC has not yet crossed, the future ally introduced in act 2, the romance that hasn't started. For relationships between two NPCs (neither side is `{{user}}`), leave `known_at_start` at its default of `true`.
 
 Naming diversity:
 - `diversity_seed.cultural_register` (and `secondary_register`, when present) hints the linguistic flavor for this campaign's roster — draw given names and surnames primarily from that register, with a minority from the secondary register so the city feels mixed rather than monolithic

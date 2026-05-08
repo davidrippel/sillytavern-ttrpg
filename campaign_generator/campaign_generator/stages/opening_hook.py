@@ -57,7 +57,7 @@ def _collect_pc_prior_knowledge(
     if npcs is not None:
         for npc in npcs.npcs:
             for relation in npc.relationships:
-                if _is_user_alias(relation.name):
+                if _is_user_alias(relation.name) and relation.known_at_start:
                     known_npcs.append(
                         {
                             "name": npc.name,
