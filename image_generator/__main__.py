@@ -44,6 +44,11 @@ def main(
         "--only",
         help="Comma-separated NPC names to render (default: all NPCs in stages/npcs.json).",
     ),
+    prompts_only: bool = typer.Option(
+        False,
+        "--prompts-only",
+        help="Resolve and record image prompts in index.json without calling the image API.",
+    ),
 ) -> None:
     only_list = [name.strip() for name in only.split(",")] if only else None
     images_dir = render_campaign(
@@ -52,9 +57,13 @@ def main(
         style_override=style_override,
         overwrite=overwrite,
         only=only_list,
+        prompts_only=prompts_only,
         progress_callback=_progress,
     )
-    console.print(f"Portraits written under {images_dir}")
+    if prompts_only:
+        console.print(f"Prompts written to {images_dir / 'index.json'}")
+    else:
+        console.print(f"Portraits written under {images_dir}")
 
 
 if __name__ == "__main__":

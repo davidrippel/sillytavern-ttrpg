@@ -102,6 +102,7 @@ def render_campaign(
     style_override: str | None = None,
     overwrite: bool = False,
     only: Iterable[str] | None = None,
+    prompts_only: bool = False,
     progress_callback: ProgressCallback | None = None,
     client: OpenRouterImageClient | None = None,
 ) -> Path:
@@ -127,12 +128,15 @@ def render_campaign(
         except json.JSONDecodeError:
             manifest = {}
 
-    image_client = client or OpenRouterImageClient()
+    image_client = None if prompts_only else (client or OpenRouterImageClient())
 
     if progress_callback is not None:
-        progress_callback(
-            f"Rendering portraits for {len(npcs)} NPC(s) at {width}x{height} with {resolved_model}"
-        )
+        if prompts_only:
+            progress_callback(f"Resolving prompts for {len(npcs)} NPC(s) (no images)")
+        else:
+            progress_callback(
+                f"Rendering portraits for {len(npcs)} NPC(s) at {width}x{height} with {resolved_model}"
+            )
 
     used_slugs: set[str] = set()
     for npc in npcs:
@@ -152,6 +156,21 @@ def render_campaign(
             if progress_callback is not None:
                 progress_callback(f"Skipped {name}: no image_generation_prompt (re-run --stages npcs to populate)")
             continue
+
+        if prompts_only:
+            manifest[name] = {
+                "file": out_path.name,
+                "prompt": effective_prompt,
+                "model": resolved_model,
+                "width": width,
+                "height": height,
+            }
+            with manifest_path.open("w", encoding="utf-8") as handle:
+                json.dump(manifest, handle, indent=2, ensure_ascii=False)
+            if progress_callback is not None:
+                progress_callback(f"Recorded prompt for {name}")
+            continue
+
         if out_path.exists() and not overwrite:
             if progress_callback is not None:
                 progress_callback(f"Skipped {name}: {out_path.name} already exists (use --overwrite to regenerate)")
