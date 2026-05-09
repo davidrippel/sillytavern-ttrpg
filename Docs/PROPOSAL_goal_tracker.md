@@ -1,118 +1,151 @@
-# PROPOSAL: Goal/clue tracker (replacing or augmenting beats)
+# PROPOSAL: Node-based scenario design (replacing beats)
 
-**Status:** design proposal — not a plan of record. Decision deferred until after the prompt-and-pending-reveals pass is validated by another pilot.
+**Status:** design proposal — not a plan of record. Awaiting validation that the latest prompt patch hasn't already fixed the symptoms enough to defer this.
 
-## Problem
+## Why we're here
 
-Beats are linear and scripted. They encode *plot* (the sequence of authored scenes) rather than *progress* (what the player has learned, what NPCs are doing, what's still owed). In the pilot:
+Two pilots in, the same failure mode keeps reappearing: the LLM treats the beat list as a story to be told. It pushes toward the Current beat even when the player is roleplaying a moment. It closes scenes the player is still living in. It writes long because long is what novels do.
 
-- The GM treated the beat list as a story to be told. Player movement between beats was scripted by the GM rather than earned by play.
-- The clue graph already exists (`solo-ttrpg-assistant/modules/clue_chains.js`) but was never used. Clues weren't surfaced because the GM didn't need them — the next beat already told the GM where to go.
-- "Beat skipping" is a symptom. The deeper issue is that beats are the wrong primitive for solo play, where the player should be discovering, not following.
+Prompt tweaks help at the margin. They don't fix the cause. As long as the AN says `Current beat: X / Next beat: Y`, the LLM has a salient nearby goal in its context window, and it will gravitate toward that goal. This is structural, not stylistic — you can't out-prompt gradient descent's preference for the most-rewarding nearby attractor.
 
-The pending-reveals fix patches the symptom. This proposal addresses the cause.
+The fix is the one Justin Alexander has been writing about for fifteen years: **don't prep plots, prep situations.**
 
-## Proposed model
+Three of his pieces are the canon for this proposal:
+- *Don't Prep Plots* — situations are circumstances; plots are sequences. Sequences create chokepoints. Situations don't.
+- *The Three Clue Rule* — for any conclusion the player needs to reach, author at least three independent clues. Players miss the first, ignore the second, misread the third.
+- *Node-Based Scenario Design* — replace the linear plot with a graph of nodes (locations, scenes, events, NPC encounters), connected by clues. Players move through the graph; they don't follow a path.
 
-### Goals (replace beats)
+## The model
 
-Goals are an **unordered** list of "things the player needs to learn or accomplish" for the current act/campaign to complete. Each goal:
+### Nodes (replace beats)
 
-- `id` (stable, e.g. `learn_killer_identity`)
-- `description` (what counts as completion, in prose)
-- `clues: [<clue_id>, ...]` — clues that lead toward this goal
-- Optional `gating: [<goal_id>, ...]` — prerequisite goals; gated goals are hidden until prerequisites complete
+A **node** is a discrete situation: a location to investigate, an NPC to confront, an event that fires when conditions are met. Nodes are unordered — the player chooses which to engage when their clues point there.
 
-Stored as new lorebook entries: `Goal: <id>`, parallel to the existing `Clue: <id>` convention parsed by [clue_chains.js](../solo-ttrpg-assistant/modules/clue_chains.js).
+Each node has:
+- `id` (stable, e.g. `the_apartment`, `meet_rita`, `polaroid_burns`)
+- `kind`: `location` | `npc_encounter` | `event`
+- `description` (what's there, what happens if engaged, in prose)
+- `entry_clues: [<clue_id>, ...]` — clues that, when discovered, point the player here
+- `exit_clues: [<clue_id>, ...]` — clues this node provides on engagement (these point to other nodes)
+- `gating: [<node_id>, ...]` — optional prerequisites; node is hidden until prereqs visited
+- `triggers` — for `event` kind, conditions that fire it (turn count, NPC state, location reached)
 
-Story state tracks `completedGoalIds: []` and (optionally) `goalProgressNotes: { [goal_id]: text }` for partial-progress notes the GM accumulates.
+Stored as new lorebook entries: `Node: <id>`, parallel to the existing `Clue: <id>` convention.
 
-### NPC agendas (dynamic, in story state)
+**Three-clue rule, hybrid enforcement:**
+- **Authoring time:** the campaign generator targets ≥3 entry clues per node. The generator validates and warns when it can't.
+- **Runtime:** the GM prompt allows the GM to *recombine* and *re-surface* existing clues if the player is stuck — but never to invent new canonical entities. "Reuse existing clues from new angles" rather than "invent new ones." This preserves the canon-strict rule while giving the GM safety margin.
 
-NPC lorebook entries declare *initial* agenda + scripted moves (authored by the campaign generator). Story state tracks *what's happened*. New `storyState.npcs` field, shaped per-NPC:
+### Clue graph (extend, don't replace)
+
+The existing [clue_chains.js](../solo-ttrpg-assistant/modules/clue_chains.js) graph already supports `pointsTo`. Extend each clue with `pointsToNodes: [<node_id>, ...]` so a clue can point to one or more nodes (the inversion of the three-clue rule: many clues per conclusion).
+
+`reachableClues()` already walks from discovered clues; extend it to also compute `reachableNodes` from discovered clues' `pointsToNodes`.
+
+### NPC agendas (dynamic)
+
+NPC lorebook entries declare initial agenda + scripted moves. Story state tracks what's happened:
 
 ```js
-{
-  npc_id: {
-    attitude: 'wary' | 'friendly' | 'hostile' | ...,   // current relational stance
-    currentAction: 'searching the apartment' | null,    // what they're doing offscreen
-    secrets_revealed: ['secret_id', ...],               // for spoiler tracking
-    last_seen_turn: 42,                                 // freshness
+storyState.npcs = {
+  [npc_id]: {
+    attitude: 'wary' | 'friendly' | 'hostile' | ...,
+    currentAction: 'searching the apartment' | null,
+    secrets_revealed: ['secret_id', ...],
+    last_seen_turn: 42,
   }
 }
 ```
 
-Mutated via a new closure tag: `<<npc:NPC_ID:state:KEY=VALUE>>`. Multiple keys per tag: `<<npc:rita:state:attitude=hostile,currentAction=fled>>`. Parsed alongside the existing `beat`/`clue`/`act` tags in [closure_tags.js](../solo-ttrpg-assistant/modules/closure_tags.js) (regex extension at line 16).
+Mutated via `<<npc:NPC_ID:state:KEY=VALUE>>`. NPCs pursue their wants between scenes — when an NPC's `last_seen_turn` is stale, the GM is prompted to advance their agenda.
 
-The AN renders an "On-screen NPCs" section listing each NPC whose lorebook entry has fired in the last N turns, with their current attitude and last action.
+### Story state shape (additions)
+
+```js
+{
+  // existing fields stay
+  visitedNodes: [],          // ordered, for AN "Recently visited"
+  completedNodes: [],        // node has been fully resolved
+  npcs: { ... },             // see above
+  // beats / pendingReveals can stay during transition; new campaigns won't use them
+}
+```
 
 ### Author's Note restructure
 
-Replace:
-- ~~Current beat~~
-- ~~Next beat~~
-- ~~Pending reveals~~
+Drop:
+- `Current beat`, `Next beat`, `Pending reveals`
 
-With:
-- **Active goals** — open goals (those not in `completedGoalIds` and not gated out), formatted as `- <id>: <description>`
-- **Recently completed goals** — last 3, for context
-- **On-screen NPCs** — currently-fired NPCs with attitude + last action
-- (keep) Discovered clues / Available clues / Active threads / Recent beats / Reminders
+Add:
+- **Reachable nodes** — nodes whose entry clues the player has discovered, ungated, unresolved. Format: `- <id>: <one-line description>`.
+- **Recently visited** — last 3 nodes, for context.
+- **On-screen NPCs** — NPCs whose lorebook entry has fired in last N turns, with attitude + last action.
 
-Constants: rewrite [AUTHORS_NOTE_SECTIONS](../solo-ttrpg-assistant/modules/constants.js) accordingly.
+Keep:
+- `Discovered clues`, `Available clues` (Available now ranks clues that point to reachable nodes higher), `Active threads`, `Recent beats` (rename to `Recent scenes`?), `Reminders`.
 
 ### GM prompt restructure
 
 Remove from [07_GM_BASE_PROMPT.md](07_GM_BASE_PROMPT.md):
-- "Run the authored adventure; don't improvise the overall story" (line 13–14) — soften
-- "Current act (constant lorebook entry) — full beat list; drive toward them" (line 27)
-- The entire **Closure protocol** beat-resolution test (lines 132–159) — replaced
-- Pending reveals language (no longer needed)
+- "Run the authored adventure; don't improvise the overall story" — soften: "Run the authored situation; the story emerges from play."
+- Sources of truth #3: "Current act (constant lorebook entry) — full beat list; drive toward them" — replace with "Current act — premise and stakes only; no scene sequence."
+- The Current beat / Next beat AN entries from sources of truth #5.
+- The entire Closure protocol's beat-resolution test — replaced by a node-resolution test.
+- "Pending reveals" language.
 
-Replace with:
-- Active goals are destinations, not scenes. Don't narrate goal completion as a scripted event; let the player *earn* it through clue-following and NPC interaction.
-- Surface a clue from Available clues when the fiction earns it — a search succeeds, an NPC slips up, a location yields evidence. Tag with `<<clue:found:ID>>`.
-- A goal completes when the player has learned/done what its description requires. Tag with `<<goal:ID:complete>>`. Same resolution test (a/b/c/d) applies — the player must have actually contributed.
-- NPCs pursue their agendas between scenes. When an NPC takes a meaningful action (changes attitude, moves location, acts on their want), update with `<<npc:ID:state:KEY=VALUE>>`.
+Add:
+- **The GM has no destination.** Reachable nodes are *available*, not *next*. The player chooses by acting on a clue, asking an NPC, going somewhere. Don't steer.
+- **NPCs pursue their wants.** When the AN flags an NPC's last_seen_turn as stale, advance that NPC's agenda offscreen — they take an action, learn something, change attitude. Surface the consequences when the player reconnects.
+- **Surface clues earned, not scheduled.** When the fiction earns it (search succeeds, NPC slips up, location yields evidence), tag `<<clue:found:ID>>`. The Three Clue Rule means it's fine to surface a clue the player wasn't actively looking for, if their action plausibly would have produced it.
+- **Recombine, don't invent.** If the player is stuck and Available clues feels exhausted, re-surface a clue from a new angle — a different NPC mentions it, a re-examined location reveals more. Never invent a new named NPC, location, or clue.
 
 ### New closure tags
 
 ```
-<<goal:ID:complete>>            // a goal was achieved this turn
+<<node:ID:visited>>             // player engaged with this node
+<<node:ID:complete>>            // node is fully resolved
 <<npc:ID:state:KEY=VALUE,...>>  // NPC state changed
 ```
 
-Existing `<<clue:found:ID>>` keeps working unchanged.
+`<<clue:found:ID>>` keeps working unchanged. `<<beat:...>>` and `<<act:...>>` deprecated for new campaigns; legacy code path retained for existing campaigns.
 
 ## Files affected
 
 | File | Change |
 | --- | --- |
-| [solo-ttrpg-assistant/modules/plot_skeleton.js](../solo-ttrpg-assistant/modules/plot_skeleton.js) | Augment with goal-loading; or replace if beats are dropped entirely |
-| [solo-ttrpg-assistant/modules/clue_chains.js](../solo-ttrpg-assistant/modules/clue_chains.js) | Add goal-aware clue ranking (clues pointing to active goals rank higher in Available clues) |
-| [solo-ttrpg-assistant/modules/closure_tags.js](../solo-ttrpg-assistant/modules/closure_tags.js) | Extend regex; add `applyGoalComplete`, `applyNpcState` handlers |
-| [solo-ttrpg-assistant/modules/authors_note.js](../solo-ttrpg-assistant/modules/authors_note.js) | New section renderers (Active goals, On-screen NPCs); drop beat sections |
-| [solo-ttrpg-assistant/modules/constants.js](../solo-ttrpg-assistant/modules/constants.js) | Rewrite `AUTHORS_NOTE_SECTIONS` |
-| [solo-ttrpg-assistant/modules/util.js](../solo-ttrpg-assistant/modules/util.js) | Story state shape: add `completedGoalIds`, `goalProgressNotes`, `npcs`; bump `STORY_STATE_SCHEMA_VERSION` |
-| [Docs/07_GM_BASE_PROMPT.md](07_GM_BASE_PROMPT.md) | Rewrite sources-of-truth, closure protocol, scene structure |
-| `genres/*/...` campaign generator | Emit `Goal: <id>` lorebook entries; emit NPC entries with explicit initial agenda fields |
+| [solo-ttrpg-assistant/modules/plot_skeleton.js](../solo-ttrpg-assistant/modules/plot_skeleton.js) | Add node-loading parser; legacy beat code path stays for backward compat |
+| `solo-ttrpg-assistant/modules/nodes.js` (new) | Parse `Node: <id>` entries; compute reachable nodes from discovered clues; mark visited/complete |
+| [solo-ttrpg-assistant/modules/clue_chains.js](../solo-ttrpg-assistant/modules/clue_chains.js) | Add `pointsToNodes`; extend `reachableClues` to expose node mapping |
+| [solo-ttrpg-assistant/modules/closure_tags.js](../solo-ttrpg-assistant/modules/closure_tags.js) | Add `node:visited`, `node:complete`, `npc:state` handlers; deprecate `beat:` for new campaigns |
+| [solo-ttrpg-assistant/modules/authors_note.js](../solo-ttrpg-assistant/modules/authors_note.js) | New section renderers: Reachable nodes, Recently visited, On-screen NPCs |
+| [solo-ttrpg-assistant/modules/constants.js](../solo-ttrpg-assistant/modules/constants.js) | Rewrite `AUTHORS_NOTE_SECTIONS` for node-mode |
+| [solo-ttrpg-assistant/modules/util.js](../solo-ttrpg-assistant/modules/util.js) | Story state: add `visitedNodes`, `completedNodes`, `npcs`; bump `STORY_STATE_SCHEMA_VERSION` |
+| [Docs/07_GM_BASE_PROMPT.md](07_GM_BASE_PROMPT.md) | Rewrite sources-of-truth, closure protocol, scene structure, pacing |
+| `genres/*/...` campaign generator | Emit `Node: <id>` lorebook entries; enforce ≥3 entry-clues per node; emit NPC entries with explicit agenda fields |
 
 ## Open questions
 
-1. **Failure-to-progress.** With no "current beat," there's no built-in pressure mechanism. If the player wanders for 20 turns, what escalates? Options: (a) GM-judged escalation per overlay, (b) a global "act timer" that ticks and triggers authored escalations, (c) NPC agendas naturally producing escalation (each NPC has a scheduled move that fires after N turns of no interaction). Lean toward (c) but it requires authoring discipline.
+1. **Mode flag.** New campaigns use node-mode; existing campaigns keep beat-mode. Set via a constant lorebook entry (e.g. `__campaign_mode: nodes` vs. `beats`)? Or detect by presence of `Node:` entries vs. `Act N:` entries? Probably the latter — implicit, no manual flagging needed.
 
-2. **GM escalation cues.** Should the AN include a "pressure" section listing NPCs whose `last_seen_turn` is stale (i.e. they've had time to act offscreen)? This would prompt the GM to advance NPC agendas without explicit player triggers.
+2. **Pressure / failure-to-progress.** With no Current beat, no built-in tempo. Three options stack-ranked:
+   - (a) NPC agendas as the pressure mechanism — each NPC has a `staleness_threshold` after which the GM advances their agenda offscreen.
+   - (b) An optional `Tick: <turn_count>` event-node kind that fires regardless of player position.
+   - (c) Overlay-defined "if no clue surfaced for N turns, GM may surface a recombined clue."
+   Lean toward (a) + (c). Skip (b) unless playtests show wandering.
 
-3. **NPC tick mechanism.** Is NPC state purely event-driven (changes only when GM emits a tag), or does some background tick advance things? Event-driven is simpler and more predictable; tick-based handles "the killer is hunting you" pressure better. Probably event-driven, with overlay-defined "if NPC X hasn't been seen in N turns, they take action Y" rules.
+3. **Node-resolution test.** What does "complete" mean for a location node vs. an NPC encounter vs. an event? Probably node-kind-specific:
+   - `location`: player has investigated and exit_clues have surfaced
+   - `npc_encounter`: player has interacted and something changed (attitude, secret revealed, decision made)
+   - `event`: player has experienced the consequence
 
-4. **Migration.** Out of scope per user direction — new campaigns only. Existing beat-based campaigns continue using the current code path. The two systems can coexist by adding a campaign-level mode flag in the lorebook (e.g. a constant entry `__campaign_mode: goals` or `beats`).
+4. **Migration.** Out of scope. New campaigns only. Beat-based campaigns continue using existing code path. The runtime branches on detected campaign mode.
 
-5. **Closure-tag resolution test for goals.** The (a/b/c/d) test was tied to a single beat's central physical event. Goals are fuzzier ("learn the killer's identity" is a state, not an event). Need a goal-shaped resolution test — probably "the player has been told or has deduced it on-screen, with evidence in chat history."
+5. **Generator-side three-clue enforcement.** What does the genre generator do when it can't find 3 plausible clue placements for a node? Options: warn and accept fewer; auto-generate filler clues from a template; mark the node as "underspecified" and skip it. Lean toward warn-and-accept with a flag in the lorebook so the runtime knows where to expect player to get stuck.
 
-6. **Multiple acts.** Do goals span the campaign, or per-act? If per-act, we need act transitions; if campaign-wide, acts may dissolve as a concept. Probably per-act, with a campaign-level "victory condition" goal that gates the ending.
+6. **Acts.** Do nodes span the campaign or per-act? Per-act with a campaign-level victory condition (a special node that gates the ending) is probably right. Acts dissolve into "node clusters with a gating boundary."
 
 ## Decision log
 
-- 2026-05-08: NPC agendas chosen as **dynamic, story-state-tracked** (not authored-only). User preference.
-- 2026-05-08: No migration of existing beat-based campaigns. New mode applies to new campaigns only.
-- 2026-05-08: Validate prompt + pending-reveals fix in another pilot before committing to this rewrite.
+- 2026-05-08: Initial proposal — goals as primitives, dynamic NPC agendas.
+- 2026-05-09: Reframed around the Alexandrian's node-based design after a second pilot showed prompt-only fixes don't address beat-drive. Three-clue rule chosen as hybrid (generator-targeted + runtime-recombination, no canon-invention).
+- 2026-05-09: Node detection over explicit mode flag for backward compat.
