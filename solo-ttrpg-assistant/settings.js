@@ -4,8 +4,13 @@ import {
     moveBeatForwardManually,
     resetCampaignState,
     revertLastBeatAdvance,
+    revertLastStateChange,
     canRevertLastAdvance,
+    applyTagsToState,
 } from './modules/closure_tags.js';
+import { isCampaignNodeMode, loadAllNodes, reachableNodes } from './modules/nodes.js';
+import { loadAllClues } from './modules/clue_chains.js';
+import { readStoryState, ensureStoryStateShape } from './modules/util.js';
 import {
     convertCharacterMode,
     createCharacter,
@@ -969,6 +974,11 @@ export async function mountSettingsPanel() {
 
     async function handleMovePlotForward() {
         try {
+            if (await isCampaignNodeMode()) {
+                await openNodePickerPopup();
+                await refreshStoryStatusRow();
+                return;
+            }
             await moveBeatForwardManually();
             toastr.info('Plot nudged forward.', 'Solo TTRPG Assistant', { timeOut: 2000 });
             await refreshStoryStatusRow();
@@ -980,9 +990,10 @@ export async function mountSettingsPanel() {
 
     async function handleMovePlotBack() {
         try {
-            const ok = await revertLastBeatAdvance();
+            const inNodeMode = await isCampaignNodeMode();
+            const ok = inNodeMode ? await revertLastStateChange() : await revertLastBeatAdvance();
             if (ok) {
-                toastr.info('Plot stepped back.', 'Solo TTRPG Assistant', { timeOut: 2000 });
+                toastr.info(inNodeMode ? 'Last state change undone.' : 'Plot stepped back.', 'Solo TTRPG Assistant', { timeOut: 2000 });
                 await refreshStoryStatusRow();
             } else {
                 toastr.warning('Nothing to revert.', 'Solo TTRPG Assistant', { timeOut: 2000 });
@@ -992,6 +1003,56 @@ export async function mountSettingsPanel() {
         }
     }
     $(settingsRoot).find('#solo-move-plot-back, #solo-play-move-plot-back').on('click', handleMovePlotBack);
+
+    async function openNodePickerPopup() {
+        const [nodes, clues] = await Promise.all([loadAllNodes(), loadAllClues()]);
+        const state = ensureStoryStateShape(readStoryState());
+        const reachable = reachableNodes(nodes, clues, state, { maxResults: 50 });
+
+        const wrapper = document.createElement('div');
+        wrapper.style.minWidth = '280px';
+
+        const heading = document.createElement('div');
+        heading.textContent = 'Mark a node visited (correction tool — use only when the GM forgot to emit <<node:ID:visited>>)';
+        heading.style.marginBottom = '8px';
+        heading.style.fontSize = '0.9em';
+        heading.style.opacity = '0.85';
+        wrapper.append(heading);
+
+        if (reachable.length === 0) {
+            const empty = document.createElement('div');
+            empty.textContent = 'No reachable nodes. Discover a clue first or check that the campaign has Node entries.';
+            empty.style.padding = '8px 0';
+            wrapper.append(empty);
+            const popup = new context.Popup(wrapper, context.POPUP_TYPE.TEXT, '', { okButton: 'Close' });
+            await popup.show();
+            return;
+        }
+
+        const select = document.createElement('select');
+        select.className = 'text_pole wide100p';
+        for (const n of reachable) {
+            const opt = document.createElement('option');
+            opt.value = n.id;
+            const desc = n.description ? ` — ${n.description.slice(0, 80)}` : '';
+            const flag = n.visited ? ' (already visited)' : '';
+            opt.textContent = `${n.id} [${n.kind}]${flag}${desc}`;
+            select.append(opt);
+        }
+        wrapper.append(select);
+
+        const popup = new context.Popup(wrapper, context.POPUP_TYPE.CONFIRM, '', {
+            okButton: 'Mark visited',
+            cancelButton: 'Cancel',
+        });
+        const result = await popup.show();
+        if (result !== context.POPUP_RESULT.AFFIRMATIVE) return;
+
+        const chosen = select.value;
+        if (!chosen) return;
+        await applyTagsToState([{ kind: 'node', key: chosen, value: 'visited', raw: '' }]);
+        toastr.info(`Marked node "${chosen}" visited.`, 'Solo TTRPG Assistant', { timeOut: 2000 });
+    }
 
     async function handleResetCampaign() {
         try {
@@ -1020,10 +1081,17 @@ export async function mountSettingsPanel() {
     $(settingsRoot).find('#solo-reset-campaign, #solo-play-reset-campaign').on('click', handleResetCampaign);
 
     async function refreshStoryStatusRow() {
-        const status = await getStoryStatusForUi();
-        const text = status
-            ? `Act ${status.actNumber} — beat ${status.currentBeatLabel}`
-            : '';
+        let text = '';
+        if (await isCampaignNodeMode()) {
+            const state = ensureStoryStateShape(readStoryState());
+            const visited = state.visitedNodes?.length ?? 0;
+            const completed = state.completedNodes?.length ?? 0;
+            const npcCount = Object.keys(state.npcs ?? {}).length;
+            text = `Nodes visited ${visited} / completed ${completed} · NPCs tracked ${npcCount}`;
+        } else {
+            const status = await getStoryStatusForUi();
+            text = status ? `Act ${status.actNumber} — beat ${status.currentBeatLabel}` : '';
+        }
         $(settingsRoot).find('#solo-story-status, #solo-play-story-status').text(text);
         const canRevert = canRevertLastAdvance();
         $(settingsRoot).find('#solo-move-plot-back, #solo-play-move-plot-back').prop('disabled', !canRevert);
