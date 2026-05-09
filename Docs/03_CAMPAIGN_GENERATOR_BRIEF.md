@@ -43,6 +43,7 @@ The user is expected to run this blind: they read only `opening_hook.txt` and `i
   - `CAMPAIGN_GENERATOR_GENRES_BASE_DIR`
   - `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR`
   - `CG_LLM_CLUE_GRAPH` — when set to `1` (default `0`), opt back into the legacy behaviour where the LLM tries to author the entire clue graph in one call. Default flow generates a deterministic skeleton and uses the LLM only to enrich each clue's prose.
+  - `CG_NODE_MODE` — when set to `1` (default `0`), emit a **node-mode** campaign (Alexandrian node-based scenario design) instead of a beat-mode campaign. Adds a `nodes` stage that produces one node per beat plus a campaign-level victory node, re-anchors clues to point at nodes, and emits `Node: <id>` lorebook entries. The runtime detects mode by presence of `Node:` entries — no explicit flag in the lorebook itself. See `PROPOSAL_goal_tracker.md` for design rationale.
   - `IMAGE_GEN_MODEL`, `IMAGE_GEN_DIMENSION`, `IMAGE_GEN_ASPECT_RATIO`, `IMAGE_GEN_STYLE_OVERRIDE` — used by the sibling `image_generator` tool when rendering NPC portraits (also reachable via `--with-images`). `IMAGE_GEN_MODEL` is required when rendering and has no fallback. `IMAGE_GEN_STYLE_OVERRIDE` is optional and exists mainly to re-render an existing campaign in one consistent style without regenerating the pipeline output.
 
 Web search during development to confirm: current OpenRouter API shape, current SillyTavern lorebook JSON schema, current model slug for `anthropic/claude-sonnet-4.5`.
@@ -283,6 +284,24 @@ Implementation details that are part of the contract:
 - The deterministic skeleton is built from `_build_hybrid_fallback_clue_graph` — the same routine that previously served as a fallback, now the primary path.
 - Prose-enrichment failures are tolerated and logged; structural failures are bugs and raise.
 
+### 6.5. `nodes` (node-mode only)
+
+Runs only when `CG_NODE_MODE=1`. Skipped entirely in beat-mode.
+
+Input: validated plot skeleton, validated clue graph.
+
+Output: a `NodeGraph` plus an updated `ClueGraph` whose clues' `points_to` lists now reference the synthesized nodes instead of beats.
+
+Deterministic algorithm (no LLM call in the current implementation):
+
+- For each beat across all acts, emit one `Node` with id derived from a snake-case slug of the beat text. Kind is heuristically classified from the beat text: `npc_encounter` (verbs like "meets", "questions", "confronts"), `event` ("ambush", "fire breaks", "ritual"), or `location` (default).
+- For the final act, append one campaign-level `Node` with `is_victory=true`, `kind=event`, gating on every other final-act node, and a triggers field describing when it fires.
+- Wire each existing beat-anchored clue to the corresponding node: append `node:<id>` to the clue's `points_to`, drop the legacy `beat:<id>` targets, mirror the node id on the clue's `points_to_nodes` array, and append the clue id to the node's `entry_clues`.
+
+Three-clue rule enforcement is **warn-and-accept**: a node with fewer than three entry clues is marked `underspecified=true` and surfaced via a warning to the validation log and the progress callback. The runtime renders `[underspecified]` next to such nodes in the AN so the GM knows the player may need recombined clues to find them.
+
+Known limitation: the deterministic clue skeleton produces 2 clues per beat, so every node ends up flagged underspecified by default. To get genuine 3+ clues per node, run `CG_NODE_MODE=1` together with `CG_LLM_CLUE_GRAPH=1`, or extend the nodes stage with an LLM-driven enrichment pass (future work).
+
 ### 7. `branches`
 
 Input: all prior.
@@ -301,9 +320,11 @@ Current implementation constraints:
 
 ### 8. `initial_authors_note`
 
-Input: plot skeleton, opening hook content.
+Input: plot skeleton, opening hook content (and node graph in node-mode).
 
-Output: the Author's Note text for Act 1 state. Sections:
+Output: the Author's Note text for Act 1 state. The section list depends on the campaign mode.
+
+**Beat-mode** sections:
 - Current Act: `Act 1: [title]`
 - Current beat: rendered text of beat `1.1`
 - Next beat: rendered text of beat `1.2` (or empty if act has only one beat)
@@ -317,6 +338,19 @@ The extension advances Current beat / Next beat at runtime by parsing
 GM-emitted closure tags (`<<beat:LABEL:resolved>>`). The 2-beat window
 is the spoiler-isolation mechanism — the GM never sees beats further
 ahead than Next beat.
+
+**Node-mode** sections (emitted when `CG_NODE_MODE=1`):
+- Current Act: `Act 1: [title]`
+- Reachable nodes: bullet list of Act 1 non-victory nodes (initial set; re-computed at runtime as clues are discovered)
+- Recently visited: `(none)` at start
+- On-screen NPCs: `(none)` at start; populated at runtime as NPCs appear in scenes
+- Discovered clues: `(none)` at start
+- Available clues: `(none)` at start; populated at runtime, ranked higher when clues point into reachable nodes
+- Active threads: 2-3 initial hooks
+- Recent scenes: `(empty at start)` — renamed from "Recent beats" because beats no longer exist as discrete units in node-mode
+- Reminders: anything the GM must not forget from the opening situation
+
+In node-mode the extension does NOT advance a destination — Reachable nodes is a *menu* the player picks from by acting on clues, asking NPCs, going somewhere. Closure tags `<<node:ID:visited>>`, `<<node:ID:complete>>`, `<<npc:ID:state:KEY=VALUE,...>>`, and `<<clue:found:ID>>` mutate state; reachability is recomputed every turn from discovered clues.
 
 This becomes `initial_authors_note.txt` in the output.
 

@@ -14,7 +14,7 @@ Core modules:
 
 - Character sheet (pack-aware, structured, always in context)
 - Dice rolling integrated with the 2d6+attribute resolution system
-- Author's Note management (recent beats, active threads, act transitions)
+- Author's Note management (recent beats / scenes, active threads, act transitions; mode-aware — beat-mode and node-mode use different section lists)
 - Canon detection (new NPCs, locations, items surfaced in GM messages)
 - Backup and restore bundles
 - Session log export
@@ -254,37 +254,44 @@ On accept: apply deltas atomically. If a threshold is crossed (e.g., `corruption
 
 #### 2.2 Author's Note management
 
-The AN has structured sections. The extension parses and writes each independently.
+The AN has structured sections. The extension parses and writes each independently. The **section list and closure-tag vocabulary depend on the campaign mode**, which the extension auto-detects: presence of any `Node: <id>` lorebook entry → node-mode; otherwise beat-mode. Both modes share the same parser; only the section list and dispatch table differ.
 
-Expected sections:
+**Beat-mode sections:**
 - Current Act (header only)
 - Current beat (the single beat the GM is currently driving toward)
 - Next beat (the immediate next beat — spoiler-bounded 2-beat window)
 - Discovered clues (clue IDs the GM has surfaced via tags)
 - Available clues (computed; one-hop reachable from discovered). Each entry renders as `- ID — hint`, where `hint` is the clue's spoiler-light teaser from the lorebook (the `Hint:` line in the clue entry). Older campaigns without hints fall back to a word-boundary-trimmed prefix of `reveals`.
+- Pending reveals (skipped beats queued for re-introduction)
 - Active threads
 - Recent beats
 - Reminders
 
+**Node-mode sections** (Alexandrian node-based design — replaces the destination-driven beat window with an unordered graph of situations):
+- Current Act (header only — premise and stakes only, no scene sequence)
+- Reachable nodes (computed; nodes whose entry clues have been discovered, ungated, unresolved). Each entry renders as `- ID [underspecified?] — description`. The list is a *menu* the player picks from by acting, not a queue.
+- Recently visited (last 3 visited node IDs)
+- On-screen NPCs (NPCs whose `last_seen_turn` is within 8 turns of the current chat length, with attitude and last action)
+- Discovered clues
+- Available clues (same shape as beat-mode; ranked higher when the clue's `points_to_nodes` intersect Reachable nodes)
+- Active threads
+- Recent scenes (renamed from "Recent beats" — beats no longer exist as discrete units)
+- Reminders
+
 **Operations:**
 
-- **GM closure tags** — on every assistant message, the extension parses
-  `<<beat:LABEL:resolved>>`, `<<act:N:complete>>`, `<<clue:found:ID>>`
-  tags, strips them from display, and advances `solo_ttrpg_story_state`
-  in `chatMetadata`. The Author's Note is regenerated from state +
-  lorebook on every change. No user click required.
-- **Beat advancement** — on `<<beat:LABEL:resolved>>` the extension
-  marks the labeled beat (and any earlier unresolved beats) as resolved
-  and promotes Next beat to Current beat. Resolving the last beat of an
-  act auto-advances to act N+1 by rewriting the `Current Act` lorebook
-  entry from the next-act entry already shipped in the campaign lorebook.
-- **Silent summary refresh** — Recent beats / Active threads / Reminders
-  are regenerated silently every N assistant messages (configurable,
-  default 3). No popup, no diff. The user can inspect the result via
-  SillyTavern's native Author's Note editor.
-- **"Move plot forward" button** — manual immersion-safe nudge. Marks
-  the Current beat resolved exactly as a `<<beat:current:resolved>>`
-  tag would. No spoiler text, no popup. Used when fiction stalls.
+- **GM closure tags** — on every assistant message, the extension parses tags, strips them from display, and advances `solo_ttrpg_story_state` in `chatMetadata`. The Author's Note is regenerated from state + lorebook on every change. No user click required. Tags from the wrong-mode vocabulary are logged and ignored (e.g. `<<beat:>>` in node-mode is a no-op, not an error). The full vocabulary by mode:
+  - Beat-mode: `<<beat:LABEL:resolved>>`, `<<act:N:complete>>`, `<<clue:found:ID>>`.
+  - Node-mode: `<<node:ID:visited>>`, `<<node:ID:complete>>`, `<<npc:ID:state:KEY=VALUE,KEY=VALUE>>`, `<<clue:found:ID>>`.
+- **Beat advancement** (beat-mode) — on `<<beat:LABEL:resolved>>` the extension marks the labeled beat (and any earlier unresolved beats) as resolved and promotes Next beat to Current beat. Resolving the last beat of an act auto-advances to act N+1 by rewriting the `Current Act` lorebook entry from the next-act entry already shipped in the campaign lorebook.
+- **Node visiting & NPC state** (node-mode) — `<<node:ID:visited>>` appends to `state.visitedNodes` (capped, deduped); `<<node:ID:complete>>` appends to `state.completedNodes` and removes the node from Reachable. `<<npc:ID:state:KEY=VALUE,...>>` merges into `state.npcs[ID]` and bumps `last_seen_turn`. Each tag pushes a single `_lastStateChange` undo record.
+- **Silent summary refresh** — Recent beats / scenes / Active threads / Reminders are regenerated silently every N assistant messages (configurable, default 3). No popup, no diff. The user can inspect the result via SillyTavern's native Author's Note editor.
+- **"Move plot forward" button** — repurposes by mode:
+  - Beat-mode: manual immersion-safe nudge. Marks the Current beat resolved exactly as a `<<beat:current:resolved>>` tag would. No spoiler text, no popup. Used when fiction stalls.
+  - Node-mode: opens a popup listing currently Reachable nodes; selecting one writes the equivalent of `<<node:ID:visited>>`. This is a *correction* tool for when the GM forgot to emit the tag — not a progression tool. In node-mode, player progression comes from clue discovery and NPC agendas, not button clicks.
+- **"Move plot back" button** — also mode-aware:
+  - Beat-mode: undoes the last beat advance / act advance / drained pending reveal.
+  - Node-mode: pops the most recent `_lastStateChange` (visit / complete / clue / npc state) and inverts it.
 
 #### 2.3 Canon detection
 
@@ -408,8 +415,8 @@ Manual test checklist in `TESTING.md`:
 - `/backup-import` into a fresh chat, verify state matches and compatibility check fires if pack is not loaded
 - Send a GM message with a STATUS_UPDATE block, verify parse + modal; verify the field whitelist from `resources.yaml` is enforced
 - Send a GM message with a new NPC, verify canon detection proposal
-- Send GM messages containing closure tags, verify state advances and tags are stripped from display
-- Click "Move plot forward", verify Current beat advances to Next beat and AN re-renders
+- Send GM messages containing closure tags, verify state advances and tags are stripped from display (test both modes — beat-mode `<<beat:LABEL:resolved>>` and node-mode `<<node:ID:visited>>` / `<<npc:ID:state:K=V>>`)
+- In beat-mode, click "Move plot forward", verify Current beat advances to Next beat and AN re-renders. In node-mode, verify the same button opens a Reachable-nodes picker and selecting one updates `visitedNodes`.
 - Stress-test with 200+ message chat, check performance
 
 ---

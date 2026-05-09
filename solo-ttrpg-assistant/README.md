@@ -12,9 +12,11 @@ SillyTavern extension for solo narrative campaigns with pack-aware character she
   - Backup export/import ZIP bundle
 - Tier 2:
   - `STATUS_UPDATE` block parsing with confirmation/edit flow
-  - GM closure-tag parsing (`<<beat:LABEL:resolved>>`, `<<act:N:complete>>`, `<<clue:found:ID>>`) — auto-advances story state and rewrites the Author's Note
-  - Silent debounced summary refresh (Recent beats / Active threads / Reminders)
-  - "Move plot forward" manual nudge button when fiction stalls
+  - GM closure-tag parsing — auto-advances story state and rewrites the Author's Note. Tag vocabulary depends on the campaign mode (auto-detected from the lorebook):
+    - Beat-mode: `<<beat:LABEL:resolved>>`, `<<act:N:complete>>`, `<<clue:found:ID>>`
+    - Node-mode (Alexandrian node-based design): `<<node:ID:visited>>`, `<<node:ID:complete>>`, `<<npc:ID:state:KEY=VALUE,...>>`, `<<clue:found:ID>>`
+  - Silent debounced summary refresh (Recent beats / scenes, Active threads, Reminders)
+  - "Move plot forward" / "Move plot back" buttons — mode-aware. Beat-mode: nudge Current beat forward / undo last advance. Node-mode: open a Reachable-nodes picker / undo the last state change. In node-mode the buttons are correction tools; player progression comes from clue discovery and NPC agendas.
 
 ## Install
 
