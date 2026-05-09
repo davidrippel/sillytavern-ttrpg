@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 from common.pack import GenrePack
-from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument, SampleCharacterSet
+from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NodeGraph, NPCRoster, PlotSkeleton, PremiseDocument, SampleCharacterSet
 
 
 _HONORIFICS = {
@@ -194,6 +194,7 @@ def assemble_lorebook(
     clue_graph: ClueGraph,
     branches: BranchPlan,
     sample_characters: SampleCharacterSet | None = None,
+    node_graph: NodeGraph | None = None,
 ) -> dict[str, Any]:
     entries: dict[str, dict[str, Any]] = {}
     uid = 0
@@ -259,13 +260,22 @@ def assemble_lorebook(
     )
 
     for act_index, act in enumerate(plot.acts):
-        act_content = "\n\n".join(
-            [
-                f"Act {act.act_number}: {act.title}",
-                f"Goal: {act.goal}",
-                "Beats:\n" + "\n".join(f"- {beat.rendered}" for beat in act.beats),
-            ]
-        )
+        if node_graph is not None:
+            # Node-mode: act entry shows premise and stakes only, no beat sequence.
+            act_content = "\n\n".join(
+                [
+                    f"Act {act.act_number}: {act.title}",
+                    f"Goal: {act.goal}",
+                ]
+            )
+        else:
+            act_content = "\n\n".join(
+                [
+                    f"Act {act.act_number}: {act.title}",
+                    f"Goal: {act.goal}",
+                    "Beats:\n" + "\n".join(f"- {beat.rendered}" for beat in act.beats),
+                ]
+            )
         beat_labels = [beat.label for beat in act.beats if beat.label]
         act_keys = [act.title, f"Act {act.act_number}", *beat_labels]
         is_first_act = act_index == 0
@@ -380,6 +390,37 @@ def assemble_lorebook(
                 order=350,
             )
         )
+
+    if node_graph is not None:
+        for node in node_graph.nodes:
+            sections = [
+                f"Node: {node.id}",
+                f"Kind: {node.kind}",
+                f"Description: {node.description}",
+            ]
+            if node.entry_clues:
+                sections.append(f"Entry clues: {', '.join(node.entry_clues)}")
+            if node.exit_clues:
+                sections.append(f"Exit clues: {', '.join(node.exit_clues)}")
+            if node.gating:
+                sections.append(f"Gating: {', '.join(node.gating)}")
+            if node.triggers:
+                sections.append(f"Triggers: {node.triggers}")
+            if node.underspecified:
+                sections.append("Underspecified: true")
+            if node.is_victory:
+                sections.append("Victory: true")
+            content = "\n\n".join(sections)
+            uid += 1
+            add(
+                _entry(
+                    uid,
+                    comment=f"Node: {node.id}",
+                    content=content,
+                    keys=[node.id],
+                    order=320,
+                )
+            )
 
     for clue in clue_graph.clues:
         rendered_targets = []

@@ -205,3 +205,58 @@ def test_branch_reference_token_map_accepts_faction_aliases_and_beats():
     assert token_map["Lantern Carters Guild"] == "Lantern Carters Guild"
     assert token_map["act1_beat1"] == "act1_beat1"
     assert token_map["Recover the ferryman's satchel"] == "act1_beat1"
+
+
+def test_node_mode_lorebook_emission():
+    """Node-mode emits Node: entries, Points to lines reference nodes, and act
+    entries omit the Beats: section so the GM has no scene sequence."""
+    from campaign_generator.stages.nodes import run as run_nodes
+
+    pack = load_pack("genres/symbaroum_dark_fantasy")
+    plot = PlotSkeleton.model_validate(_load_fixture("plot_skeleton"))
+    clue_graph = ClueGraph.model_validate(_load_fixture("clue_chains"))
+    new_clues, node_graph, _warnings = run_nodes(plot=plot, clues=clue_graph)
+
+    lorebook = assemble_lorebook(
+        pack=pack,
+        premise=PremiseDocument.model_validate(_load_fixture("premise")),
+        plot=plot,
+        factions=FactionSet.model_validate(_load_fixture("factions")),
+        npcs=NPCRoster.model_validate({"npcs": [_load_fixture(f"npc_{index}") for index in range(1, 7)]}),
+        locations=LocationCatalog.model_validate({"locations": [_load_fixture(f"location_{index}") for index in range(1, 6)]}),
+        clue_graph=new_clues,
+        branches=BranchPlan.model_validate(_load_fixture("branches")),
+        node_graph=node_graph,
+    )
+    entry_list = list(lorebook["entries"].values())
+
+    # Node entries are emitted with Kind:, Description:, Entry clues: sections.
+    node_entries = [e for e in entry_list if e["comment"].startswith("Node:")]
+    assert len(node_entries) == len(node_graph.nodes)
+    sample_node = node_entries[0]
+    assert "Kind:" in sample_node["content"]
+    assert "Description:" in sample_node["content"]
+
+    # The runtime detects node-mode by presence of Node: entries.
+    assert any(e["comment"].startswith("Node:") for e in entry_list)
+
+    # Act entries in node-mode must NOT contain "Beats:" — the proposal removes
+    # the scene sequence. (Compare with beat-mode tests above where Act 1
+    # content includes "1.1 ...".)
+    current_act = next(e for e in entry_list if e["comment"].startswith("Current Act"))
+    assert "Beats:" not in current_act["content"]
+    assert "Goal:" in current_act["content"]
+
+    # Clue entries' Points-to lines reference nodes; beat targets are dropped.
+    clue_entries = [e for e in entry_list if e["comment"].startswith("Clue:")]
+    assert any("- node:" in e["content"] for e in clue_entries), (
+        "expected at least one clue Points-to line to reference a node:<id>"
+    )
+    assert not any("- beat:" in e["content"] for e in clue_entries), (
+        "node-mode should drop beat references from clue Points-to"
+    )
+
+    # Victory node is present, gating-aware.
+    victory_entries = [e for e in node_entries if "Victory: true" in e["content"]]
+    assert len(victory_entries) == 1
+    assert "Gating:" in victory_entries[0]["content"]

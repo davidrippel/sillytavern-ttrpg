@@ -32,13 +32,14 @@ from .stages import clue_chains as clue_chains_stage
 from .stages import factions as factions_stage
 from .stages import initial_an as initial_an_stage
 from .stages import locations as locations_stage
+from .stages import nodes as nodes_stage
 from .stages import npcs as npcs_stage
 from .stages import opening_hook as opening_hook_stage
 from .stages import plot_skeleton as plot_stage
 from .stages import premise as premise_stage
 from .stages import sample_characters as sample_characters_stage
 from .stages import spoilers as spoilers_stage
-from common.settings import get_default_model, get_default_temperature, get_dry_run_model
+from common.settings import get_default_model, get_default_temperature, get_dry_run_model, get_node_mode
 
 PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
@@ -509,6 +510,21 @@ def run_pipeline(
     if progress_callback is not None:
         progress_callback("Cross-stage validation passed")
 
+    node_graph = None
+    if get_node_mode():
+        clue_graph, node_graph, node_warnings = nodes_stage.run(
+            plot=plot,
+            clues=clue_graph,
+            progress_callback=progress_callback,
+        )
+        for warning in node_warnings:
+            validation_log.write(f"[nodes] {warning}")
+        if progress_callback is not None and node_warnings:
+            progress_callback(
+                f"Node graph: {len(node_warnings)} node(s) flagged underspecified "
+                "(player may get stuck — see validation log)"
+            )
+
     opening_hook = opening_hook_stage.render(
         pack,
         premise,
@@ -528,8 +544,11 @@ def run_pipeline(
     if progress_callback is not None:
         progress_callback("Wrote opening_hook.txt")
 
-    initial_note = initial_an_stage.render(plot)
-    _write_text(output_dir / "initial_authors_note.txt", initial_note.render())
+    if node_graph is not None:
+        initial_text = initial_an_stage.render_node_mode(plot, node_graph)
+    else:
+        initial_text = initial_an_stage.render(plot).render()
+    _write_text(output_dir / "initial_authors_note.txt", initial_text)
     if progress_callback is not None:
         progress_callback("Wrote initial_authors_note.txt")
 
@@ -543,6 +562,7 @@ def run_pipeline(
         clue_graph=clue_graph,
         branches=branches,
         sample_characters=sample_characters,
+        node_graph=node_graph,
     )
     lorebook_filename = _slugify_title(premise.title) + ".json"
     _write_json(output_dir / lorebook_filename, lorebook)

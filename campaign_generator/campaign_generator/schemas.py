@@ -210,7 +210,7 @@ class ClueTarget(BaseModel):
     @field_validator("type")
     @classmethod
     def validate_type(cls, value: str) -> str:
-        allowed = {"clue", "npc", "location", "beat"}
+        allowed = {"clue", "npc", "location", "beat", "node"}
         if value not in allowed:
             raise ValueError(f"type must be one of {sorted(allowed)}")
         return value
@@ -223,7 +223,8 @@ class Clue(BaseModel):
     hint: str = Field(default="", max_length=120)
     reveals: str = Field(max_length=280)
     points_to: list[ClueTarget] = Field(min_length=1)
-    supports_beats: list[str] = Field(min_length=1)
+    supports_beats: list[str] = Field(default_factory=list)
+    points_to_nodes: list[str] = Field(default_factory=list)
 
     @field_validator("found_at_type")
     @classmethod
@@ -231,6 +232,21 @@ class Clue(BaseModel):
         if value not in {"npc", "location"}:
             raise ValueError("found_at_type must be npc or location")
         return value
+
+    @model_validator(mode="after")
+    def require_beat_or_node_anchor(self) -> "Clue":
+        # A clue must anchor to either a beat (legacy) or a node (new). The
+        # generator may emit only one or the other depending on campaign mode.
+        if not self.supports_beats and not self.points_to_nodes:
+            # Synthesize from points_to if it contains a beat or node ref.
+            for target in self.points_to:
+                if target.type == "beat" and target.value not in self.supports_beats:
+                    self.supports_beats.append(target.value)
+                if target.type == "node" and target.value not in self.points_to_nodes:
+                    self.points_to_nodes.append(target.value)
+        if not self.supports_beats and not self.points_to_nodes:
+            raise ValueError("clue must anchor to at least one beat (supports_beats) or node (points_to_nodes)")
+        return self
 
 
 class ClueGraph(BaseModel):
@@ -242,6 +258,60 @@ class ClueGraph(BaseModel):
         ids = [clue.id for clue in self.clues]
         if len(ids) != len(set(ids)):
             raise ValueError("clue ids must be unique")
+        return self
+
+
+class Node(BaseModel):
+    """Alexandrian node — a discrete situation the player can engage with.
+
+    Nodes replace the linear beat sequence in node-mode campaigns. The player
+    navigates the graph by acting on clues (which point to nodes) rather than
+    being shepherded along a beat list.
+    """
+
+    id: str = Field(min_length=1)
+    kind: str  # validated below
+    description: str = Field(min_length=1, max_length=400)
+    act_number: int = Field(ge=1)
+    entry_clues: list[str] = Field(default_factory=list)
+    exit_clues: list[str] = Field(default_factory=list)
+    gating: list[str] = Field(default_factory=list)
+    triggers: str | None = Field(default=None, max_length=200)
+    underspecified: bool = False
+    is_victory: bool = False
+
+    @field_validator("kind")
+    @classmethod
+    def validate_kind(cls, value: str) -> str:
+        allowed = {"location", "npc_encounter", "event"}
+        if value not in allowed:
+            raise ValueError(f"kind must be one of {sorted(allowed)}")
+        return value
+
+    @field_validator("id")
+    @classmethod
+    def validate_id_shape(cls, value: str) -> str:
+        if not re.fullmatch(r"[a-z0-9_]+", value):
+            raise ValueError("node id must be snake_case ([a-z0-9_]+)")
+        return value
+
+
+class NodeGraph(BaseModel):
+    nodes: list[Node] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_consistency(self) -> "NodeGraph":
+        ids = [node.id for node in self.nodes]
+        if len(ids) != len(set(ids)):
+            raise ValueError("node ids must be unique")
+        id_set = set(ids)
+        for node in self.nodes:
+            for prereq in node.gating:
+                if prereq not in id_set:
+                    raise ValueError(f"node {node.id} gating references unknown node {prereq}")
+        victory_count = sum(1 for n in self.nodes if n.is_victory)
+        if victory_count > 1:
+            raise ValueError("at most one node may have is_victory=true")
         return self
 
 

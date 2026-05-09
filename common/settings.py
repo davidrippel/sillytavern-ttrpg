@@ -55,6 +55,13 @@ def get_use_llm_clue_graph() -> bool:
     return _get_env_bool("CG_LLM_CLUE_GRAPH", False)
 
 
+def get_node_mode() -> bool:
+    """Whether to emit a node-based campaign (Alexandrian) vs. the legacy
+    beat-based campaign. Toggle with CG_NODE_MODE=1.
+    """
+    return _get_env_bool("CG_NODE_MODE", False)
+
+
 def get_default_model() -> str:
     return _get_env_str("CAMPAIGN_GENERATOR_DEFAULT_MODEL", DEFAULT_MODEL_FALLBACK)
 
