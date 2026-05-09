@@ -531,6 +531,14 @@ def run_pipeline(
                 f"Node graph: {len(node_warnings)} node(s) flagged underspecified "
                 "(player may get stuck — see validation log)"
             )
+        # Rewrite the clue partial so it reflects post-node-rewiring state
+        # (the version the rest of the pipeline and the lorebook see), not
+        # the pre-rewiring state the clue stage wrote. Also drop a fresh
+        # nodes.partial.json so the node graph is independently inspectable.
+        _write_json(partials_dir / "clue_chains.partial.json", serialize_clue_graph(clue_graph, plot))
+        _write_json(partials_dir / "nodes.partial.json", node_graph.model_dump())
+        if progress_callback is not None:
+            progress_callback("Wrote partials/clue_chains.partial.json (post-node-rewire) and partials/nodes.partial.json")
 
     opening_hook = opening_hook_stage.render(
         pack,
