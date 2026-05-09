@@ -11,9 +11,14 @@ import {
     rewriteCurrentActLorebookEntry,
 } from './plot_skeleton.js';
 import { loadAllClues, clueExists } from './clue_chains.js';
+import { loadAllNodes, nodeExists, isCampaignNodeMode } from './nodes.js';
 import { renderAuthorsNoteFromState, ensureStoryStateInitialized } from './authors_note.js';
 
-const TAG_REGEX = /<<(beat|act|clue):([^:>\s]+):([^:>\s]+)>>/g;
+// Value group permits `=` and `,` so <<npc:ID:state:KEY=VALUE,KEY=VALUE>> parses.
+// `>` and whitespace remain disallowed so tag boundaries stay unambiguous.
+const TAG_REGEX = /<<(beat|act|clue|node|npc):([^:>\s]+):([^>\s]+)>>/g;
+
+const VISITED_NODES_CAP = 32;
 
 export function parseClosureTags(text) {
     const tags = [];
@@ -132,23 +137,138 @@ async function applyClueFound(clueId, state) {
         log(`clue:found:${clueId} ignored — id not found in clue lorebook entries.`, 'warn');
         return { state, changed: false };
     }
-    const next = { ...state, discoveredClues: [...state.discoveredClues, clueId] };
+    const next = {
+        ...state,
+        discoveredClues: [...state.discoveredClues, clueId],
+        _lastStateChange: { kind: 'clue_found', clueId },
+    };
     log(`Discovered clue: ${clueId}.`);
     return { state: next, changed: true };
 }
 
-export async function applyTagsToState(tags) {
+async function applyNodeVisited(nodeId, state) {
+    const visited = state.visitedNodes ?? [];
+    if (visited.includes(nodeId)) {
+        return { state, changed: false };
+    }
+    const nodes = await loadAllNodes();
+    if (!nodeExists(nodes, nodeId)) {
+        log(`node:${nodeId}:visited ignored — id not found in node lorebook entries.`, 'warn');
+        return { state, changed: false };
+    }
+    const trimmed = visited.length >= VISITED_NODES_CAP
+        ? visited.slice(visited.length - VISITED_NODES_CAP + 1)
+        : visited;
+    const next = {
+        ...state,
+        visitedNodes: [...trimmed, nodeId],
+        _lastStateChange: { kind: 'node_visited', nodeId },
+    };
+    log(`Visited node: ${nodeId}.`);
+    return { state: next, changed: true };
+}
+
+async function applyNodeComplete(nodeId, state) {
+    const completed = state.completedNodes ?? [];
+    if (completed.includes(nodeId)) {
+        return { state, changed: false };
+    }
+    const nodes = await loadAllNodes();
+    if (!nodeExists(nodes, nodeId)) {
+        log(`node:${nodeId}:complete ignored — id not found in node lorebook entries.`, 'warn');
+        return { state, changed: false };
+    }
+    const next = {
+        ...state,
+        completedNodes: [...completed, nodeId],
+        _lastStateChange: { kind: 'node_complete', nodeId },
+    };
+    log(`Completed node: ${nodeId}.`);
+    return { state: next, changed: true };
+}
+
+function parseNpcStateKv(kvString) {
+    const out = {};
+    for (const part of String(kvString ?? '').split(',')) {
+        const eq = part.indexOf('=');
+        if (eq < 0) continue;
+        const key = part.slice(0, eq).trim();
+        const value = part.slice(eq + 1).trim();
+        if (!key) continue;
+        out[key] = value;
+    }
+    return out;
+}
+
+function applyNpcState(npcId, kvString, state, turnCount) {
+    const updates = parseNpcStateKv(kvString);
+    if (Object.keys(updates).length === 0) {
+        log(`npc:${npcId}:state ignored — no parseable KEY=VALUE pairs in "${kvString}".`, 'warn');
+        return { state, changed: false };
+    }
+    const prior = state.npcs?.[npcId] ?? {};
+    const merged = { ...prior, ...updates, last_seen_turn: turnCount };
+    const next = {
+        ...state,
+        npcs: { ...(state.npcs ?? {}), [npcId]: merged },
+        _lastStateChange: { kind: 'npc_state', npcId, prior },
+    };
+    log(`NPC ${npcId} state updated: ${Object.keys(updates).join(', ')}.`);
+    return { state: next, changed: true };
+}
+
+export async function applyTagsToState(tags, { turnCount = 0 } = {}) {
+    const nodeMode = await isCampaignNodeMode();
+
     let state = ensureStoryStateShape(readStoryState());
-    if (!state.currentBeatLabel) {
+    if (!nodeMode && !state.currentBeatLabel) {
         const initialized = await ensureStoryStateInitialized();
         if (initialized) state = ensureStoryStateShape(initialized);
     }
 
-    let { acts } = await loadAllActs();
-    let currentAct = acts.find((a) => a.actNumber === state.actNumber) ?? null;
+    let acts = [];
+    let currentAct = null;
+    if (!nodeMode) {
+        ({ acts } = await loadAllActs());
+        currentAct = acts.find((a) => a.actNumber === state.actNumber) ?? null;
+    }
     let anyChanged = false;
 
     for (const tag of tags) {
+        if (nodeMode) {
+            if (tag.kind === 'beat' || tag.kind === 'act') {
+                log(`${tag.kind} tag ${tag.raw} ignored — campaign is in node-mode.`, 'info');
+                continue;
+            }
+            if (tag.kind === 'node' && tag.value === 'visited') {
+                const result = await applyNodeVisited(tag.key, state);
+                if (result.changed) { state = result.state; anyChanged = true; }
+            } else if (tag.kind === 'node' && tag.value === 'complete') {
+                const result = await applyNodeComplete(tag.key, state);
+                if (result.changed) { state = result.state; anyChanged = true; }
+            } else if (tag.kind === 'npc') {
+                // Shape: <<npc:ID:state:KEY=VALUE,...>>. The regex captures
+                // group2=ID and group3="state:KEY=VALUE,...".
+                const value = String(tag.value ?? '');
+                if (value.startsWith('state:')) {
+                    const kv = value.slice('state:'.length);
+                    const result = applyNpcState(tag.key, kv, state, turnCount);
+                    if (result.changed) { state = result.state; anyChanged = true; }
+                } else {
+                    log(`npc tag ${tag.raw} ignored — unrecognized form.`, 'warn');
+                }
+            } else if (tag.kind === 'clue' && tag.key === 'found') {
+                const result = await applyClueFound(tag.value, state);
+                if (result.changed) { state = result.state; anyChanged = true; }
+            }
+            continue;
+        }
+
+        // Beat-mode (legacy) dispatch
+        if (tag.kind === 'node' || tag.kind === 'npc') {
+            log(`${tag.kind} tag ${tag.raw} ignored — campaign is in beat-mode.`, 'info');
+            continue;
+        }
         if (tag.kind === 'beat' && tag.value === 'resolved') {
             const result = await applyBeatResolved(tag.key, state, currentAct);
             if (result.changed) {
@@ -195,7 +315,46 @@ export function canRevertLastAdvance() {
     const state = ensureStoryStateShape(readStoryState());
     return (state.resolvedBeatLabels?.length ?? 0) > 0
         || (state.completedActs?.length ?? 0) > 0
-        || !!state._lastAdvanceDrainedReveal;
+        || !!state._lastAdvanceDrainedReveal
+        || !!state._lastStateChange;
+}
+
+export async function revertLastStateChange() {
+    const state = ensureStoryStateShape(readStoryState());
+    const change = state._lastStateChange;
+    if (!change) {
+        log('Undo ignored — no recent state change recorded.', 'info');
+        return false;
+    }
+
+    const next = { ...state, _lastStateChange: null };
+    if (change.kind === 'node_visited') {
+        next.visitedNodes = (state.visitedNodes ?? []).filter((id) => id !== change.nodeId);
+    } else if (change.kind === 'node_complete') {
+        next.completedNodes = (state.completedNodes ?? []).filter((id) => id !== change.nodeId);
+    } else if (change.kind === 'clue_found') {
+        next.discoveredClues = (state.discoveredClues ?? []).filter((id) => id !== change.clueId);
+    } else if (change.kind === 'npc_state') {
+        const npcs = { ...(state.npcs ?? {}) };
+        if (change.prior && Object.keys(change.prior).length > 0) {
+            npcs[change.npcId] = change.prior;
+        } else {
+            delete npcs[change.npcId];
+        }
+        next.npcs = npcs;
+    } else {
+        log(`Undo ignored — unknown change kind ${change.kind}.`, 'warn');
+        return false;
+    }
+
+    await writeStoryState(next);
+    try {
+        await renderAuthorsNoteFromState({ preserveSummaries: true });
+    } catch (error) {
+        log(`renderAuthorsNoteFromState threw: ${error.message}`, 'warn');
+    }
+    log(`Reverted ${change.kind}.`, 'info');
+    return true;
 }
 
 export async function revertLastBeatAdvance() {
@@ -316,6 +475,10 @@ export async function resetCampaignState() {
 }
 
 export async function moveBeatForwardManually() {
+    if (await isCampaignNodeMode()) {
+        log('Move plot forward is a no-op in node-mode — use the node picker UI to mark a node visited.', 'info');
+        return;
+    }
     const state = ensureStoryStateShape(readStoryState());
     if (!state.currentBeatLabel) {
         await ensureStoryStateInitialized();
@@ -354,10 +517,20 @@ export async function handleAssistantMessage(message) {
         message.mes = stripped;
     }
 
+    let turnCount = 0;
     try {
-        const result = await applyTagsToState(tags);
+        const ctx = (await import('./util.js')).getContext();
+        turnCount = Array.isArray(ctx?.chat) ? ctx.chat.length : 0;
+    } catch { /* turnCount stays 0 — only used for npc:state, which still works */ }
+
+    try {
+        const result = await applyTagsToState(tags, { turnCount });
         if (result.changed) {
-            log(`Closure tags applied: currentBeat=${result.state.currentBeatLabel}, nextBeat=${result.state.nextBeatLabel}`, 'info');
+            const s = result.state;
+            const summary = (s.visitedNodes?.length || s.completedNodes?.length || Object.keys(s.npcs ?? {}).length)
+                ? `nodes=${s.visitedNodes?.length ?? 0}/${s.completedNodes?.length ?? 0}, npcs=${Object.keys(s.npcs ?? {}).length}, clues=${s.discoveredClues?.length ?? 0}`
+                : `currentBeat=${s.currentBeatLabel}, nextBeat=${s.nextBeatLabel}`;
+            log(`Closure tags applied: ${summary}`, 'info');
         }
     } catch (error) {
         log('Closure-tag handler failed.', 'warn', error.message);
