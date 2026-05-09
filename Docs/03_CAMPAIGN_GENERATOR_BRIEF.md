@@ -43,7 +43,7 @@ The user is expected to run this blind: they read only `opening_hook.txt` and `i
   - `CAMPAIGN_GENERATOR_GENRES_BASE_DIR`
   - `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR`
   - `CG_LLM_CLUE_GRAPH` — when set to `1` (default `0`), opt back into the legacy behaviour where the LLM tries to author the entire clue graph in one call. Default flow generates a deterministic skeleton and uses the LLM only to enrich each clue's prose.
-  - `CG_NODE_MODE` — when set to `1` (default `0`), emit a **node-mode** campaign (Alexandrian node-based scenario design) instead of a beat-mode campaign. Adds a `nodes` stage that produces one node per beat plus a campaign-level victory node, re-anchors clues to point at nodes, and emits `Node: <id>` lorebook entries. The runtime detects mode by presence of `Node:` entries — no explicit flag in the lorebook itself. See `PROPOSAL_goal_tracker.md` for design rationale.
+  - `CG_NODE_MODE` — overrides the default mode. Set to `1` to force node-mode (Alexandrian node-based scenario design), `0` to force beat-mode (legacy linear acts/beats). When unset, the CLI default is **node-mode**. The CLI flags `--nodes-mode` and `--beats-mode` (mutually exclusive) override this env var when present; the env var overrides the CLI default. Node-mode adds a `nodes` stage that produces one node per beat plus a campaign-level victory node, re-anchors clues to point at nodes, and emits `Node: <id>` lorebook entries. The runtime detects mode by presence of `Node:` entries — no explicit flag in the lorebook itself. See `PROPOSAL_goal_tracker.md` for design rationale.
   - `IMAGE_GEN_MODEL`, `IMAGE_GEN_DIMENSION`, `IMAGE_GEN_ASPECT_RATIO`, `IMAGE_GEN_STYLE_OVERRIDE` — used by the sibling `image_generator` tool when rendering NPC portraits (also reachable via `--with-images`). `IMAGE_GEN_MODEL` is required when rendering and has no fallback. `IMAGE_GEN_STYLE_OVERRIDE` is optional and exists mainly to re-render an existing campaign in one consistent style without regenerating the pipeline output.
 
 Web search during development to confirm: current OpenRouter API shape, current SillyTavern lorebook JSON schema, current model slug for `anthropic/claude-sonnet-4.5`.
@@ -72,6 +72,7 @@ Flags:
 - `--dry-run` — use a cheap model (e.g. `anthropic/claude-haiku-4.5`) for the whole pipeline
 - `--random-seed INT` — reproducibility seed
 - `--with-images` — after generation, call the image generator (see [`image_generator/README.md`](../image_generator/README.md)) to render NPC portraits into `<output>/npc_images/`. Requires `IMAGE_GEN_MODEL` in `.env`. Off by default. Image-gen failures are logged but do not fail the campaign run.
+- `--nodes-mode` / `--beats-mode` — choose campaign mode. Mutually exclusive. **Node-mode is the default** when neither flag nor `CG_NODE_MODE` env var is set. Precedence: explicit flag > `CG_NODE_MODE` env var > default (node-mode).
 
 Model precedence is:
 1. `model:` in the seed YAML
@@ -286,7 +287,7 @@ Implementation details that are part of the contract:
 
 ### 6.5. `nodes` (node-mode only)
 
-Runs only when `CG_NODE_MODE=1`. Skipped entirely in beat-mode.
+Runs in node-mode (the default). Skipped entirely in beat-mode (when `--beats-mode` is passed or `CG_NODE_MODE=0`).
 
 Input: validated plot skeleton, validated clue graph.
 
@@ -300,7 +301,7 @@ Deterministic algorithm (no LLM call in the current implementation):
 
 Three-clue rule enforcement is **warn-and-accept**: a node with fewer than three entry clues is marked `underspecified=true` and surfaced via a warning to the validation log and the progress callback. The runtime renders `[underspecified]` next to such nodes in the AN so the GM knows the player may need recombined clues to find them.
 
-Known limitation: the deterministic clue skeleton produces 2 clues per beat, so every node ends up flagged underspecified by default. To get genuine 3+ clues per node, run `CG_NODE_MODE=1` together with `CG_LLM_CLUE_GRAPH=1`, or extend the nodes stage with an LLM-driven enrichment pass (future work).
+Known limitation: the deterministic clue skeleton produces 2 clues per beat, so every node ends up flagged underspecified by default. To get genuine 3+ clues per node, run with `CG_LLM_CLUE_GRAPH=1` (which puts the clue stage in LLM-first mode), or extend the nodes stage with an LLM-driven enrichment pass (future work).
 
 ### 7. `branches`
 
@@ -339,7 +340,7 @@ GM-emitted closure tags (`<<beat:LABEL:resolved>>`). The 2-beat window
 is the spoiler-isolation mechanism — the GM never sees beats further
 ahead than Next beat.
 
-**Node-mode** sections (emitted when `CG_NODE_MODE=1`):
+**Node-mode** sections (emitted in node-mode, which is the default):
 - Current Act: `Act 1: [title]`
 - Reachable nodes: bullet list of Act 1 non-victory nodes (initial set; re-computed at runtime as clues are discovered)
 - Recently visited: `(none)` at start

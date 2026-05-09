@@ -176,6 +176,7 @@ def run_pipeline(
     stages: str = "all",
     llm_client: LLMClient | None = None,
     progress_callback: ProgressCallback | None = None,
+    node_mode: bool | None = None,
 ) -> PipelineResult:
     started_at = time.monotonic()
     output_dir = Path(output_path).resolve()
@@ -511,7 +512,13 @@ def run_pipeline(
         progress_callback("Cross-stage validation passed")
 
     node_graph = None
-    if get_node_mode():
+    # Precedence: explicit kwarg > CG_NODE_MODE env var > default (node-mode).
+    if node_mode is not None:
+        use_node_mode = node_mode
+    else:
+        env_value = get_node_mode()
+        use_node_mode = True if env_value is None else env_value
+    if use_node_mode:
         clue_graph, node_graph, node_warnings = nodes_stage.run(
             plot=plot,
             clues=clue_graph,

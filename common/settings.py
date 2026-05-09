@@ -55,11 +55,19 @@ def get_use_llm_clue_graph() -> bool:
     return _get_env_bool("CG_LLM_CLUE_GRAPH", False)
 
 
-def get_node_mode() -> bool:
+def get_node_mode() -> bool | None:
     """Whether to emit a node-based campaign (Alexandrian) vs. the legacy
-    beat-based campaign. Toggle with CG_NODE_MODE=1.
+    beat-based campaign.
+
+    Returns ``True`` if ``CG_NODE_MODE`` is set to a truthy value, ``False``
+    if set to a falsy value, and ``None`` if the variable is unset. The CLI
+    treats unset as "use the default" (currently node-mode).
     """
-    return _get_env_bool("CG_NODE_MODE", False)
+    load_project_dotenv()
+    value = os.getenv("CG_NODE_MODE")
+    if value is None or value.strip() == "":
+        return None
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def get_default_model() -> str:
