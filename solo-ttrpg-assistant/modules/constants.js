@@ -32,7 +32,7 @@ export const AUTHORS_NOTE_SECTIONS = Object.freeze([
 ]);
 
 export const STORY_STATE_KEY = 'solo_ttrpg_story_state';
-export const STORY_STATE_SCHEMA_VERSION = 1;
+export const STORY_STATE_SCHEMA_VERSION = 2;
 
 export const DEFAULT_SETTINGS = Object.freeze({
     enabled: true,

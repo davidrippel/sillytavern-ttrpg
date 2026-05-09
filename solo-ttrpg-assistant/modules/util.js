@@ -162,6 +162,9 @@ function defaultStoryState() {
         completedActs: [],
         discoveredClues: [],
         pendingReveals: [],
+        visitedNodes: [],
+        completedNodes: [],
+        npcs: {},
     };
 }
 
