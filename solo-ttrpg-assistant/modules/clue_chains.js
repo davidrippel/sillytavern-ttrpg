@@ -25,7 +25,9 @@ function parseClueEntry(entry) {
         pointsTo.push({ type: m[1].toLowerCase().trim(), value: m[2].trim() });
     }
 
-    return { id, hint, reveals, pointsTo };
+    const pointsToNodes = pointsTo.filter((t) => t.type === 'node').map((t) => t.value);
+
+    return { id, hint, reveals, pointsTo, pointsToNodes };
 }
 
 export async function loadAllClues() {
