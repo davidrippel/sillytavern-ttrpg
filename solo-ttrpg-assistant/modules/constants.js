@@ -31,6 +31,22 @@ export const AUTHORS_NOTE_SECTIONS = Object.freeze([
     'Reminders',
 ]);
 
+export const AUTHORS_NOTE_SECTIONS_NODE_MODE = Object.freeze([
+    'Current Act',
+    'Reachable nodes',
+    'Recently visited',
+    'On-screen NPCs',
+    'Discovered clues',
+    'Available clues',
+    'Active threads',
+    'Recent scenes',
+    'Reminders',
+]);
+
+export const AUTHORS_NOTE_SECTIONS_ALL = Object.freeze([
+    ...new Set([...AUTHORS_NOTE_SECTIONS, ...AUTHORS_NOTE_SECTIONS_NODE_MODE]),
+]);
+
 export const STORY_STATE_KEY = 'solo_ttrpg_story_state';
 export const STORY_STATE_SCHEMA_VERSION = 2;
 

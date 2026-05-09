@@ -1,4 +1,4 @@
-import { AUTHORS_NOTE_SECTIONS } from './constants.js';
+import { AUTHORS_NOTE_SECTIONS, AUTHORS_NOTE_SECTIONS_NODE_MODE, AUTHORS_NOTE_SECTIONS_ALL } from './constants.js';
 import { log } from './logger.js';
 import { buildRecentChatExcerpt } from './sheet.js';
 import { loadCurrentLorebook } from './pack.js';
@@ -13,14 +13,15 @@ import {
 } from './util.js';
 import { loadAllActs, getActByNumber, findBeat, nextBeatLabel } from './plot_skeleton.js';
 import { loadAllClues, reachableClues } from './clue_chains.js';
+import { loadAllNodes, isCampaignNodeMode, reachableNodes } from './nodes.js';
 
 function normalizeHeading(label) {
     return label.trim().toLowerCase();
 }
 
-export function parseAuthorsNoteSections(text = readAuthorsNote()) {
-    const normalizedLabels = new Map(AUTHORS_NOTE_SECTIONS.map((label) => [normalizeHeading(label), label]));
-    const sections = Object.fromEntries(AUTHORS_NOTE_SECTIONS.map((label) => [label, '']));
+export function parseAuthorsNoteSections(text = readAuthorsNote(), sectionList = AUTHORS_NOTE_SECTIONS_ALL) {
+    const normalizedLabels = new Map(sectionList.map((label) => [normalizeHeading(label), label]));
+    const sections = Object.fromEntries(sectionList.map((label) => [label, '']));
 
     let currentLabel = null;
     const lines = String(text ?? '').split('\n');
@@ -42,8 +43,8 @@ export function parseAuthorsNoteSections(text = readAuthorsNote()) {
     return sections;
 }
 
-export function formatAuthorsNoteSections(sections) {
-    return AUTHORS_NOTE_SECTIONS
+export function formatAuthorsNoteSections(sections, sectionList = AUTHORS_NOTE_SECTIONS) {
+    return sectionList
         .map((label) => `${label}: ${String(sections[label] ?? '').trim()}`)
         .join('\n');
 }
@@ -60,7 +61,7 @@ function sanitizeProposal(raw, { requireBullets = true } = {}) {
     if (!text) return '';
 
     const sectionHeadingPattern = new RegExp(
-        `^\\s*(?:${AUTHORS_NOTE_SECTIONS.map((label) => label.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|')})\\s*:`,
+        `^\\s*(?:${AUTHORS_NOTE_SECTIONS_ALL.map((label) => label.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|')})\\s*:`,
         'i',
     );
     const isBullet = (line) => /^\s*[-*•]\s+/.test(line);
@@ -219,13 +220,118 @@ function formatCluesList(items) {
     return items.map((c) => `- ${c.id} — ${c.label}`).join('\n');
 }
 
-export async function renderAuthorsNoteFromState({ preserveSummaries = true } = {}) {
-    const state = ensureStoryStateShape(readStoryState());
+function truncate(text, max) {
+    const t = String(text ?? '').trim();
+    if (t.length <= max) return t;
+    return `${t.slice(0, max - 1)}…`;
+}
+
+async function renderNodeModeAuthorsNote(state, { preserveSummaries }) {
     const { acts } = await loadAllActs();
     const act = acts.find((a) => a.actNumber === state.actNumber) ?? acts[0] ?? null;
 
     const sections = preserveSummaries
-        ? parseAuthorsNoteSections()
+        ? parseAuthorsNoteSections(undefined, AUTHORS_NOTE_SECTIONS_NODE_MODE)
+        : Object.fromEntries(AUTHORS_NOTE_SECTIONS_NODE_MODE.map((l) => [l, '']));
+
+    sections['Current Act'] = act ? `Act ${act.actNumber}: ${act.title}` : (sections['Current Act'] || '');
+
+    let nodes = [];
+    let clues = [];
+    try {
+        [nodes, clues] = await Promise.all([loadAllNodes(), loadAllClues()]);
+    } catch (error) {
+        log('Failed to load nodes/clues for AN render.', 'warn', error.message);
+    }
+
+    const reachableForRender = reachableNodes(nodes, clues, state, { maxResults: 12 });
+    const pointedSet = new Set();
+    for (const c of clues) {
+        if (!(state.discoveredClues ?? []).includes(c.id)) continue;
+        for (const t of c.pointsToNodes ?? []) pointedSet.add(t);
+    }
+    sections['Reachable nodes'] = reachableForRender.length
+        ? reachableForRender.map((n) => {
+            const flag = n.underspecified ? ' [underspecified]' : '';
+            const desc = n.description ? ` — ${truncate(n.description, 80)}` : '';
+            return `- ${n.id}${flag}${desc}`;
+        }).join('\n')
+        : '(none)';
+
+    const visited = state.visitedNodes ?? [];
+    const recent = visited.slice(-3);
+    sections['Recently visited'] = recent.length
+        ? recent.map((id) => `- ${id}`).join('\n')
+        : '(none)';
+
+    const npcs = state.npcs ?? {};
+    const turnCount = (() => {
+        try { return getContext()?.chat?.length ?? 0; } catch { return 0; }
+    })();
+    const STALE_AFTER = 8;
+    const onScreen = Object.entries(npcs)
+        .filter(([, info]) => {
+            const last = Number(info?.last_seen_turn ?? 0);
+            return turnCount - last <= STALE_AFTER;
+        })
+        .map(([id, info]) => {
+            const attitude = info?.attitude ? ` (${info.attitude})` : '';
+            const action = info?.currentAction ? `: ${info.currentAction}` : '';
+            return `- ${id}${attitude}${action}`;
+        });
+    sections['On-screen NPCs'] = onScreen.length ? onScreen.join('\n') : '(none)';
+
+    const discoveredBullets = (state.discoveredClues ?? []).map((id) => `- ${id}`);
+    sections['Discovered clues'] = discoveredBullets.length ? discoveredBullets.join('\n') : '(none)';
+
+    try {
+        const reachableClueList = reachableClues(clues, state.discoveredClues ?? []);
+        const ranked = reachableClueList.slice().sort((a, b) => {
+            const ac = clues.find((c) => c.id === a.id);
+            const bc = clues.find((c) => c.id === b.id);
+            const aHits = (ac?.pointsToNodes ?? []).some((n) => pointedSet.has(n) || reachableForRender.some((r) => r.id === n));
+            const bHits = (bc?.pointsToNodes ?? []).some((n) => pointedSet.has(n) || reachableForRender.some((r) => r.id === n));
+            return Number(bHits) - Number(aHits);
+        });
+        sections['Available clues'] = formatCluesList(ranked);
+    } catch (error) {
+        log('Failed to compute Available clues.', 'warn', error.message);
+        sections['Available clues'] = '(none)';
+    }
+
+    const text = formatAuthorsNoteSections(sections, AUTHORS_NOTE_SECTIONS_NODE_MODE);
+    const ctx = getContext();
+    const substitute = ctx.substituteParams ?? ((s) => s);
+    const finalText = substitute(text);
+    await writeAuthorsNote(finalText);
+
+    try {
+        const $ = globalThis.$;
+        if ($) {
+            const $textarea = $('#extension_floating_prompt');
+            if ($textarea.length) {
+                $textarea.val(finalText);
+                $textarea[0].dispatchEvent(new Event('input', { bubbles: true }));
+                $textarea[0].dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }
+    } catch (error) {
+        log(`AN UI refresh failed: ${error.message}`, 'warn');
+    }
+}
+
+export async function renderAuthorsNoteFromState({ preserveSummaries = true } = {}) {
+    const state = ensureStoryStateShape(readStoryState());
+
+    if (await isCampaignNodeMode()) {
+        return renderNodeModeAuthorsNote(state, { preserveSummaries });
+    }
+
+    const { acts } = await loadAllActs();
+    const act = acts.find((a) => a.actNumber === state.actNumber) ?? acts[0] ?? null;
+
+    const sections = preserveSummaries
+        ? parseAuthorsNoteSections(undefined, AUTHORS_NOTE_SECTIONS)
         : Object.fromEntries(AUTHORS_NOTE_SECTIONS.map((l) => [l, '']));
 
     sections['Current Act'] = act ? `Act ${act.actNumber}: ${act.title}` : (sections['Current Act'] || '');
@@ -249,7 +355,7 @@ export async function renderAuthorsNoteFromState({ preserveSummaries = true } = 
         sections['Available clues'] = '(none)';
     }
 
-    const text = formatAuthorsNoteSections(sections);
+    const text = formatAuthorsNoteSections(sections, AUTHORS_NOTE_SECTIONS);
     const ctx = getContext();
     const substitute = ctx.substituteParams ?? ((s) => s);
     const finalText = substitute(text);
@@ -272,6 +378,17 @@ export async function renderAuthorsNoteFromState({ preserveSummaries = true } = 
 
 export async function ensureStoryStateInitialized() {
     const existing = readStoryState();
+
+    if (await isCampaignNodeMode()) {
+        // Node-mode has nothing to seed — story state starts empty and grows as
+        // the GM emits <<node:>>/<<clue:>>/<<npc:>> tags. Render the AN once so
+        // sections appear in their initial empty form.
+        const seeded = ensureStoryStateShape(existing ?? {});
+        if (!existing) await writeStoryState(seeded);
+        await renderAuthorsNoteFromState({ preserveSummaries: true });
+        return seeded;
+    }
+
     if (existing && existing.currentBeatLabel) return existing;
 
     const { acts } = await loadAllActs();
@@ -310,7 +427,10 @@ export async function ensureStoryStateInitialized() {
 
 export async function refreshSummariesSilently() {
     try {
-        const current = parseAuthorsNoteSections();
+        const nodeMode = await isCampaignNodeMode();
+        const sectionList = nodeMode ? AUTHORS_NOTE_SECTIONS_NODE_MODE : AUTHORS_NOTE_SECTIONS;
+        const recentLabel = nodeMode ? 'Recent scenes' : 'Recent beats';
+        const current = parseAuthorsNoteSections(undefined, sectionList);
         const [recent, threads, reminders] = await Promise.all([
             generateRecentBeatsProposal(),
             generateActiveThreadsProposal(current['Active threads']),
@@ -318,12 +438,12 @@ export async function refreshSummariesSilently() {
         ]);
         const next = {
             ...current,
-            'Recent beats': recent || current['Recent beats'],
+            [recentLabel]: recent || current[recentLabel],
             'Active threads': threads || current['Active threads'],
             'Reminders': reminders || current['Reminders'],
         };
         const substitute = getContext().substituteParams ?? ((s) => s);
-        await writeAuthorsNote(substitute(formatAuthorsNoteSections(next)));
+        await writeAuthorsNote(substitute(formatAuthorsNoteSections(next, sectionList)));
     } catch (error) {
         log('Silent summary refresh failed.', 'warn', error.message);
     }
@@ -331,8 +451,17 @@ export async function refreshSummariesSilently() {
 
 export async function getStoryStatusForUi() {
     const state = readStoryState();
-    if (!state || !state.currentBeatLabel) return null;
+    if (!state) return null;
+    if (await isCampaignNodeMode()) {
+        return {
+            mode: 'node',
+            visitedNodes: state.visitedNodes?.length ?? 0,
+            completedNodes: state.completedNodes?.length ?? 0,
+        };
+    }
+    if (!state.currentBeatLabel) return null;
     return {
+        mode: 'beat',
         actNumber: state.actNumber,
         currentBeatLabel: state.currentBeatLabel,
     };
