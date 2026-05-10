@@ -646,6 +646,185 @@ async function handleCharacterRename() {
     renameCharacter(active.id, nextName.trim());
 }
 
+function buildSelectionStep(characters, prevSelected) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'solo-ttrpg-assistant solo-stack';
+
+    const heading = document.createElement('h4');
+    heading.textContent = 'Select characters to import';
+    wrapper.append(heading);
+
+    const hint = document.createElement('p');
+    hint.textContent = `${characters.length} sample character${characters.length === 1 ? '' : 's'} found. Choose which to import.`;
+    wrapper.append(hint);
+
+    const list = document.createElement('div');
+    list.className = 'solo-stack';
+    list.style.maxHeight = '60vh';
+    list.style.overflowY = 'auto';
+    list.style.paddingRight = '8px';
+
+    const checkboxes = characters.map((sample, idx) => {
+        const archetype = sample?.archetype ?? 'Sample character';
+        const row = document.createElement('div');
+        row.className = 'solo-stack';
+        row.style.padding = '6px 0';
+        row.style.borderBottom = '1px solid var(--SmartThemeBorderColor, rgba(255,255,255,0.1))';
+        row.style.cursor = 'pointer';
+
+        const top = document.createElement('div');
+        top.style.display = 'flex';
+        top.style.alignItems = 'center';
+        top.style.gap = '8px';
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = prevSelected ? prevSelected.has(idx) : true;
+        cb.dataset.idx = String(idx);
+
+        const title = document.createElement('strong');
+        title.textContent = archetype;
+        title.style.cursor = 'pointer';
+
+        top.append(cb, title);
+        row.append(top);
+
+        title.addEventListener('click', (e) => {
+            e.preventDefault();
+            cb.checked = !cb.checked;
+        });
+
+        if (sample?.hook_into_campaign) {
+            const hook = document.createElement('div');
+            hook.textContent = sample.hook_into_campaign;
+            hook.style.opacity = '0.8';
+            hook.style.marginLeft = '24px';
+            hook.style.fontSize = '0.9em';
+            row.append(hook);
+        }
+
+        list.append(row);
+        return cb;
+    });
+
+    wrapper.append(list);
+
+    return {
+        wrapper,
+        getSelected: () => new Set(checkboxes.filter((cb) => cb.checked).map((cb) => Number(cb.dataset.idx))),
+    };
+}
+
+function buildModeStep(characters, selected, prevModes) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'solo-ttrpg-assistant solo-stack';
+
+    const heading = document.createElement('h4');
+    heading.textContent = 'Choose import mode';
+    wrapper.append(heading);
+
+    const hint = document.createElement('p');
+    hint.textContent = 'Pick how each character should be imported.';
+    wrapper.append(hint);
+
+    const list = document.createElement('div');
+    list.className = 'solo-stack';
+    list.style.maxHeight = '60vh';
+    list.style.overflowY = 'auto';
+    list.style.paddingRight = '8px';
+
+    const modeByIdx = new Map();
+
+    for (const idx of [...selected].sort((a, b) => a - b)) {
+        const sample = characters[idx];
+        const archetype = sample?.archetype ?? 'Sample character';
+        const hasStory = !!sample?.story;
+        const hasStats = !!sample?.pack;
+
+        const row = document.createElement('div');
+        row.className = 'solo-stack';
+        row.style.padding = '6px 0';
+        row.style.borderBottom = '1px solid var(--SmartThemeBorderColor, rgba(255,255,255,0.1))';
+
+        const title = document.createElement('strong');
+        title.textContent = archetype;
+        row.append(title);
+
+        if (sample?.hook_into_campaign) {
+            const hook = document.createElement('div');
+            hook.textContent = sample.hook_into_campaign;
+            hook.style.opacity = '0.8';
+            hook.style.fontSize = '0.9em';
+            row.append(hook);
+        }
+
+        const select = document.createElement('select');
+        select.className = 'text_pole wide100p';
+        if (hasStats) {
+            const opt = document.createElement('option');
+            opt.value = 'stats';
+            opt.textContent = '📊 Stats-Based character';
+            select.append(opt);
+        }
+        if (hasStory) {
+            const opt = document.createElement('option');
+            opt.value = 'story';
+            opt.textContent = '📖 Story-Based character';
+            select.append(opt);
+        }
+        const prev = prevModes?.get(idx);
+        if (prev && [...select.options].some((o) => o.value === prev)) {
+            select.value = prev;
+        }
+        modeByIdx.set(idx, select.value);
+        select.addEventListener('change', () => modeByIdx.set(idx, select.value));
+
+        row.append(select);
+        list.append(row);
+    }
+
+    wrapper.append(list);
+
+    return {
+        wrapper,
+        getModes: () => new Map(modeByIdx),
+    };
+}
+
+function importSampleCharacter(sample, mode, activePackName) {
+    const archetype = sample?.archetype ?? 'Sample character';
+    if (mode === 'story' && sample?.story) {
+        createStoryCharacter({
+            name: sample.story.name ?? archetype,
+            description: sample.story.description ?? '',
+            strengths: sample.story.strengths ?? [],
+            weakness: sample.story.weakness ?? '',
+        });
+        return true;
+    }
+    if ((mode === 'stats' || mode === 'pack') && sample?.pack) {
+        const created = createCharacter({
+            name: sample.pack.name ?? archetype,
+            packName: activePackName,
+        });
+        created.concept = sample.pack.concept ?? created.concept ?? '';
+        if (sample.pack.attributes && typeof sample.pack.attributes === 'object') {
+            created.attributes = { ...(created.attributes ?? {}), ...sample.pack.attributes };
+        }
+        if (Array.isArray(sample.pack.abilities)) {
+            created.abilities = sample.pack.abilities.slice();
+        }
+        if (Array.isArray(sample.pack.equipment)) {
+            created.equipment = sample.pack.equipment.slice();
+        }
+        if (sample.pack.notes) {
+            created.notes = sample.pack.notes;
+        }
+        return true;
+    }
+    return false;
+}
+
 async function handleCharacterImportSamples(event) {
     if (!isExtensionEnabled()) {
         event.target.value = '';
@@ -670,96 +849,69 @@ async function handleCharacterImportSamples(event) {
         const settings = getSettings();
         const activePackName = settings.activePackName ?? data.pack_name ?? null;
 
-        for (const sample of characters) {
-            const archetype = sample?.archetype ?? 'Sample character';
-            const hasStory = !!sample?.story;
-            const hasStats = !!sample?.pack;
+        let selected = null;
+        let modes = null;
 
-            const wrapper = document.createElement('div');
-            wrapper.className = 'solo-ttrpg-assistant solo-stack';
-
-            const heading = document.createElement('h4');
-            heading.textContent = `Import "${archetype}"`;
-            wrapper.append(heading);
-
-            if (sample?.hook_into_campaign) {
-                const hook = document.createElement('p');
-                hook.textContent = sample.hook_into_campaign;
-                wrapper.append(hook);
+        // Step 1: select which characters
+        while (true) {
+            const step1 = buildSelectionStep(characters, selected);
+            const popup1 = new context.Popup(step1.wrapper, context.POPUP_TYPE.CONFIRM, '', {
+                okButton: 'Next',
+                cancelButton: 'Cancel',
+            });
+            const r1 = await popup1.show();
+            if (r1 !== context.POPUP_RESULT.AFFIRMATIVE) {
+                return;
+            }
+            selected = step1.getSelected();
+            if (selected.size === 0) {
+                toastr.info('Select at least one character to continue.');
+                continue;
             }
 
-            const label = document.createElement('label');
-            label.className = 'solo-stack';
-            const labelText = document.createElement('span');
-            labelText.textContent = 'Import as';
-            label.append(labelText);
-
-            const select = document.createElement('select');
-            select.className = 'text_pole wide100p';
-            const skipOpt = document.createElement('option');
-            skipOpt.value = 'skip';
-            skipOpt.textContent = '⏭ Skip this character';
-            skipOpt.selected = true;
-            select.append(skipOpt);
-            if (hasStats) {
-                const statsOpt = document.createElement('option');
-                statsOpt.value = 'stats';
-                statsOpt.textContent = '📊 Stats-Based character';
-                select.append(statsOpt);
-            }
-            if (hasStory) {
-                const storyOpt = document.createElement('option');
-                storyOpt.value = 'story';
-                storyOpt.textContent = '📖 Story-Based character';
-                select.append(storyOpt);
-            }
-            label.append(select);
-            wrapper.append(label);
-
-            let mode = 'skip';
-            select.addEventListener('change', () => {
-                mode = select.value;
+            // Skip step 2 if no character has both shapes available
+            const needsModeChoice = [...selected].some((idx) => {
+                const s = characters[idx];
+                return !!s?.story && !!s?.pack;
             });
 
-            const popup = new context.Popup(wrapper, context.POPUP_TYPE.CONFIRM, '', {
-                okButton: 'Import',
-                cancelButton: 'Cancel All',
-            });
-            const result = await popup.show();
-            if (result !== context.POPUP_RESULT.AFFIRMATIVE) {
+            if (!needsModeChoice) {
+                modes = new Map();
+                for (const idx of selected) {
+                    const s = characters[idx];
+                    modes.set(idx, s?.pack ? 'stats' : 'story');
+                }
                 break;
             }
 
-            if (mode === 'story' && sample?.story) {
-                createStoryCharacter({
-                    name: sample.story.name ?? archetype,
-                    description: sample.story.description ?? '',
-                    strengths: sample.story.strengths ?? [],
-                    weakness: sample.story.weakness ?? '',
-                });
-            } else if ((mode === 'stats' || mode === 'pack') && sample?.pack) {
-                const created = createCharacter({
-                    name: sample.pack.name ?? archetype,
-                    packName: activePackName,
-                });
-                created.concept = sample.pack.concept ?? created.concept ?? '';
-                if (sample.pack.attributes && typeof sample.pack.attributes === 'object') {
-                    created.attributes = { ...(created.attributes ?? {}), ...sample.pack.attributes };
-                }
-                if (Array.isArray(sample.pack.abilities)) {
-                    created.abilities = sample.pack.abilities.slice();
-                }
-                if (Array.isArray(sample.pack.equipment)) {
-                    created.equipment = sample.pack.equipment.slice();
-                }
-                if (sample.pack.notes) {
-                    created.notes = sample.pack.notes;
-                }
-                saveSettings();
+            // Step 2: choose mode per selected character
+            const step2 = buildModeStep(characters, selected, modes);
+            const popup2 = new context.Popup(step2.wrapper, context.POPUP_TYPE.CONFIRM, '', {
+                okButton: 'Import',
+                cancelButton: 'Back',
+            });
+            const r2 = await popup2.show();
+            if (r2 === context.POPUP_RESULT.AFFIRMATIVE) {
+                modes = step2.getModes();
+                break;
             }
+            // Back: loop to step 1, preserve selection + modes
+            modes = step2.getModes();
         }
 
-        toastr.success('Sample import complete.');
+        let imported = 0;
+        for (const idx of [...selected].sort((a, b) => a - b)) {
+            const sample = characters[idx];
+            const mode = modes.get(idx);
+            if (importSampleCharacter(sample, mode, activePackName)) {
+                imported += 1;
+            }
+        }
+        if (imported > 0) {
+            saveSettings();
+        }
+
+        toastr.success(`Imported ${imported} character${imported === 1 ? '' : 's'}.`);
     } catch (error) {
         toastr.error(`Failed to import samples: ${error.message}`);
     } finally {

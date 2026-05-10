@@ -489,6 +489,7 @@ def run_pipeline(
                 factions=factions,
                 npcs=npcs,
                 locations=locations,
+                seed=loaded_seed.resolved,
                 model=resolved_model,
                 temperature=temperature,
                 validation_log=validation_log,

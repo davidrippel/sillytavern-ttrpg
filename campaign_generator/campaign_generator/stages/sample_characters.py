@@ -12,6 +12,7 @@ from ..schemas import (
     PremiseDocument,
     SampleCharacterSet,
 )
+from ..seed import CampaignSeed
 from ..validation import ValidationLog
 
 
@@ -28,12 +29,25 @@ def run(
     factions: FactionSet,
     npcs: NPCRoster,
     locations: LocationCatalog,
+    seed: CampaignSeed,
     model: str,
     temperature: float,
     validation_log: ValidationLog,
 ) -> SampleCharacterSet:
     pack_attribute_keys = list(pack.attribute_keys)
     ability_names = sorted(pack.ability_names)
+
+    count = seed.num_sample_characters or 5
+
+    known_npcs = [
+        n for n in npcs.npcs
+        if any(getattr(rel, "known_at_start", True) for rel in (n.relationships or []))
+    ]
+    if not known_npcs:
+        validation_log.write(
+            "[sample-characters] no NPCs marked known_at_start; falling back to full roster for hooks"
+        )
+        known_npcs = list(npcs.npcs)
 
     context = {
         "pack": {
@@ -47,10 +61,15 @@ def run(
             "abilities": ability_names,
             "character_template": pack.character_template,
         },
+        "num_sample_characters": count,
+        "protagonist": {
+            "archetype": seed.protagonist_archetype,
+            "known_facts": list(seed.protagonist_known_facts or []),
+        },
         "premise": premise.model_dump(),
         "plot": plot.model_dump(),
         "factions": [{"name": f.name} for f in factions.factions],
-        "npcs": [{"name": n.name} for n in npcs.npcs],
+        "npcs": [{"name": n.name} for n in known_npcs],
         "locations": [{"name": loc.name} for loc in locations.locations],
     }
 
@@ -65,11 +84,16 @@ def run(
         validation_log=validation_log,
     )
 
+    if len(result.characters) != count:
+        raise ValueError(
+            f"sample_characters: expected exactly {count} characters, got {len(result.characters)}"
+        )
+
     valid_keys = set(pack_attribute_keys)
     valid_abilities = set(ability_names)
     known_names = (
         {f.name for f in factions.factions}
-        | {n.name for n in npcs.npcs}
+        | {n.name for n in known_npcs}
         | {loc.name for loc in locations.locations}
     )
 
@@ -86,7 +110,7 @@ def run(
             )
         if known_names and not any(name in sample.hook_into_campaign for name in known_names):
             validation_log.write(
-                f"[sample-characters] {sample.archetype!r} hook does not reference any known faction/NPC/location"
+                f"[sample-characters] {sample.archetype!r} hook does not reference any known-at-start faction/NPC/location"
             )
 
     return result

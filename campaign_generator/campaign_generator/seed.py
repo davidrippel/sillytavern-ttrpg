@@ -40,6 +40,7 @@ class CampaignSeed(BaseModel):
     num_acts: int | None = None
     num_npcs: int | None = None
     num_locations: int | None = None
+    num_sample_characters: int | None = None
     clue_chain_density: str | None = None
     branch_points: int | None = None
     random_seed: int | None = None
@@ -125,5 +126,7 @@ def load_seed(path: str | Path, pack: GenrePack) -> LoadedSeed:
         warnings.append("num_npcs is outside the recommended 6-15 range")
     if resolved.num_locations is not None and not 5 <= resolved.num_locations <= 12:
         warnings.append("num_locations is outside the recommended 5-12 range")
+    if resolved.num_sample_characters is not None and not 1 <= resolved.num_sample_characters <= 10:
+        warnings.append("num_sample_characters is outside the recommended 1-10 range")
 
     return LoadedSeed(raw=raw, resolved=resolved, warnings=warnings)

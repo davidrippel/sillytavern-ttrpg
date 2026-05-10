@@ -377,7 +377,7 @@ class SampleCharacter(BaseModel):
 
 
 class SampleCharacterSet(BaseModel):
-    characters: list[SampleCharacter] = Field(min_length=5, max_length=5)
+    characters: list[SampleCharacter] = Field(min_length=1, max_length=10)
 
 
 class OpeningHookDocument(BaseModel):

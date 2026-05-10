@@ -31,6 +31,7 @@ def test_pipeline_replay_writes_outputs(tmp_path):
                 "campaign_pitch": "A ferryman's death opens a path into a buried conspiracy.",
                 "num_npcs": 6,
                 "num_locations": 5,
+                "num_sample_characters": 3,
                 "branch_points": 4,
             }
         ),
