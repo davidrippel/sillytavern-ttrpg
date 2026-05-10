@@ -2,6 +2,21 @@ from __future__ import annotations
 
 from ..schemas import InitialAuthorsNote, NodeGraph, PlotSkeleton
 
+RESPONSE_LENGTH_BLOCK = "\n".join(
+    [
+        "",
+        "Response length (HARD CAP — applies to THIS turn):",
+        "- Default: 2 short paragraphs, ~120 words total.",
+        "- Scene transitions or climaxes only: up to 3 paragraphs, ~200 words.",
+        "- If you exceed either limit, you have failed the task.",
+        "- End at the first natural beat. Do not continue the scene.",
+    ]
+)
+
+
+def append_response_length_cap(text: str) -> str:
+    return f"{text.rstrip()}\n{RESPONSE_LENGTH_BLOCK}"
+
 
 def render(plot: PlotSkeleton) -> InitialAuthorsNote:
     act_one = plot.acts[0]
@@ -42,4 +57,4 @@ def render_node_mode(plot: PlotSkeleton, node_graph: NodeGraph) -> str:
         "Recent scenes: (empty at start)",
         "Reminders: (none)",
     ]
-    return "\n".join(sections)
+    return append_response_length_cap("\n".join(sections))

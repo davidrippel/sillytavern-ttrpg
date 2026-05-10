@@ -230,6 +230,19 @@ async function generateRemindersProposal(currentReminders) {
     return runQuietPrompt(prompt, 'Reminders');
 }
 
+const RESPONSE_LENGTH_BLOCK = [
+    '',
+    'Response length (HARD CAP — applies to THIS turn):',
+    '- Default: 2 short paragraphs, ~120 words total.',
+    '- Scene transitions or climaxes only: up to 3 paragraphs, ~200 words.',
+    '- If you exceed either limit, you have failed the task.',
+    '- End at the first natural beat. Do not continue the scene.',
+].join('\n');
+
+function appendResponseLengthCap(text) {
+    return `${String(text ?? '').trimEnd()}\n${RESPONSE_LENGTH_BLOCK}`;
+}
+
 function formatBeatBullet(act, label) {
     const beat = findBeat(act, label);
     if (!beat) return '';
@@ -320,7 +333,7 @@ async function renderNodeModeAuthorsNote(state, { preserveSummaries }) {
         sections['Available clues'] = '(none)';
     }
 
-    const text = formatAuthorsNoteSections(sections, AUTHORS_NOTE_SECTIONS_NODE_MODE);
+    const text = appendResponseLengthCap(formatAuthorsNoteSections(sections, AUTHORS_NOTE_SECTIONS_NODE_MODE));
     const ctx = getContext();
     const substitute = ctx.substituteParams ?? ((s) => s);
     const finalText = substitute(text);
@@ -376,7 +389,7 @@ export async function renderAuthorsNoteFromState({ preserveSummaries = true } = 
         sections['Available clues'] = '(none)';
     }
 
-    const text = formatAuthorsNoteSections(sections, AUTHORS_NOTE_SECTIONS);
+    const text = appendResponseLengthCap(formatAuthorsNoteSections(sections, AUTHORS_NOTE_SECTIONS));
     const ctx = getContext();
     const substitute = ctx.substituteParams ?? ((s) => s);
     const finalText = substitute(text);
@@ -464,7 +477,7 @@ export async function refreshSummariesSilently() {
             'Reminders': reminders || current['Reminders'],
         };
         const substitute = getContext().substituteParams ?? ((s) => s);
-        await writeAuthorsNote(substitute(formatAuthorsNoteSections(next, sectionList)));
+        await writeAuthorsNote(substitute(appendResponseLengthCap(formatAuthorsNoteSections(next, sectionList))));
     } catch (error) {
         log('Silent summary refresh failed.', 'warn', error.message);
     }

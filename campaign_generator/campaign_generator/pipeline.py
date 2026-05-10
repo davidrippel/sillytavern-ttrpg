@@ -563,7 +563,9 @@ def run_pipeline(
     if node_graph is not None:
         initial_text = initial_an_stage.render_node_mode(plot, node_graph)
     else:
-        initial_text = initial_an_stage.render(plot).render()
+        initial_text = initial_an_stage.append_response_length_cap(
+            initial_an_stage.render(plot).render()
+        )
     _write_text(output_dir / "initial_authors_note.txt", initial_text)
     if progress_callback is not None:
         progress_callback("Wrote initial_authors_note.txt")
