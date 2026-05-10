@@ -112,10 +112,10 @@ export function reachableNodes(nodes, clues, state, { maxResults = 8 } = {}) {
     const completed = new Set(state?.completedNodes ?? []);
     const discovered = state?.discoveredClues ?? [];
 
-    const hasProgress = visited.size > 0 || completed.size > 0 || discovered.length > 0;
-    const pointed = hasProgress
-        ? discoveredCluesPointingToNodes(clues, discovered)
-        : bootstrapPointedNodes(clues, nodes);
+    const pointed = discoveredCluesPointingToNodes(clues, discovered);
+    if (discovered.length === 0) {
+        for (const id of bootstrapPointedNodes(clues, nodes)) pointed.add(id);
+    }
 
     const result = [];
     for (const node of nodes) {
