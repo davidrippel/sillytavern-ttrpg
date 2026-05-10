@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from common.llm import LLMClient, generate_structured
+from common.llm import LLMClient, LLMError, generate_structured
 from common.pack import GenrePack
 from ..schemas import (
     FactionSet,
@@ -49,7 +49,7 @@ def run(
         )
         known_npcs = list(npcs.npcs)
 
-    context = {
+    base_context = {
         "pack": {
             "pack_name": pack.metadata.pack_name,
             "display_name": pack.metadata.display_name,
@@ -73,22 +73,6 @@ def run(
         "locations": [{"name": loc.name} for loc in locations.locations],
     }
 
-    result = generate_structured(
-        client=client,
-        stage_name="sample_characters",
-        system_prompt=system_prompt,
-        user_prompt=json.dumps(context, indent=2),
-        schema=SampleCharacterSet,
-        model=model,
-        temperature=temperature,
-        validation_log=validation_log,
-    )
-
-    if len(result.characters) != count:
-        raise ValueError(
-            f"sample_characters: expected exactly {count} characters, got {len(result.characters)}"
-        )
-
     valid_keys = set(pack_attribute_keys)
     valid_abilities = set(ability_names)
     known_names = (
@@ -97,20 +81,59 @@ def run(
         | {loc.name for loc in locations.locations}
     )
 
-    for sample in result.characters:
-        bad_attrs = [key for key in sample.pack.attributes if key not in valid_keys]
-        if bad_attrs:
-            raise ValueError(
-                f"sample character {sample.archetype!r} references unknown attribute keys: {bad_attrs}"
-            )
-        bad_abilities = [name for name in sample.pack.abilities if name not in valid_abilities]
-        if bad_abilities:
-            raise ValueError(
-                f"sample character {sample.archetype!r} references unknown abilities: {bad_abilities}"
-            )
-        if known_names and not any(name in sample.hook_into_campaign for name in known_names):
-            validation_log.write(
-                f"[sample-characters] {sample.archetype!r} hook does not reference any known-at-start faction/NPC/location"
-            )
+    repair_note: str | None = None
+    last_errors: list[str] = []
+    for attempt in range(1, 4):
+        context = dict(base_context)
+        if repair_note is not None:
+            context["repair_note"] = repair_note
 
-    return result
+        result = generate_structured(
+            client=client,
+            stage_name="sample_characters",
+            system_prompt=system_prompt,
+            user_prompt=json.dumps(context, indent=2),
+            schema=SampleCharacterSet,
+            model=model,
+            temperature=temperature,
+            validation_log=validation_log,
+        )
+
+        errors: list[str] = []
+        if len(result.characters) != count:
+            errors.append(
+                f"expected exactly {count} characters, got {len(result.characters)}"
+            )
+        for sample in result.characters:
+            bad_attrs = [key for key in sample.pack.attributes if key not in valid_keys]
+            if bad_attrs:
+                errors.append(
+                    f"{sample.archetype!r} pack.attributes contains unknown keys {bad_attrs}; "
+                    f"valid attribute_keys are {pack_attribute_keys}"
+                )
+            bad_abilities = [name for name in sample.pack.abilities if name not in valid_abilities]
+            if bad_abilities:
+                errors.append(
+                    f"{sample.archetype!r} pack.abilities contains entries {bad_abilities} that are NOT in the pack ability catalog. "
+                    f"Each entry of pack.abilities must be one of the canonical ability names from the input `pack.abilities` list. "
+                    f"Attribute keys (like {pack_attribute_keys}) are NOT abilities."
+                )
+
+        if not errors:
+            for sample in result.characters:
+                if known_names and not any(name in sample.hook_into_campaign for name in known_names):
+                    validation_log.write(
+                        f"[sample-characters] {sample.archetype!r} hook does not reference any known-at-start faction/NPC/location"
+                    )
+            return result
+
+        last_errors = errors
+        validation_log.write(
+            f"[sample-characters] attempt {attempt} semantic validation failed: {'; '.join(errors)}"
+        )
+        repair_note = "Repair these constraint failures: " + "; ".join(errors)
+
+    raise LLMError(
+        "sample_characters could not satisfy semantic constraints after 3 attempts: "
+        + "; ".join(last_errors)
+    )

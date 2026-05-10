@@ -35,7 +35,7 @@ For each character:
 - `pack.name`: same as `story.name`.
 - `pack.concept`: a one-line concept ("disgraced scholar turned investigator").
 - `pack.attributes`: an object whose keys are a subset of `pack.attribute_keys`. Values are integer modifiers in the −1..+2 range. Use ONLY keys from `attribute_keys`.
-- `pack.abilities`: a list of ability names; every entry MUST appear in the `pack.abilities` input list.
+- `pack.abilities`: a list of ability names; every entry MUST appear verbatim in the input `pack.abilities` list. Do NOT invent abilities. Do NOT use attribute keys (e.g. "Stamina", "Charm") as abilities — attributes and abilities are disjoint catalogs.
 - `pack.equipment`: 2-4 evocative items.
 - `pack.notes`: 1-2 sentences of additional flavor (background, secret, or unfinished business).
 
