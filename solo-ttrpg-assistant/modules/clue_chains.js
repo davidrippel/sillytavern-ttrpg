@@ -35,7 +35,9 @@ export async function loadAllClues() {
     const clues = [];
     for (const entry of entriesOf(lorebook)) {
         const parsed = parseClueEntry(entry);
-        if (parsed) clues.push(parsed);
+        if (!parsed) continue;
+        if (/^__.*__$/.test(parsed.id)) continue;
+        clues.push(parsed);
     }
     return clues;
 }

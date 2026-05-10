@@ -66,6 +66,8 @@ function sanitizeProposal(raw, { requireBullets = true } = {}) {
     );
     const isBullet = (line) => /^\s*[-*•]\s+/.test(line);
     const sentinelPattern = /^\(.*\)$/;
+    const instructionEchoPattern = /\b(?:plain[- ]text bullets?|one (?:thread|beat|reminder) per line|no headings|no narration|no explanations|no "?---"? separators?|no npc dialogue|under \d+ words|return exactly|output format)\b/i;
+    const formatSpecPattern = /^\s*[-*•]\s*\d+\s*[-–]\s*\d+\s+\S/;
 
     const cleaned = [];
     for (const line of text.split('\n')) {
@@ -73,6 +75,8 @@ function sanitizeProposal(raw, { requireBullets = true } = {}) {
         if (sectionHeadingPattern.test(trimmed)) break;
         if (/^---+\s*$/.test(trimmed)) break;
         if (/^\*\*[^*]+\*\*\s*[:?]/.test(trimmed)) break;
+        if (instructionEchoPattern.test(trimmed)) continue;
+        if (formatSpecPattern.test(trimmed)) continue;
         cleaned.push(line);
     }
 
@@ -140,25 +144,44 @@ async function generateRecentBeatsProposal() {
     return runQuietPrompt(prompt, 'Recent beats');
 }
 
+function dedupeAndCapBullets(text, { max = 5, maxWords = 30 } = {}) {
+    if (!text) return '';
+    const seen = new Set();
+    const kept = [];
+    for (const rawLine of text.split('\n')) {
+        const line = rawLine.trim();
+        if (!line) continue;
+        const bulletMatch = line.match(/^[-*•]\s*(.+)$/);
+        if (!bulletMatch) continue;
+        const body = bulletMatch[1].trim();
+        const words = body.split(/\s+/);
+        const trimmedBody = words.length > maxWords
+            ? `${words.slice(0, maxWords).join(' ')}…`
+            : body;
+        const key = trimmedBody.toLowerCase().replace(/[^\w\s]/g, '').slice(0, 80);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        kept.push(`- ${trimmedBody}`);
+        if (kept.length >= max) break;
+    }
+    return kept.join('\n');
+}
+
 async function generateActiveThreadsProposal(currentActiveThreads) {
     const settings = getSettings();
     const excerpt = buildRecentChatExcerpt(settings.authorsNote.recentBeatsMessages ?? 8);
-    if (!excerpt.trim() && !currentActiveThreads?.trim()) return '';
+    if (!excerpt.trim()) return '';
 
     const prompt = [
-        'Build a fresh list of currently active narrative threads, working bottom-up from the Recent chat below.',
+        'Build a fresh list of currently active narrative threads, working only from the Recent chat below.',
         '',
-        'Process:',
-        '1. Read Recent chat. Identify open threads it raises — open questions, unfulfilled promises, dangling NPC relationships, looming dangers, decisions the player faces, mysteries.',
-        '2. For each thread you identify, write one short bullet describing it in concrete terms grounded in chat events.',
-        '3. Then look at the Previously listed Active threads. Add any of them ONLY IF the Recent chat contains evidence that thread is still in play.',
-        '',
+        'A thread is a concrete dangling situation in the fiction — open questions, unfulfilled promises, dangling NPC relationships, looming dangers, decisions the player faces, unresolved mysteries.',
         'A thread is NOT a premise statement, an author goal, or a mystery framed in third-person about the protagonist.',
-        'A thread IS a concrete dangling situation in the fiction.',
         '',
         'Hard rules:',
+        '- Use only what Recent chat shows. Do not invent threads from genre expectations.',
         '- Never include "{{user}}" or any template placeholder. Use the actual character name from chat.',
-        '- Never copy a previous thread verbatim if it contains template language or premise framing — rewrite or drop it.',
+        '- Each bullet must describe a different thread. No paraphrases of the same situation.',
         '',
         'Output format — STRICT:',
         '- 2-5 short plain-text bullets, one thread per line.',
@@ -166,13 +189,11 @@ async function generateActiveThreadsProposal(currentActiveThreads) {
         '- Nothing else. No headings. No explanations. No narration. No "---" separators. No NPC dialogue.',
         '',
         '=== Recent chat ===',
-        excerpt || '(no chat yet)',
-        '',
-        '=== Previously listed Active threads (use only as a hint; do not copy verbatim) ===',
-        currentActiveThreads?.trim() || '(empty)',
+        excerpt,
     ].join('\n');
 
-    return runQuietPrompt(prompt, 'Active threads');
+    const raw = await runQuietPrompt(prompt, 'Active threads');
+    return dedupeAndCapBullets(raw, { max: 5, maxWords: 30 });
 }
 
 async function generateRemindersProposal(currentReminders) {
@@ -433,7 +454,7 @@ export async function refreshSummariesSilently() {
         const current = parseAuthorsNoteSections(undefined, sectionList);
         const [recent, threads, reminders] = await Promise.all([
             generateRecentBeatsProposal(),
-            generateActiveThreadsProposal(current['Active threads']),
+            generateActiveThreadsProposal(),
             generateRemindersProposal(current['Reminders']),
         ]);
         const next = {

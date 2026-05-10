@@ -90,12 +90,32 @@ export function discoveredCluesPointingToNodes(clues, discoveredIds) {
     return targets;
 }
 
+function bootstrapPointedNodes(clues, nodes) {
+    const pointed = new Set();
+    for (const clue of clues) {
+        const isSeed = /seed|entry/i.test(clue.id);
+        if (!isSeed) continue;
+        for (const target of clue.pointsTo ?? []) {
+            if (target.type === 'node' && target.value) pointed.add(target.value);
+        }
+    }
+    if (pointed.size === 0) {
+        for (const node of nodes) {
+            if (!(node.gating ?? []).length) pointed.add(node.id);
+        }
+    }
+    return pointed;
+}
+
 export function reachableNodes(nodes, clues, state, { maxResults = 8 } = {}) {
     const visited = new Set(state?.visitedNodes ?? []);
     const completed = new Set(state?.completedNodes ?? []);
     const discovered = state?.discoveredClues ?? [];
 
-    const pointed = discoveredCluesPointingToNodes(clues, discovered);
+    const hasProgress = visited.size > 0 || completed.size > 0 || discovered.length > 0;
+    const pointed = hasProgress
+        ? discoveredCluesPointingToNodes(clues, discovered)
+        : bootstrapPointedNodes(clues, nodes);
 
     const result = [];
     for (const node of nodes) {
