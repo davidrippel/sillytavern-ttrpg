@@ -24,7 +24,7 @@ export function parseAuthorsNoteSections(text = readAuthorsNote(), sectionList =
     const sections = Object.fromEntries(sectionList.map((label) => [label, '']));
 
     let currentLabel = null;
-    const lines = String(text ?? '').split('\n');
+    const lines = stripResponseLengthCap(text).split('\n');
 
     for (const line of lines) {
         const headingMatch = line.match(/^([^:]+):\s*(.*)$/);
@@ -239,8 +239,17 @@ const RESPONSE_LENGTH_BLOCK = [
     '- End at the first natural beat. Do not continue the scene.',
 ].join('\n');
 
+const RESPONSE_LENGTH_HEADING_RE = /^Response length \(HARD CAP[^\n]*$/im;
+
+function stripResponseLengthCap(text) {
+    const str = String(text ?? '');
+    const match = str.match(RESPONSE_LENGTH_HEADING_RE);
+    if (!match) return str;
+    return str.slice(0, match.index).trimEnd();
+}
+
 function appendResponseLengthCap(text) {
-    return `${String(text ?? '').trimEnd()}\n${RESPONSE_LENGTH_BLOCK}`;
+    return `${stripResponseLengthCap(text).trimEnd()}\n${RESPONSE_LENGTH_BLOCK}`;
 }
 
 function formatBeatBullet(act, label) {
