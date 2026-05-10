@@ -44,6 +44,10 @@ def main(
         False, "--beats-mode",
         help="Force the legacy beat-mode (linear acts/beats). Mutually exclusive with --nodes-mode.",
     ),
+    resume: bool = typer.Option(
+        False, "--resume",
+        help="Reuse the existing --output directory and its cached stages instead of creating a fresh sibling (_1, _2, ...).",
+    ),
 ) -> None:
     if init_seed is not None:
         if genre is None:
@@ -72,6 +76,7 @@ def main(
         output=output,
         pack_name=pack.metadata.pack_name,
         seed_path=seed,
+        resume=resume,
     )
 
     result = run_pipeline(
@@ -84,6 +89,7 @@ def main(
         stages=stages,
         progress_callback=_progress,
         node_mode=node_mode_override,
+        resume=resume,
     )
     console.print(f"Campaign written to {result.output_dir}")
 

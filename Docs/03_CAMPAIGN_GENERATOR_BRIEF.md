@@ -73,6 +73,7 @@ Flags:
 - `--random-seed INT` — reproducibility seed
 - `--with-images` — after generation, call the image generator (see [`image_generator/README.md`](../image_generator/README.md)) to render NPC portraits into `<output>/npc_images/`. Requires `IMAGE_GEN_MODEL` in `.env`. Off by default. Image-gen failures are logged but do not fail the campaign run.
 - `--nodes-mode` / `--beats-mode` — choose campaign mode. Mutually exclusive. **Node-mode is the default** when neither flag nor `CG_NODE_MODE` env var is set. Precedence: explicit flag > `CG_NODE_MODE` env var > default (node-mode).
+- `--resume` — reuse the existing `--output` directory verbatim (and its cached `stages/*.json`) instead of allocating a fresh `_N` sibling. Use this to continue an interrupted run; the pipeline picks up at the first stage with no cache entry.
 
 Model precedence is:
 1. `model:` in the seed YAML
@@ -84,7 +85,7 @@ Path resolution rules:
 - If `CAMPAIGN_GENERATOR_GENRES_BASE_DIR` is set, `--genre` may be either a full path or just the pack name.
 - If `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set, a relative `--output my_campaign` is resolved under that base directory.
 - If `--output` is omitted and `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set, the tool auto-generates a campaign directory name using timestamp + pack name + seed stem.
-- Output name collisions are resolved by appending `_1`, `_2`, etc.
+- Output name collisions are resolved by appending `_1`, `_2`, etc. Pass `--resume` to opt out and reuse the existing directory.
 
 Seed file extends the pack's `generator_seed.yaml`. Any fields specified in the seed override the pack defaults, except `themes_exclude` (which merges) and `strictness` (which merges field-by-field). The full seed format is specified in `09_SEED_FORMAT.md`.
 

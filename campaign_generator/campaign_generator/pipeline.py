@@ -144,9 +144,10 @@ def _run_or_load_stage(
     model_cls: type[BaseModel],
     client: LLMClient,
     progress_callback: ProgressCallback | None = None,
+    resume: bool = False,
 ) -> BaseModel:
     cache_path = _stage_cache_path(stages_dir, name)
-    if name not in selected and cache_path.exists():
+    if (name not in selected or resume) and cache_path.exists():
         if progress_callback is not None:
             progress_callback(f"Using cached stage: {name}")
         return _load_cached_stage(cache_path, model_cls)
@@ -177,6 +178,7 @@ def run_pipeline(
     llm_client: LLMClient | None = None,
     progress_callback: ProgressCallback | None = None,
     node_mode: bool | None = None,
+    resume: bool = False,
 ) -> PipelineResult:
     started_at = time.monotonic()
     output_dir = Path(output_path).resolve()
@@ -222,6 +224,7 @@ def run_pipeline(
         model_cls=PremiseDocument,
         client=client,
         progress_callback=progress_callback,
+        resume=resume,
         runner=lambda: premise_stage.run(
             client=client,
             system_prompt=_load_prompt(premise_stage.PROMPT_FILE),
@@ -242,6 +245,7 @@ def run_pipeline(
         model_cls=PlotSkeleton,
         client=client,
         progress_callback=progress_callback,
+        resume=resume,
         runner=lambda: plot_stage.run(
             client=client,
             system_prompt=_load_prompt(plot_stage.PROMPT_FILE),
@@ -274,6 +278,7 @@ def run_pipeline(
         model_cls=FactionSet,
         client=client,
         progress_callback=progress_callback,
+        resume=resume,
         runner=lambda: factions_stage.run(
             client=client,
             system_prompt=_load_prompt(factions_stage.PROMPT_FILE),
@@ -308,6 +313,7 @@ def run_pipeline(
         model_cls=NPCRoster,
         client=client,
         progress_callback=progress_callback,
+        resume=resume,
         runner=lambda: npcs_stage.run(
             client=client,
             system_prompt=_load_prompt(npcs_stage.PROMPT_FILE),
@@ -398,6 +404,7 @@ def run_pipeline(
         model_cls=LocationCatalog,
         client=client,
         progress_callback=progress_callback,
+        resume=resume,
         runner=lambda: locations_stage.run(
             client=client,
             system_prompt=_load_prompt(locations_stage.PROMPT_FILE),
@@ -425,6 +432,7 @@ def run_pipeline(
         model_cls=ClueGraph,
         client=client,
         progress_callback=progress_callback,
+        resume=resume,
         runner=lambda: clue_chains_stage.run(
             client=client,
             system_prompt=_load_prompt(clue_chains_stage.PROMPT_FILE),
@@ -452,6 +460,7 @@ def run_pipeline(
         model_cls=BranchPlan,
         client=client,
         progress_callback=progress_callback,
+        resume=resume,
         runner=lambda: branches_stage.run(
             client=client,
             system_prompt=_load_prompt(branches_stage.PROMPT_FILE),
@@ -480,6 +489,7 @@ def run_pipeline(
             model_cls=SampleCharacterSet,
             client=client,
             progress_callback=progress_callback,
+            resume=resume,
             runner=lambda: sample_characters_stage.run(
                 client=client,
                 system_prompt=_load_prompt(sample_characters_stage.PROMPT_FILE),

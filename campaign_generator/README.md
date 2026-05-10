@@ -79,6 +79,18 @@ If `--output` is omitted and `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set, the
 
 Example: `20260421_153000_symbaroum_dark_fantasy_my_seed`
 
+If the target output directory already exists, the generator creates a sibling with a `_1`, `_2`, … suffix to avoid overwriting prior runs. To **resume an interrupted run** into the existing directory (reusing cached stages under `stages/`), pass `--resume`:
+
+```bash
+python -m campaign_generator \
+    --genre symbaroum_dark_fantasy \
+    --seed my_seed.yaml \
+    --output ./campaigns/my_first_campaign/ \
+    --resume
+```
+
+`--resume` makes the generator target the existing path verbatim instead of allocating a fresh `_N` sibling. Completed stages load from cache; the run picks up at the first stage that has no cache entry (typically the one that previously failed).
+
 ## Environment
 
 - `OPENROUTER_API_KEY` is read automatically from `.env` if present.

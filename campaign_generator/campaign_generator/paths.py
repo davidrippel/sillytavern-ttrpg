@@ -53,17 +53,20 @@ def resolve_output_path(
     pack_name: str,
     seed_path: str | Path,
     now: datetime | None = None,
+    resume: bool = False,
 ) -> Path:
+    pick = (lambda p: p.resolve()) if resume else (lambda p: _next_available_path(p.resolve()))
+
     if output is not None:
         output_path = Path(output)
         if output_path.is_absolute():
-            return _next_available_path(output_path.resolve())
+            return pick(output_path)
 
         base_dir = get_campaigns_base_dir()
         if base_dir is not None:
-            return _next_available_path((base_dir / output_path).resolve())
+            return pick(base_dir / output_path)
 
-        return _next_available_path(output_path.resolve())
+        return pick(output_path)
 
     base_dir = get_campaigns_base_dir()
     if base_dir is None:
@@ -72,4 +75,4 @@ def resolve_output_path(
         )
 
     auto_name = build_auto_campaign_dir_name(pack_name=pack_name, seed_path=seed_path, now=now)
-    return _next_available_path((base_dir / auto_name).resolve())
+    return pick(base_dir / auto_name)
