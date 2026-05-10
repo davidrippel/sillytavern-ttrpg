@@ -35,9 +35,7 @@ export async function loadAllClues() {
     const clues = [];
     for (const entry of entriesOf(lorebook)) {
         const parsed = parseClueEntry(entry);
-        if (!parsed) continue;
-        if (/^__.*__$/.test(parsed.id)) continue;
-        clues.push(parsed);
+        if (parsed) clues.push(parsed);
     }
     return clues;
 }
@@ -52,8 +50,14 @@ export function reachableClues(clues, discoveredIds, { maxResults = 5 } = {}) {
 
     const seeds = new Set(discovered);
     if (seeds.size === 0) {
+        const pointedAt = new Set();
         for (const clue of clues) {
-            if (clue.id.includes('seed') || clue.id.includes('entry')) seeds.add(clue.id);
+            for (const target of clue.pointsTo) {
+                if (target.type === 'clue') pointedAt.add(target.value);
+            }
+        }
+        for (const clue of clues) {
+            if (!pointedAt.has(clue.id)) seeds.add(clue.id);
         }
         if (seeds.size === 0 && clues.length > 0) {
             seeds.add(clues[0].id);

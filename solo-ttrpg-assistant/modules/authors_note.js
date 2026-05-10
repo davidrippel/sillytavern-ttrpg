@@ -258,9 +258,36 @@ function formatBeatBullet(act, label) {
     return `- ${beat.text}`;
 }
 
-function formatCluesList(items) {
+const TEMPLATED_HINT_PATTERNS = [
+    /^Physical evidence on site, easy to overlook\.?$/i,
+    /^A second lead worth chasing here\.?$/i,
+];
+
+function isTemplatedHint(label) {
+    const text = String(label ?? '').trim();
+    return TEMPLATED_HINT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function cluesByIdMap(clues) {
+    const map = new Map();
+    for (const clue of clues ?? []) map.set(clue.id, clue);
+    return map;
+}
+
+function formatCluesList(items, allClues) {
     if (!items || items.length === 0) return '(none)';
-    return items.map((c) => `- ${c.id} — ${c.label}`).join('\n');
+    const byId = cluesByIdMap(allClues);
+    return items.map((c) => {
+        let label = c.label;
+        if (isTemplatedHint(label)) {
+            const clue = byId.get(c.id);
+            const reveals = String(clue?.reveals ?? '').trim();
+            if (reveals) {
+                label = reveals.length > 100 ? `${reveals.slice(0, 99)}…` : reveals;
+            }
+        }
+        return `- ${c.id} — ${label}`;
+    }).join('\n');
 }
 
 function truncate(text, max) {
@@ -336,7 +363,7 @@ async function renderNodeModeAuthorsNote(state, { preserveSummaries }) {
             const bHits = (bc?.pointsToNodes ?? []).some((n) => pointedSet.has(n) || reachableForRender.some((r) => r.id === n));
             return Number(bHits) - Number(aHits);
         });
-        sections['Available clues'] = formatCluesList(ranked);
+        sections['Available clues'] = formatCluesList(ranked, clues);
     } catch (error) {
         log('Failed to compute Available clues.', 'warn', error.message);
         sections['Available clues'] = '(none)';
@@ -392,7 +419,7 @@ export async function renderAuthorsNoteFromState({ preserveSummaries = true } = 
     try {
         const clues = await loadAllClues();
         const reachable = reachableClues(clues, state.discoveredClues ?? []);
-        sections['Available clues'] = formatCluesList(reachable);
+        sections['Available clues'] = formatCluesList(reachable, clues);
     } catch (error) {
         log('Failed to compute Available clues.', 'warn', error.message);
         sections['Available clues'] = '(none)';

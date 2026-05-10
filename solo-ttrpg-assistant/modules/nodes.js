@@ -91,10 +91,15 @@ export function discoveredCluesPointingToNodes(clues, discoveredIds) {
 }
 
 function bootstrapPointedNodes(clues, nodes) {
+    const pointedAt = new Set();
+    for (const clue of clues) {
+        for (const target of clue.pointsTo ?? []) {
+            if (target.type === 'clue') pointedAt.add(target.value);
+        }
+    }
     const pointed = new Set();
     for (const clue of clues) {
-        const isSeed = /seed|entry/i.test(clue.id);
-        if (!isSeed) continue;
+        if (pointedAt.has(clue.id)) continue;
         for (const target of clue.pointsTo ?? []) {
             if (target.type === 'node' && target.value) pointed.add(target.value);
         }

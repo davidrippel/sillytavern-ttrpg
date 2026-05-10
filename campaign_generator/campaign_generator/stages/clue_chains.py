@@ -239,7 +239,7 @@ def _build_hybrid_fallback_clue_graph(
     plot: PlotSkeleton,
     npcs: NPCRoster,
     locations: LocationCatalog,
-    candidate_graph: ClueGraph,
+    candidate_graph: ClueGraph | None,
 ) -> tuple[ClueGraph, int, int]:
     beat_list = [beat for act in plot.acts for beat in act.beats]
     if not beat_list:
@@ -254,7 +254,8 @@ def _build_hybrid_fallback_clue_graph(
     used_ids: set[str] = set()
     preserved_by_beat: dict[str, list[Clue]] = defaultdict(list)
 
-    for clue in candidate_graph.clues:
+    candidate_clues = candidate_graph.clues if candidate_graph is not None else []
+    for clue in candidate_clues:
         if not _valid_anchor(clue, npc_names, location_names):
             continue
         clue_beats = _extract_candidate_beats(plot, clue)
@@ -336,34 +337,12 @@ def build_clue_skeleton(
     """Build a structurally-valid clue graph deterministically from the plot,
     NPCs, and locations. Every beat receives exactly two clues that point at
     it, and the ordering wires successive beats together so that every clue is
-    reachable from the entry pair."""
-    anchor_type = "location" if locations.locations else "npc"
-    anchor_name = (
-        locations.locations[0].name if locations.locations else npcs.npcs[0].name
-    )
-    first_beat_id = plot.acts[0].beats[0].id
-    first_beat_text = plot.acts[0].beats[0].text
-    seed_clues = [
-        Clue(
-            id=f"__skeleton_seed_{index}__",
-            found_at_type=anchor_type,
-            found_at=anchor_name,
-            hint=_synthetic_hint("a" if index % 2 == 0 else "b"),
-            reveals=_synthetic_reveals(plot, first_beat_text, "a" if index % 2 == 0 else "b"),
-            points_to=[ClueTarget(type="beat", value=first_beat_id)],
-            supports_beats=[first_beat_id],
-        )
-        for index in range(4)
-    ]
-    seed_graph = ClueGraph(
-        entry_clue_ids=[seed_clues[0].id],
-        clues=seed_clues,
-    )
+    reachable from the entry pair (the two clues attached to the first beat)."""
     graph, _, _ = _build_hybrid_fallback_clue_graph(
         plot=plot,
         npcs=npcs,
         locations=locations,
-        candidate_graph=seed_graph,
+        candidate_graph=None,
     )
     return graph
 
@@ -404,8 +383,9 @@ def _enrich_clue_prose(
     temperature: float,
     validation_log: ValidationLog,
 ) -> tuple[Clue, bool]:
-    """Ask the LLM to rewrite only the `reveals` field of a single clue.
-    Returns (possibly-updated clue, llm_success_flag)."""
+    """Ask the LLM to rewrite the `hint` and `reveals` fields of a single clue.
+    Returns (possibly-updated clue, llm_success_flag). All-or-nothing: if either
+    field comes back invalid, both fall back to the templated defaults."""
     beat_lookup = plot.beat_id_to_text()
     beat_targets = [t.value for t in clue.points_to if t.type == "beat"]
     beat_context = [
@@ -447,14 +427,27 @@ def _enrich_clue_prose(
             model=model,
             temperature=temperature,
             validation_log=validation_log,
+            attempts=5,
         )
     except LLMError as exc:
         validation_log.write(
-            f"[clue_chains] prose enrichment for {clue.id} failed; keeping templated reveals. {exc}"
+            f"[clue_chains] prose enrichment for {clue.id} failed; keeping templated hint and reveals. {exc}"
         )
         return clue, False
 
+    new_hint = (result.hint or "").strip()
     new_reveals = (result.reveals or "").strip()
+    if not new_hint:
+        validation_log.write(
+            f"[clue_chains] prose enrichment for {clue.id} returned empty hint; keeping templated text."
+        )
+        return clue, False
+    if len(new_hint) > 120:
+        validation_log.write(
+            f"[clue_chains] prose enrichment for {clue.id} returned {len(new_hint)}-char hint "
+            f"(cap 120); keeping templated text."
+        )
+        return clue, False
     if not new_reveals:
         validation_log.write(
             f"[clue_chains] prose enrichment for {clue.id} returned empty reveals; keeping templated text."
@@ -467,7 +460,7 @@ def _enrich_clue_prose(
         )
         return clue, False
 
-    return Clue.model_validate({**clue.model_dump(), "reveals": new_reveals}), True
+    return Clue.model_validate({**clue.model_dump(), "hint": new_hint, "reveals": new_reveals}), True
 
 
 def _run_legacy_llm_first(
