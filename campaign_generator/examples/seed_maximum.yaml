@@ -58,6 +58,7 @@ image_style_hint: >
 num_acts: 4
 num_npcs: 11
 num_locations: 9
+num_sample_characters: 6
 clue_chain_density: heavy
 branch_points: 8
 random_seed: 44119

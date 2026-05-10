@@ -66,6 +66,7 @@ def build_seed_template(pack: GenrePack) -> str:
         "# num_acts: 4",
         "# num_npcs: 10",
         "# num_locations: 8",
+        "# num_sample_characters: 5",
         "# clue_chain_density: medium",
         "# branch_points: 7",
         "",

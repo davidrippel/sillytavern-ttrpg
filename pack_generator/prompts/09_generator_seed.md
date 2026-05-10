@@ -11,6 +11,7 @@ Produce JSON with these fields:
 - `num_acts`: integer, typically 3 or 4
 - `num_npcs`: integer, typically 8-12
 - `num_locations`: integer, typically 6-10
+- `num_sample_characters`: integer, typically 5 (range 1-10) — how many pregen player characters the campaign should ship with
 - `clue_chain_density`: one of `low`, `medium`, `high`. Default `medium` unless the genre cries out for an investigation focus.
 - `branch_points`: integer, typically 5-8
 

@@ -420,6 +420,7 @@ tone: [grim, mysterious, morally_ambiguous]
 num_acts: 4
 num_npcs: 10
 num_locations: 8
+num_sample_characters: 5
 antagonist_archetypes_preferred: [corrupt_inquisitor, ancient_sorcerer, cult_leader]
 ```
 

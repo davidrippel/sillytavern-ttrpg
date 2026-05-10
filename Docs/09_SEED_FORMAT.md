@@ -107,6 +107,9 @@ How many named NPCs to generate. Range 6–15 reasonable.
 **`num_locations`** *(integer, default 8)*
 How many locations to generate. Range 5–12 reasonable.
 
+**`num_sample_characters`** *(integer, default 5)*
+How many ready-to-play pregen characters to generate. Range 1–10. Each pregen is grounded in `protagonist_archetype` / `protagonist_known_facts` (when set) and may only hook into NPCs marked `known_at_start: true` for the protagonist.
+
 **`clue_chain_density`** *(string: `light`, `medium`, or `heavy`, default `medium`)*
 How many clues and how branching the investigation graph is. Light = linear, easy to follow; heavy = dense, many red herrings and branches.
 
@@ -319,6 +322,7 @@ The campaign generator validates your seed before running the pipeline. Invalid 
 - **`genre` doesn't match the pack's `pack_name`**: error — pack mismatch, showing both the expected and provided values
 - **`antagonist_archetypes_preferred` contains archetypes not in the pack's menu**: error, listing the pack's available archetypes
 - **`num_acts` outside 3–6**: warning — will still run, but may produce unbalanced pacing
+- **`num_sample_characters` outside 1–10**: warning — will still run, but the LLM may struggle at the extremes
 - **`themes_include` and `themes_exclude` contain the same theme**: error — contradictory
 - **Unknown fields**: warning — the field is ignored, but typos in field names won't silently do nothing
 
