@@ -31,6 +31,7 @@ from .validation import ValidationLog, find_phantom_plot_names, validate_cross_s
 from .stages import branches as branches_stage
 from .stages import clue_chains as clue_chains_stage
 from .stages import factions as factions_stage
+from .stages import graph as graph_stage
 from .stages import initial_an as initial_an_stage
 from .stages import locations as locations_stage
 from .stages import node_generation as nodes_stage
@@ -494,6 +495,12 @@ def run_pipeline(
     )
     clue_graph = sanitize_model(clue_graph, protagonist_names=protagonist_names)
     _write_json(_stage_cache_path(stages_dir, "clue_chains"), serialize_clue_graph(clue_graph, node_graph))
+
+    mermaid_src, html_doc = graph_stage.render(node_graph, clue_graph, plot)
+    _write_text(spoilers_dir / "campaign_graph.mmd", mermaid_src)
+    _write_text(spoilers_dir / "campaign_graph.html", html_doc)
+    if progress_callback is not None:
+        progress_callback("Wrote spoilers/campaign_graph.mmd + spoilers/campaign_graph.html")
 
     branches = _run_or_load_stage(
         name="branches",
