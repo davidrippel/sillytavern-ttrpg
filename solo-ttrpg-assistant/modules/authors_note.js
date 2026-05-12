@@ -13,7 +13,7 @@ import {
 } from './util.js';
 import { loadAllActs, getActByNumber, findBeat, nextBeatLabel } from './plot_skeleton.js';
 import { loadAllClues, reachableClues } from './clue_chains.js';
-import { loadAllNodes, isCampaignNodeMode, reachableNodes, currentNodeId } from './nodes.js';
+import { loadAllNodes, isCampaignNodeMode, reachableNodes, effectiveCurrentNodeId } from './nodes.js';
 
 function normalizeHeading(label) {
     return label.trim().toLowerCase();
@@ -314,7 +314,17 @@ async function renderNodeModeAuthorsNote(state, { preserveSummaries }) {
         log('Failed to load nodes/clues for AN render.', 'warn', error.message);
     }
 
-    const reachableForRender = reachableNodes(nodes, clues, state, { maxResults: 12 });
+    const currentId = effectiveCurrentNodeId(nodes, state);
+    const currentNode = currentId ? nodes.find((n) => n.id === currentId) : null;
+    if (currentNode) {
+        const desc = currentNode.description ? ` — ${truncate(currentNode.description, 80)}` : '';
+        sections['Current node'] = `- ${currentNode.id}${desc}`;
+    } else {
+        sections['Current node'] = '(none)';
+    }
+
+    const reachableForRender = reachableNodes(nodes, clues, state, { maxResults: 12 })
+        .filter((n) => n.id !== currentId);
     sections['Reachable nodes'] = reachableForRender.length
         ? reachableForRender.map((n) => {
             const desc = n.description ? ` — ${truncate(n.description, 80)}` : '';
@@ -349,12 +359,6 @@ async function renderNodeModeAuthorsNote(state, { preserveSummaries }) {
     sections['Discovered clues'] = discoveredBullets.length ? discoveredBullets.join('\n') : '(none)';
 
     try {
-        // currentNode = last visited (or fall back to the act-1 start node when nothing yet visited).
-        let currentId = currentNodeId(state);
-        if (!currentId) {
-            const startNode = nodes.find((n) => n.isActStart && n.actNumber === 1);
-            if (startNode) currentId = startNode.id;
-        }
         const reachableClueList = reachableClues(clues, state.discoveredClues ?? [], currentId);
         sections['Available clues'] = formatCluesList(reachableClueList, clues);
     } catch (error) {

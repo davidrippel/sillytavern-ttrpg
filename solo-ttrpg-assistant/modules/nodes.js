@@ -86,6 +86,18 @@ export function currentNodeId(state) {
 }
 
 /**
+ * The node the player is effectively "at" for reachability/clue purposes.
+ * Falls back to the act-1 start node when nothing has been visited yet, so
+ * that pre-visit renders still surface the opening clues and their targets.
+ */
+export function effectiveCurrentNodeId(nodes, state) {
+    const fromState = currentNodeId(state);
+    if (fromState) return fromState;
+    const startNode = (nodes ?? []).find((n) => n.isActStart && n.actNumber === 1);
+    return startNode ? startNode.id : null;
+}
+
+/**
  * Reachable nodes from the current state. A node is reachable if:
  *   - it's the target of a clue currently emitted from the current node, OR
  *   - it's the target of any clue the player has already discovered.
@@ -96,7 +108,7 @@ export function reachableNodes(nodes, clues, state, { maxResults = 8 } = {}) {
     const completed = new Set(state?.completedNodes ?? []);
     const visited = new Set(state?.visitedNodes ?? []);
     const discovered = new Set(state?.discoveredClues ?? []);
-    const currentId = currentNodeId(state);
+    const currentId = effectiveCurrentNodeId(nodes, state);
 
     const reachableIds = new Set();
     for (const clue of clues) {
@@ -105,11 +117,6 @@ export function reachableNodes(nodes, clues, state, { maxResults = 8 } = {}) {
         }
         if (discovered.has(clue.id) && clue.pointsToNode) {
             reachableIds.add(clue.pointsToNode);
-        }
-    }
-    if (visited.size === 0 && reachableIds.size === 0) {
-        for (const node of nodes) {
-            if (node.isActStart && node.actNumber === 1) reachableIds.add(node.id);
         }
     }
 

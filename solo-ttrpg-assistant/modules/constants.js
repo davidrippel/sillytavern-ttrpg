@@ -33,6 +33,7 @@ export const AUTHORS_NOTE_SECTIONS = Object.freeze([
 
 export const AUTHORS_NOTE_SECTIONS_NODE_MODE = Object.freeze([
     'Current Act',
+    'Current node',
     'Reachable nodes',
     'Recently visited',
     'On-screen NPCs',
