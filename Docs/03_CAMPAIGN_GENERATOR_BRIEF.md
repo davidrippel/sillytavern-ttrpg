@@ -42,8 +42,7 @@ The user is expected to run this blind: they read only `opening_hook.txt` and `i
   - `CAMPAIGN_GENERATOR_STAGE_MAX_RETRIES`
   - `CAMPAIGN_GENERATOR_GENRES_BASE_DIR`
   - `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR`
-  - `CG_LLM_CLUE_GRAPH` — when set to `1` (default `0`), opt back into the legacy behaviour where the LLM tries to author the entire clue graph in one call. Default flow generates a deterministic skeleton and uses the LLM only to enrich each clue's prose.
-  - `CG_NODE_MODE` — overrides the default mode. Set to `1` to force node-mode (Alexandrian node-based scenario design), `0` to force beat-mode (legacy linear acts/beats). When unset, the CLI default is **node-mode**. The CLI flags `--nodes-mode` and `--beats-mode` (mutually exclusive) override this env var when present; the env var overrides the CLI default. Node-mode adds a `nodes` stage that produces one node per beat plus a campaign-level victory node, re-anchors clues to point at nodes, and emits `Node: <id>` lorebook entries. The runtime detects mode by presence of `Node:` entries — no explicit flag in the lorebook itself. See `PROPOSAL_goal_tracker.md` for design rationale.
+  - `CG_LLM_CLUE_GRAPH`, `CG_NODE_MODE` — *deprecated*. Node-mode is now the only supported clue/scenario model. These env vars are read for backwards compatibility but do not change behavior; the pipeline raises if `node_mode=False` is forced.
   - `IMAGE_GEN_MODEL`, `IMAGE_GEN_DIMENSION`, `IMAGE_GEN_ASPECT_RATIO`, `IMAGE_GEN_STYLE_OVERRIDE` — used by the sibling `image_generator` tool when rendering NPC portraits (also reachable via `--with-images`). `IMAGE_GEN_MODEL` is required when rendering and has no fallback. `IMAGE_GEN_STYLE_OVERRIDE` is optional and exists mainly to re-render an existing campaign in one consistent style without regenerating the pipeline output.
 
 Web search during development to confirm: current OpenRouter API shape, current SillyTavern lorebook JSON schema, current model slug for `anthropic/claude-sonnet-4.5`.
@@ -72,7 +71,7 @@ Flags:
 - `--dry-run` — use a cheap model (e.g. `anthropic/claude-haiku-4.5`) for the whole pipeline
 - `--random-seed INT` — reproducibility seed
 - `--with-images` — after generation, call the image generator (see [`image_generator/README.md`](../image_generator/README.md)) to render NPC portraits into `<output>/npc_images/`. Requires `IMAGE_GEN_MODEL` in `.env`. Off by default. Image-gen failures are logged but do not fail the campaign run.
-- `--nodes-mode` / `--beats-mode` — choose campaign mode. Mutually exclusive. **Node-mode is the default** when neither flag nor `CG_NODE_MODE` env var is set. Precedence: explicit flag > `CG_NODE_MODE` env var > default (node-mode).
+- `--nodes-mode` / `--beats-mode` — *deprecated*. Node-mode is the only supported mode; `--beats-mode` raises an error. The flag remains accepted for backwards compatibility.
 - `--resume` — reuse the existing `--output` directory verbatim (and its cached `stages/*.json`) instead of allocating a fresh `_N` sibling. Use this to continue an interrupted run; the pipeline picks up at the first stage with no cache entry.
 
 Model precedence is:
@@ -252,57 +251,67 @@ Current implementation constraints:
 - `npc_names` must reference roster NPCs only; if the model invents a name, regenerate/repair the location instead of letting the bad reference through.
 - The same `diversity_seed` used by the NPC stage (district flavor + naming style) and a location-specific `avoid_names` list (location names from the most recent sibling campaigns) are injected into the location prompt to steer away from repeated atmospheric English compounds ("The Velvet ___", "The Silk ___") and toward names rooted in the campaign's chosen cultural register. District flavors are sampled from `pack.naming.district_flavors`; naming styles remain in `diversity.py` as cross-genre defaults because they describe genre-agnostic *patterns* (trade + topographic feature, proprietor-possessive, etc.) rather than content.
 
-### 6. `clue_chains`
+### 6. `nodes`
 
-Input: all prior.
+Generates the node graph **before** the clue graph. Node-mode is the only supported campaign mode; the beat-mode clue path is no longer wired.
 
-Generate an explicit clue graph as structured JSON, not prose.
+Input: premise, plot skeleton (acts + beats), NPC roster, location catalog.
 
-Each clue:
-- `id` (unique)
-- `found_at` — location or NPC reference
-- `hint` — short (≤120 char) spoiler-light teaser describing what the clue *looks like* on the surface (the object, the room, the source) without revealing what it discloses. Surfaced to the GM in the Author's Note's `Available clues` section so the GM can steer toward it. Never include the reveal itself.
-- `reveals` — the spoiler prose, surfaced only after the clue is discovered (≤280 char)
-- `points_to` — next clue id(s), NPC, location, or beat
-- `supports_beats` — canonical beat ids that this clue materially supports
+Output: a `NodeGraph` whose nodes are organized per-act, with shared transition nodes between adjacent acts.
 
-Constraints (validated by pydantic):
-- Every clue must be reachable from the opening hook (graph connectivity)
-- Every major plot beat must have at least two paths leading to it (so player choices don't dead-end the investigation)
-- No orphan clues (clues pointing to nothing)
-- No missing references (a clue pointing to NPC X requires X to exist)
+**Structural rules** (enforced by the stage and re-checked by the validator):
+- Each act has `nodes_per_act` nodes (seed-configurable, default `5`, valid range `[3, 10]`).
+- Per act: one start node, `nodes_per_act - 2` intermediate "points of interest", and one final node.
+- **Transitions are shared**: act N's final node IS act N+1's start node — one node, two flags (`is_act_final=True` AND `is_act_start=True`). So with 3 acts × 5 nodes = 13 distinct nodes (5 + 4 + 4), not 15.
+- The campaign's last act's final node is the **victory** (`is_victory=True`, no outbound role).
+- Intermediate nodes are **unordered and optional**. The player may visit them in any order, or skip them entirely and beeline to the act's final node.
 
-**Generation strategy: deterministic skeleton + per-clue LLM prose enrichment** (default). LLMs do not reliably satisfy global graph constraints (every beat reached twice, no orphans, valid cross-references). Asking the LLM to author the whole graph and falling back to a synthesizer when it failed produced silent quality degradation. The pipeline now inverts the order:
+**Per-act LLM call sequence** (`1 + N*(1+intermediate_count)` calls for N acts):
 
-1. **Skeleton (deterministic)**: `build_clue_skeleton` produces a structurally valid graph from the plot beats, NPCs, and locations alone. Every beat receives exactly two clues anchored to a real NPC or location, with reachability wired to satisfy connectivity. The skeleton can never fail validation.
-2. **Prose enrichment (LLM, per-clue)**: each clue's `reveals` field is rewritten in isolation by an LLM call (prompt `06b_clue_prose.md`). The model sees the clue's structural slot and the relevant NPC/location/beat context but cannot alter `id`, `found_at_type`, `found_at`, `hint`, `points_to`, or `supports_beats`. If the call fails or returns empty prose, the clue keeps its templated `reveals` text — the graph stays valid.
-3. **Visibility**: the validation log emits a summary line `Clue graph: skeleton produced N clues, M enriched by LLM, K used template fallback`. The same line is sent through the progress callback. Never silent.
+1. *(Act 1 only)* `act_1_start` — designs the opening scene **and** picks act 1's relevant NPCs (3–7) and locations (2–5). Prompt: `08a_node_start.md`.
+2. `act_N_final` — designs the act's dramatic culmination. For acts 2+ it also bundles that act's NPC/location selection. Receives all prior acts' final-node descriptions so escalation lands. Prompt: `08b_node_final.md`.
+3..K. `act_N_intermediate_1`, `_2`, ... — designs each intermediate node, one at a time. Each prompt sees the act's start, the act's final, the act's NPC/location subset, and all previously-designed intermediates for this act (so the next one stays distinct). Prompt: `08c_node_intermediate.md`.
 
-**Opt-in legacy LLM-first mode**: setting `CG_LLM_CLUE_GRAPH=1` reactivates the older flow where the LLM tries to author the entire graph (prompt `06_clue_chains.md`) with up to 3 repair-loop attempts. If it succeeds, that graph is used; if it fails, the pipeline falls through to the deterministic skeleton + prose enrichment path. This flag is for experimentation only — production runs should leave it unset.
+Each node carries:
+- `id` (snake-case slug)
+- `kind` (`location` / `npc_encounter` / `event`)
+- `description`
+- `act_number`
+- `is_act_start`, `is_act_final`, `is_victory`
+- `relevant_npcs` (subset of the act's NPC selection, filtered against the roster — silent drop of hallucinations)
+- `relevant_location` (one of the act's locations)
 
-Implementation details that are part of the contract:
-- The model receives explicit menus of valid NPC names, location names, and beat ids.
-- Beat references are canonicalized to ids like `act2_beat3`.
-- The deterministic skeleton is built from `_build_hybrid_fallback_clue_graph` — the same routine that previously served as a fallback, now the primary path.
-- Prose-enrichment failures are tolerated and logged; structural failures are bugs and raise.
+The act-relevant subsets are picked by the LLM in the first prompt of each act and threaded into subsequent prompts so the act feels cohesive.
 
-### 6.5. `nodes` (node-mode only)
+### 6.5. `clue_chains`
 
-Runs in node-mode (the default). Skipped entirely in beat-mode (when `--beats-mode` is passed or `CG_NODE_MODE=0`).
+Input: validated node graph + NPC roster + location catalog.
 
-Input: validated plot skeleton, validated clue graph.
+Generate the clue graph deterministically. **No LLM call in the topology path** — only prose enrichment (`hint`/`reveals`) uses the LLM.
 
-Output: a `NodeGraph` plus an updated `ClueGraph` whose clues' `points_to` lists now reference the synthesized nodes instead of beats.
+Each clue is a **directed edge between two nodes**:
+- `id` — unique (`clue_01`, `clue_02`, ...)
+- `found_at_node` — the source node id
+- `points_to_node` — the target node id
+- `found_at_type` — `npc` or `location`
+- `found_at` — the NPC or location name where this clue is physically discovered
+- `hint` — short (≤120 char) spoiler-light teaser describing what the clue *looks like* on the surface
+- `reveals` — the spoiler prose (≤280 char)
 
-Deterministic algorithm (no LLM call in the current implementation):
+**Structural rules** (validated):
+- `found_at_node != points_to_node` (no self-loops).
+- Source and target belong to the same act (with the shared transition node treated as belonging to its **outbound** act for outbound clues, and its **inbound** act for inbound clues).
+- Every non-(act-1-start) node has **≥3 inbound clues** from same-act sources.
+- Every non-victory node emits **≥1 outbound clue** (no stranding).
+- Each act's start node emits **≥3 outbound clues** so the player has multiple leads upon entering an act.
 
-- For each beat across all acts, emit one `Node` with id derived from a snake-case slug of the beat text. Kind is heuristically classified from the beat text: `npc_encounter` (verbs like "meets", "questions", "confronts"), `event` ("ambush", "fire breaks", "ritual"), or `location` (default).
-- For the final act, append one campaign-level `Node` with `is_victory=true`, `kind=event`, gating on every other final-act node, and a triggers field describing when it fires.
-- Wire each existing beat-anchored clue to the corresponding node: append `node:<id>` to the clue's `points_to`, drop the legacy `beat:<id>` targets, mirror the node id on the clue's `points_to_nodes` array, and append the clue id to the node's `entry_clues`.
+When the per-act node count is small (e.g. `nodes_per_act=3`), the rules still hold via **duplicate edges**: clues are not uniquely keyed by `(source, target)`, so the start node can satisfy `≥3 outbound` by emitting 3 clues that all point to the same target. Likewise an inbound target with only one available source receives 3 clues all from that source.
 
-Three-clue rule enforcement is **warn-and-accept**: a node with fewer than three entry clues is marked `underspecified=true` and surfaced via a warning to the validation log and the progress callback. The runtime renders `[underspecified]` next to such nodes in the AN so the GM knows the player may need recombined clues to find them.
+**Clue anchoring** (where to find the clue): `_select_found_at` prefers the source node's own `relevant_npcs` / `relevant_location` (tier 1) — this keeps clue prose grounded to where the player physically is. If the source node has no relevance hints it falls back to the global pool (tier 2). Within a node, an `npc_encounter` kind prefers NPC anchors; `location` / `event` prefer locations. Anchors round-robin so the same NPC/location isn't reused for every clue at a node.
 
-Known limitation: the deterministic clue skeleton produces 2 clues per beat, so every node ends up flagged underspecified by default. To get genuine 3+ clues per node, run with `CG_LLM_CLUE_GRAPH=1` (which puts the clue stage in LLM-first mode), or extend the nodes stage with an LLM-driven enrichment pass (future work).
+**Prose enrichment** (LLM, per clue): `_enrich_clue_prose` calls the LLM once per clue with the source/target node descriptions, the `found_at` NPC or location's context, and the campaign tone. The LLM rewrites only `hint` and `reveals`; structural fields are immutable. On any failure the clue keeps its templated text. Prompt: `06b_clue_prose.md`.
+
+**Visibility**: the validation log emits `Clue graph: N clues, M enriched by LLM, K used template fallback`. The same line is sent through the progress callback.
 
 ### 7. `branches`
 
@@ -341,18 +350,18 @@ GM-emitted closure tags (`<<beat:LABEL:resolved>>`). The 2-beat window
 is the spoiler-isolation mechanism — the GM never sees beats further
 ahead than Next beat.
 
-**Node-mode** sections (emitted in node-mode, which is the default):
+**Node-mode** sections (the only supported mode):
 - Current Act: `Act 1: [title]`
-- Reachable nodes: bullet list of Act 1 non-victory nodes (initial set; re-computed at runtime as clues are discovered)
+- Reachable nodes: bullet list of the **targets of the start node's outbound clues** (the act-1 start node is implicitly visited on turn 1). At runtime this re-computes as the player moves between nodes and discovers more clues.
 - Recently visited: `(none)` at start
 - On-screen NPCs: `(none)` at start; populated at runtime as NPCs appear in scenes
 - Discovered clues: `(none)` at start
-- Available clues: `(none)` at start; populated at runtime, ranked higher when clues point into reachable nodes
+- Available clues: **the start node's outbound clues** (id + hint) — non-empty at start so the GM can drop them on turn 1
 - Active threads: 2-3 initial hooks
-- Recent scenes: `(empty at start)` — renamed from "Recent beats" because beats no longer exist as discrete units in node-mode
+- Recent scenes: `(empty at start)`
 - Reminders: anything the GM must not forget from the opening situation
 
-In node-mode the extension does NOT advance a destination — Reachable nodes is a *menu* the player picks from by acting on clues, asking NPCs, going somewhere. Closure tags `<<node:ID:visited>>`, `<<node:ID:complete>>`, `<<npc:ID:state:KEY=VALUE,...>>`, and `<<clue:found:ID>>` mutate state; reachability is recomputed every turn from discovered clues.
+In node-mode the extension does NOT advance a destination — Reachable nodes is a *menu* the player picks from by acting on clues, asking NPCs, going somewhere. Closure tags `<<node:ID:visited>>`, `<<node:ID:complete>>`, `<<npc:ID:state:KEY=VALUE,...>>`, and `<<clue:found:ID>>` mutate state. `Available clues` at runtime is a simple filter: undiscovered clues whose `found_at_node` matches the player's current node — no graph walk, no chain logic.
 
 This becomes `initial_authors_note.txt` in the output.
 
@@ -430,6 +439,13 @@ Output `spoilers/full_campaign.md`: human-readable dump of everything. Premise, 
 
 This file is clearly labeled as spoilers. The user opens it only post-play, or when unsticking.
 
+Two additional spoiler artifacts are emitted automatically after the `clue_chains` stage by a pure (non-LLM) renderer (`stages/graph.py`):
+
+- `spoilers/campaign_graph.mmd` — Mermaid `flowchart TB` source: each act is a subgraph; node shape encodes `kind` (location/npc_encounter/event); `is_act_start` / `is_act_final` / gateway / `is_victory` get distinctive styling; clues are directed labeled edges; gating prerequisites are dotted edges; cross-act clue edges are thickened in red.
+- `spoilers/campaign_graph.html` — self-contained viewer that loads Mermaid from CDN, embeds the source plus a JSON blob of full node/clue metadata, and wires hover handlers. Hovering a node or clue edge shows a floating details panel near the cursor (full description, triggers, relevant NPCs/location, gating, or hint/reveals). Zoom buttons (bottom-left) scale the SVG from 0.5×–4×; the graph fills the page width by default.
+
+Like `full_campaign.md`, these reveal the whole topology and are clearly spoiler material.
+
 ---
 
 ## Validation between stages
@@ -473,13 +489,16 @@ Console/runtime behavior:
 │   ├── locations.partial.json
 │   └── clue_chains.partial.json
 ├── spoilers/
-│   └── full_campaign.md
+│   ├── full_campaign.md
+│   ├── campaign_graph.mmd     # Mermaid source for the acts/nodes/clues graph
+│   └── campaign_graph.html    # standalone interactive viewer (hover nodes/clues for details)
 ├── stages/
 │   ├── premise.json
 │   ├── plot_skeleton.json
 │   ├── factions.json
 │   ├── npcs.json              # each NPC includes an `image_generation_prompt`
 │   ├── locations.json
+│   ├── nodes.json
 │   ├── clue_chains.json
 │   ├── branches.json
 │   ├── calls.jsonl            # all LLM calls logged, including usage
@@ -555,10 +574,14 @@ campaign_generator/
 │   │   ├── factions.py
 │   │   ├── npcs.py
 │   │   ├── locations.py
+│   │   ├── nodes.py
+│   │   ├── node_generation.py
 │   │   ├── clue_chains.py
 │   │   ├── branches.py
+│   │   ├── sample_characters.py
 │   │   ├── initial_an.py
 │   │   ├── opening_hook.py
+│   │   ├── graph.py             # pure renderer: emits spoilers/campaign_graph.{mmd,html}
 │   │   └── spoilers.py
 │   ├── lorebook.py              # assembly into SillyTavern format
 │   └── validation.py            # cross-stage validators

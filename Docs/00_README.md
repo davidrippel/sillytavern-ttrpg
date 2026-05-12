@@ -7,7 +7,7 @@ A design and build bundle for running endless solo tabletop RPG campaigns in Sil
 - A custom SillyTavern extension for character sheets, dice rolls, status tracking, canon detection, and backup/restore
 - A PbtA-inspired 2d6 + attribute resolution system with six attributes (fixed)
 - Character abilities that fit the genre (magic, cyberware, psionics, etc.)
-- Two campaign authoring modes: **beat-mode** (linear act/beat sequence — the original design) and **node-mode** (Alexandrian node-based scenario design — graph of unordered situations connected by clues, no destination). The runtime auto-detects which mode a campaign uses; both are fully supported. See `PROPOSAL_goal_tracker.md` for the design rationale.
+- **Node-mode scenario design** (the only supported mode): a graph of unordered situations per act, connected by clues. Each clue is a directed edge from a source node to a target node. The player has no destination — they navigate by acting on clues. The legacy beat-mode runtime path has been retired. See `03_CAMPAIGN_GENERATOR_BRIEF.md` §6/§6.5 for the contract and `PROPOSAL_goal_tracker.md` for the design rationale.
 
 ## Files in this bundle
 

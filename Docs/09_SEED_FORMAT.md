@@ -110,8 +110,11 @@ How many locations to generate. Range 5–12 reasonable.
 **`num_sample_characters`** *(integer, default 5)*
 How many ready-to-play pregen characters to generate. Range 1–10. Each pregen is grounded in `protagonist_archetype` / `protagonist_known_facts` (when set) and may only hook into NPCs marked `known_at_start: true` for the protagonist.
 
+**`nodes_per_act`** *(integer, default 5, range 3–10)*
+How many nodes each act contains: one start, `nodes_per_act - 2` intermediate "points of interest", and one final. Adjacent acts share a transition node (act N's final = act N+1's start), so total distinct nodes for N acts = `nodes_per_act + (N-1) * (nodes_per_act - 1)`. With defaults (3 acts × 5 nodes): 13 distinct nodes. Smaller values produce tighter, more linear campaigns; larger values produce more parallel side investigations.
+
 **`clue_chain_density`** *(string: `light`, `medium`, or `heavy`, default `medium`)*
-How many clues and how branching the investigation graph is. Light = linear, easy to follow; heavy = dense, many red herrings and branches.
+*Deprecated under the node-edge clue model.* The new clue generator produces a deterministic 3-inbound / start-3-outbound graph per act regardless of this setting. The field is still accepted for backwards compatibility but currently has no effect.
 
 **`branch_points`** *(integer, default 7)*
 How many explicit "if player does X, then Y" contingencies the generator creates. Range 4–10.

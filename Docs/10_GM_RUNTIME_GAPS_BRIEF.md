@@ -22,7 +22,7 @@ What's missing for someone actually trying to GM with this:
 
 1. **No session-zero / character-creation guidance entry** — `opening_hook.txt` lists three generic guidance bullets, but there is no World Info entry the GM can lean on during the table conversation that builds the party, nor any structured prompt for the LLM to facilitate that conversation.
 2. **No reusable scene templates** — investigation scenes, corruption manifestations, and faction-pressure scenes recur across the campaign, but the GM (and the LLM acting as GM) has no scaffold to reach for. Each scene is improvised cold from the bible + current-act entry.
-3. **No fallback-hook coverage** — if the players ignore the mentor's storyline or refuse to engage with the Valerius family, there is no documented redirect. The clue graph wires beats to clues, but there is no "if the table has stalled for 20 minutes, do this" entry.
+3. **No fallback-hook coverage** — if the players ignore the mentor's storyline or refuse to engage with the Valerius family, there is no documented redirect. The clue graph wires clues to nodes, but there is no "if the table has stalled for 20 minutes, do this" entry.
 
 These are not bugs in the generator. They are content categories the design has not yet asked for.
 
@@ -145,7 +145,7 @@ Cross-stage validation: every `template_name` resolves to a real template; every
 
 ### Problem
 
-If the players ignore the mentor storyline, refuse to engage with the Valerius family, or simply stall for 20 minutes in a roleplay tangent, the LLM-GM has no documented "redirect lever" to pull. The clue graph wires beats to clues but has no concept of "what if the players never look for clues?".
+If the players ignore the mentor storyline, refuse to engage with the Valerius family, or simply stall for 20 minutes in a roleplay tangent, the LLM-GM has no documented "redirect lever" to pull. The clue graph wires clues to nodes but has no concept of "what if the players never look for clues?".
 
 A campaign should ship a small set of **escalation pressures** — events the GM can introduce to advance the world-state when the party stalls. A faction makes a move, an NPC acts on their motivation, a corruption tick lands. These are not "railroad nudges"; they are world-events that exist regardless of player attention.
 

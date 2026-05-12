@@ -63,11 +63,15 @@ Successful runs write:
 - `initial_authors_note.txt`
 - `campaign_lorebook.json`
 - `spoilers/full_campaign.md`
-- `stages/*.json`
+- `spoilers/campaign_graph.mmd` — Mermaid source for the acts/nodes/clues graph (renders on GitHub, in VS Code, Obsidian, etc.)
+- `spoilers/campaign_graph.html` — self-contained interactive viewer: pan/zoom the graph, hover any node or clue edge to see full details in a floating panel near the cursor. Open directly in a browser; no server needed.
+- `stages/*.json` (one cache per pipeline stage: `premise`, `plot_skeleton`, `factions`, `npcs`, `locations`, `nodes`, `clue_chains`, `branches`, `sample_characters`)
 - `stages/calls.jsonl`
 - `stages/validation_log.txt`
 
 `opening_hook.txt` includes player-facing character creation guidance derived from the current campaign premise, Act 1 hook, and the selected genre pack's attributes, ability categories, and non-static resources.
+
+The campaign uses **node-based scenario design**: each act is a small graph of unordered situations the player can engage with, connected by clues. Each clue is a directed edge from a source node to a target node. Node count per act is seed-configurable via `nodes_per_act` (range 3–10, default 5). See [`Docs/03_CAMPAIGN_GENERATOR_BRIEF.md`](../Docs/03_CAMPAIGN_GENERATOR_BRIEF.md) §6/§6.5 and [`Docs/09_SEED_FORMAT.md`](../Docs/09_SEED_FORMAT.md) for the contract.
 
 `stages/npcs.json` includes a per-NPC `image_generation_prompt` field — a self-contained text-to-image prompt suitable for portrait generation. See [NPC Portraits](#npc-portraits) below.
 

@@ -261,21 +261,21 @@ The AN has structured sections. The extension parses and writes each independent
 - Current beat (the single beat the GM is currently driving toward)
 - Next beat (the immediate next beat — spoiler-bounded 2-beat window)
 - Discovered clues (clue IDs the GM has surfaced via tags)
-- Available clues (computed; one-hop reachable from discovered). Each entry renders as `- ID — hint`, where `hint` is the clue's spoiler-light teaser from the lorebook (the `Hint:` line in the clue entry). Older campaigns without hints fall back to a word-boundary-trimmed prefix of `reveals`.
+- Available clues — *deprecated under the node-edge clue model*. Beat-mode runtimes render this as `(none)`; the new model needs a current-node anchor that beat-mode does not track. See node-mode below.
 - Pending reveals (skipped beats queued for re-introduction)
 - Active threads
 - Recent beats
 - Reminders
 
-**Node-mode sections** (Alexandrian node-based design — replaces the destination-driven beat window with an unordered graph of situations):
+**Node-mode sections** (the only supported mode — node-based design with each clue as a directed edge between two nodes):
 - Current Act (header only — premise and stakes only, no scene sequence)
-- Reachable nodes (computed; nodes whose entry clues have been discovered, ungated, unresolved). Each entry renders as `- ID [underspecified?] — description`. The list is a *menu* the player picks from by acting, not a queue.
-- Recently visited (last 3 visited node IDs)
+- Reachable nodes (computed from clues: targets of clues the player has discovered, plus targets of the **current node's outbound clues** as a forward-looking menu). Each entry renders as `- ID — description`. The list is a *menu* the player picks from by acting, not a queue.
+- Recently visited (last 3 visited node IDs; the most recent is treated as the "current node")
 - On-screen NPCs (NPCs whose `last_seen_turn` is within 8 turns of the current chat length, with attitude and last action)
 - Discovered clues
-- Available clues (same shape as beat-mode; ranked higher when the clue's `points_to_nodes` intersect Reachable nodes)
+- Available clues — **simple filter**: undiscovered clues whose `found_at_node` matches the current node. No graph walk, no chain logic, no ranking. Each entry renders as `- ID — hint`. On turn 1 (no visits yet) the act-1 start node is treated as the current node.
 - Active threads
-- Recent scenes (renamed from "Recent beats" — beats no longer exist as discrete units)
+- Recent scenes
 - Reminders
 
 **Operations:**

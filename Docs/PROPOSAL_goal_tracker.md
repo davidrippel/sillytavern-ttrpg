@@ -1,6 +1,10 @@
 # PROPOSAL: Node-based scenario design (replacing beats)
 
-**Status:** design proposal — not a plan of record. Awaiting validation that the latest prompt patch hasn't already fixed the symptoms enough to defer this.
+**Status:** *Largely landed in the current pipeline.* Node-based design is now the only supported scenario model. The implementation diverged from this proposal in two notable ways:
+1. **Clues are edges between nodes**, not chained references. Each clue has a `found_at_node` (source) and `points_to_node` (target). No clue→clue chaining; no `entry_clues`/`exit_clues` as authored fields — those are derived at lorebook-emission time from the clue graph.
+2. **Acts share transition nodes** (one act's final node = the next act's start node), and each act's intermediate nodes are unordered, optional "points of interest" rather than mandatory stops on the way to the act's final node.
+
+See `03_CAMPAIGN_GENERATOR_BRIEF.md` §6 and §6.5 for the current contract. The sections below are preserved as the original proposal that motivated the change.
 
 ## Why we're here
 
