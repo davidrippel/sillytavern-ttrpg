@@ -37,7 +37,7 @@ def test_render_contains_every_node_and_clue_edge():
 
     mermaid_src, html_doc = render(node_graph, clue_graph, plot)
 
-    assert mermaid_src.startswith("flowchart LR")
+    assert mermaid_src.startswith("flowchart TB")
     for node in node_graph.nodes:
         assert node.id in mermaid_src
     for clue in clue_graph.clues:
@@ -75,7 +75,7 @@ def test_render_handles_empty_clue_graph():
 
     mermaid_src, _ = render(node_graph, empty, plot)
 
-    assert mermaid_src.startswith("flowchart LR")
+    assert mermaid_src.startswith("flowchart TB")
     for node in node_graph.nodes:
         assert node.id in mermaid_src
     assert "-->|" not in mermaid_src
