@@ -119,7 +119,11 @@ def _initial_npc_errors(
         errors.append(f"NPC {npc.name} {faction_error}")
     invalid_abilities = [ability for ability in npc.abilities if ability not in ability_names]
     if invalid_abilities:
-        errors.append(f"NPC {npc.name} references unknown abilities {invalid_abilities!r}")
+        errors.append(
+            f"NPC {npc.name} references unknown abilities {invalid_abilities!r}. "
+            f"Drop these and replace them with names copied verbatim from `ability_catalog`: "
+            f"{sorted(ability_names)!r}. Do not invent new ability names."
+        )
     return errors
 
 
