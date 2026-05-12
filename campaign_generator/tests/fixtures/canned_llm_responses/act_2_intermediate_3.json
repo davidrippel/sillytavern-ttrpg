@@ -1,0 +1,8 @@
+{
+  "kind": "event",
+  "description": "Maelin Voss arranges a 'misplaced' shipment so {{user}} can observe a Sun Choir transfer at the Cellar \u2014 provided {{user}} accepts the risk of being seen.",
+  "relevant_npcs": [
+    "Maelin Voss"
+  ],
+  "relevant_location": "Lantern Hall Cellar"
+}

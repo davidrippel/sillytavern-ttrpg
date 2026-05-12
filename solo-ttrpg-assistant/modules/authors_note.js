@@ -13,7 +13,7 @@ import {
 } from './util.js';
 import { loadAllActs, getActByNumber, findBeat, nextBeatLabel } from './plot_skeleton.js';
 import { loadAllClues, reachableClues } from './clue_chains.js';
-import { loadAllNodes, isCampaignNodeMode, reachableNodes } from './nodes.js';
+import { loadAllNodes, isCampaignNodeMode, reachableNodes, currentNodeId } from './nodes.js';
 
 function normalizeHeading(label) {
     return label.trim().toLowerCase();
@@ -315,16 +315,10 @@ async function renderNodeModeAuthorsNote(state, { preserveSummaries }) {
     }
 
     const reachableForRender = reachableNodes(nodes, clues, state, { maxResults: 12 });
-    const pointedSet = new Set();
-    for (const c of clues) {
-        if (!(state.discoveredClues ?? []).includes(c.id)) continue;
-        for (const t of c.pointsToNodes ?? []) pointedSet.add(t);
-    }
     sections['Reachable nodes'] = reachableForRender.length
         ? reachableForRender.map((n) => {
-            const flag = n.underspecified ? ' [underspecified]' : '';
             const desc = n.description ? ` — ${truncate(n.description, 80)}` : '';
-            return `- ${n.id}${flag}${desc}`;
+            return `- ${n.id}${desc}`;
         }).join('\n')
         : '(none)';
 
@@ -355,15 +349,14 @@ async function renderNodeModeAuthorsNote(state, { preserveSummaries }) {
     sections['Discovered clues'] = discoveredBullets.length ? discoveredBullets.join('\n') : '(none)';
 
     try {
-        const reachableClueList = reachableClues(clues, state.discoveredClues ?? []);
-        const ranked = reachableClueList.slice().sort((a, b) => {
-            const ac = clues.find((c) => c.id === a.id);
-            const bc = clues.find((c) => c.id === b.id);
-            const aHits = (ac?.pointsToNodes ?? []).some((n) => pointedSet.has(n) || reachableForRender.some((r) => r.id === n));
-            const bHits = (bc?.pointsToNodes ?? []).some((n) => pointedSet.has(n) || reachableForRender.some((r) => r.id === n));
-            return Number(bHits) - Number(aHits);
-        });
-        sections['Available clues'] = formatCluesList(ranked, clues);
+        // currentNode = last visited (or fall back to the act-1 start node when nothing yet visited).
+        let currentId = currentNodeId(state);
+        if (!currentId) {
+            const startNode = nodes.find((n) => n.isActStart && n.actNumber === 1);
+            if (startNode) currentId = startNode.id;
+        }
+        const reachableClueList = reachableClues(clues, state.discoveredClues ?? [], currentId);
+        sections['Available clues'] = formatCluesList(reachableClueList, clues);
     } catch (error) {
         log('Failed to compute Available clues.', 'warn', error.message);
         sections['Available clues'] = '(none)';
@@ -416,14 +409,9 @@ export async function renderAuthorsNoteFromState({ preserveSummaries = true } = 
     const discoveredBullets = (state.discoveredClues ?? []).map((id) => `- ${id}`);
     sections['Discovered clues'] = discoveredBullets.length ? discoveredBullets.join('\n') : '(none)';
 
-    try {
-        const clues = await loadAllClues();
-        const reachable = reachableClues(clues, state.discoveredClues ?? []);
-        sections['Available clues'] = formatCluesList(reachable, clues);
-    } catch (error) {
-        log('Failed to compute Available clues.', 'warn', error.message);
-        sections['Available clues'] = '(none)';
-    }
+    // Beat-mode no longer surfaces available clues — the new clue model requires
+    // a current node, which beat-mode does not track.
+    sections['Available clues'] = '(none)';
 
     const text = appendResponseLengthCap(formatAuthorsNoteSections(sections, AUTHORS_NOTE_SECTIONS));
     const ctx = getContext();

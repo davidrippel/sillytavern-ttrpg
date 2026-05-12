@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ..schemas import InitialAuthorsNote, NodeGraph, PlotSkeleton
+from ..schemas import ClueGraph, InitialAuthorsNote, NodeGraph, PlotSkeleton
 
 RESPONSE_LENGTH_BLOCK = "\n".join(
     [
@@ -33,25 +33,57 @@ def render(plot: PlotSkeleton) -> InitialAuthorsNote:
     )
 
 
-def render_node_mode(plot: PlotSkeleton, node_graph: NodeGraph) -> str:
+def render_node_mode(plot: PlotSkeleton, node_graph: NodeGraph, clue_graph: ClueGraph | None = None) -> str:
     """Render the initial Author's Note for a node-mode campaign.
 
-    No InitialAuthorsNote model is used because that schema's required fields
-    (current_beat, next_beat) are beat-mode concepts. We return a plain string
-    that matches the node-mode section list the JS runtime parses.
+    Seeds `Available clues` with the start node's outbound clues (so the GM
+    can drop them on turn 1) and `Reachable nodes` with their targets.
     """
     act_one = plot.acts[0]
-    act_one_nodes = [n for n in node_graph.nodes if n.act_number == (act_one.act_number or 1) and not n.is_victory]
-    reachable_lines = [f"- {n.id}: {n.description[:80]}" for n in act_one_nodes[:8]] or ["(none)"]
+    act_one_number = act_one.act_number or 1
+
+    # Find the act-1 start node.
+    start_node = None
+    for node in node_graph.nodes:
+        if node.act_number == act_one_number and node.is_act_start:
+            start_node = node
+            break
+
+    # Outbound clues from the start node.
+    outbound_clues = []
+    if clue_graph is not None and start_node is not None:
+        for clue in clue_graph.clues:
+            if clue.found_at_node == start_node.id:
+                outbound_clues.append(clue)
+
+    if outbound_clues:
+        available_lines = [f"- {clue.id} — {clue.hint or clue.reveals[:80]}" for clue in outbound_clues]
+        target_ids = []
+        node_by_id = {n.id: n for n in node_graph.nodes}
+        for clue in outbound_clues:
+            if clue.points_to_node not in target_ids:
+                target_ids.append(clue.points_to_node)
+        reachable_lines = []
+        for nid in target_ids:
+            node = node_by_id.get(nid)
+            if node is not None:
+                reachable_lines.append(f"- {node.id}: {node.description[:80]}")
+    else:
+        # Fall back to listing act-1 non-victory nodes if no clues yet.
+        act_one_nodes = [n for n in node_graph.nodes if n.act_number == act_one_number and not n.is_victory]
+        reachable_lines = [f"- {n.id}: {n.description[:80]}" for n in act_one_nodes[:8]]
+        available_lines = []
+
     threads = [plot.hook, plot.driving_mystery, act_one.goal]
     sections = [
         f"Current Act: Act {act_one.act_number}: {act_one.title}",
         "Reachable nodes:",
-        *reachable_lines,
+        *(reachable_lines or ["(none)"]),
         "Recently visited: (none)",
         "On-screen NPCs: (none)",
         "Discovered clues: (none)",
-        "Available clues: (none)",
+        "Available clues:",
+        *(available_lines or ["(none)"]),
         "Active threads:",
         *(f"- {t}" for t in threads),
         "Recent scenes: (empty at start)",

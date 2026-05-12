@@ -392,22 +392,36 @@ def assemble_lorebook(
         )
 
     if node_graph is not None:
+        # Derive per-node entry/exit clue lists from the clue graph.
+        entry_clues_by_node: dict[str, list[str]] = {n.id: [] for n in node_graph.nodes}
+        exit_clues_by_node: dict[str, list[str]] = {n.id: [] for n in node_graph.nodes}
+        for clue in clue_graph.clues:
+            if clue.found_at_node in exit_clues_by_node:
+                exit_clues_by_node[clue.found_at_node].append(clue.id)
+            if clue.points_to_node in entry_clues_by_node:
+                entry_clues_by_node[clue.points_to_node].append(clue.id)
+
         for node in node_graph.nodes:
             sections = [
                 f"Node: {node.id}",
                 f"Kind: {node.kind}",
                 f"Description: {node.description}",
             ]
-            if node.entry_clues:
-                sections.append(f"Entry clues: {', '.join(node.entry_clues)}")
-            if node.exit_clues:
-                sections.append(f"Exit clues: {', '.join(node.exit_clues)}")
+            entries_here = entry_clues_by_node.get(node.id, [])
+            exits_here = exit_clues_by_node.get(node.id, [])
+            if entries_here:
+                sections.append(f"Entry clues: {', '.join(entries_here)}")
+            if exits_here:
+                sections.append(f"Exit clues: {', '.join(exits_here)}")
             if node.gating:
                 sections.append(f"Gating: {', '.join(node.gating)}")
             if node.triggers:
                 sections.append(f"Triggers: {node.triggers}")
-            if node.underspecified:
-                sections.append("Underspecified: true")
+            sections.append(f"Act: {node.act_number}")
+            if node.is_act_start:
+                sections.append("Act start: true")
+            if node.is_act_final:
+                sections.append("Act final: true")
             if node.is_victory:
                 sections.append("Victory: true")
             content = "\n\n".join(sections)
@@ -423,18 +437,15 @@ def assemble_lorebook(
             )
 
     for clue in clue_graph.clues:
-        rendered_targets = []
-        for target in clue.points_to:
-            value = plot.format_beat_reference(target.value) if target.type == "beat" else target.value
-            rendered_targets.append(f"- {target.type}: {value}")
         sections = [
             f"Clue {clue.id}",
             f"Found at: {clue.found_at_type} {clue.found_at}",
+            f"Found at node: {clue.found_at_node}",
+            f"Points to node: {clue.points_to_node}",
         ]
         if clue.hint:
             sections.append(f"Hint: {clue.hint}")
         sections.append(f"Reveals: {clue.reveals}")
-        sections.append("Points to:\n" + "\n".join(rendered_targets))
         content = "\n\n".join(sections)
         uid += 1
         add(

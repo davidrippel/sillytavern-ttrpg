@@ -3,8 +3,10 @@ from pathlib import Path
 
 from campaign_generator.lorebook import _name_variants, assemble_lorebook
 from common.pack import load_pack
-from campaign_generator.schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
+from campaign_generator.schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NodeGraph, NPCRoster, PlotSkeleton, PremiseDocument
 from campaign_generator.stages.branches import _build_reference_token_map
+from campaign_generator.stages.clue_chains import build_clue_graph
+from campaign_generator.stages.nodes import build_node_graph
 from campaign_generator.stages.npcs import _normalize_faction_affiliation
 from campaign_generator.validation import validate_cross_stage
 
@@ -15,17 +17,32 @@ def _load_fixture(name: str):
         return json.load(handle)
 
 
+def _ferryman_clue_and_node_graphs():
+    """Build a deterministic clue+node graph from the ferryman fixtures.
+
+    The legacy clue_chains.json fixture is preserved for historical reference
+    but no longer matches the schema. Tests build the clue graph live from
+    the deterministic generator instead.
+    """
+    plot = PlotSkeleton.model_validate(_load_fixture("plot_skeleton"))
+    npcs = NPCRoster.model_validate({"npcs": [_load_fixture(f"npc_{index}") for index in range(1, 7)]})
+    locations = LocationCatalog.model_validate({"locations": [_load_fixture(f"location_{index}") for index in range(1, 6)]})
+    node_graph = build_node_graph(plot, nodes_per_act=5)
+    clue_graph = build_clue_graph(node_graph=node_graph, npcs=npcs, locations=locations, plot=plot)
+    return plot, npcs, locations, node_graph, clue_graph
+
+
 def test_lorebook_contains_pack_entries():
     pack = load_pack("genres/symbaroum_dark_fantasy")
-    plot = PlotSkeleton.model_validate(_load_fixture("plot_skeleton"))
+    plot, npcs, locations, _node_graph, clue_graph = _ferryman_clue_and_node_graphs()
     lorebook = assemble_lorebook(
         pack=pack,
         premise=PremiseDocument.model_validate(_load_fixture("premise")),
         plot=plot,
         factions=FactionSet.model_validate(_load_fixture("factions")),
-        npcs=NPCRoster.model_validate({"npcs": [_load_fixture(f"npc_{index}") for index in range(1, 7)]}),
-        locations=LocationCatalog.model_validate({"locations": [_load_fixture(f"location_{index}") for index in range(1, 6)]}),
-        clue_graph=ClueGraph.model_validate(_load_fixture("clue_chains")),
+        npcs=npcs,
+        locations=locations,
+        clue_graph=clue_graph,
         branches=BranchPlan.model_validate(_load_fixture("branches")),
     )
     assert isinstance(lorebook["entries"], dict)
@@ -96,7 +113,7 @@ def test_lorebook_contains_pack_entries():
 
 def test_cross_stage_validation_allows_user_relationship_placeholder():
     pack = load_pack("genres/symbaroum_dark_fantasy")
-    plot = PlotSkeleton.model_validate(_load_fixture("plot_skeleton"))
+    plot, _npcs, locations, node_graph, clue_graph = _ferryman_clue_and_node_graphs()
     factions = FactionSet.model_validate(_load_fixture("factions"))
     npc_payloads = [_load_fixture(f"npc_{index}") for index in range(1, 7)]
     npc_payloads[0]["relationships"].append(
@@ -110,9 +127,10 @@ def test_cross_stage_validation_allows_user_relationship_placeholder():
         plot=plot,
         factions=factions,
         npcs=NPCRoster.model_validate({"npcs": npc_payloads}),
-        locations=LocationCatalog.model_validate({"locations": [_load_fixture(f"location_{index}") for index in range(1, 6)]}),
-        clue_graph=ClueGraph.model_validate(_load_fixture("clue_chains")),
+        locations=locations,
+        clue_graph=clue_graph,
         branches=BranchPlan.model_validate(_load_fixture("branches")),
+        node_graph=node_graph,
     )
 
     assert not any("{{user}}" in error for error in errors)
@@ -120,16 +138,15 @@ def test_cross_stage_validation_allows_user_relationship_placeholder():
 
 def test_npc_secret_is_segregated_into_disabled_entry():
     pack = load_pack("genres/symbaroum_dark_fantasy")
-    plot = PlotSkeleton.model_validate(_load_fixture("plot_skeleton"))
-    npc_roster = NPCRoster.model_validate({"npcs": [_load_fixture(f"npc_{index}") for index in range(1, 7)]})
+    plot, npc_roster, locations, _node_graph, clue_graph = _ferryman_clue_and_node_graphs()
     lorebook = assemble_lorebook(
         pack=pack,
         premise=PremiseDocument.model_validate(_load_fixture("premise")),
         plot=plot,
         factions=FactionSet.model_validate(_load_fixture("factions")),
         npcs=npc_roster,
-        locations=LocationCatalog.model_validate({"locations": [_load_fixture(f"location_{index}") for index in range(1, 6)]}),
-        clue_graph=ClueGraph.model_validate(_load_fixture("clue_chains")),
+        locations=locations,
+        clue_graph=clue_graph,
         branches=BranchPlan.model_validate(_load_fixture("branches")),
     )
     entry_list = list(lorebook["entries"].values())
@@ -188,11 +205,8 @@ def test_normalize_faction_affiliation_treats_none_string_as_independent():
 
 
 def test_branch_reference_token_map_accepts_faction_aliases_and_beats():
-    plot = PlotSkeleton.model_validate(_load_fixture("plot_skeleton"))
+    plot, npcs, locations, _node_graph, clues = _ferryman_clue_and_node_graphs()
     factions = FactionSet.model_validate(_load_fixture("factions"))
-    npcs = NPCRoster.model_validate({"npcs": [_load_fixture(f"npc_{index}") for index in range(1, 7)]})
-    locations = LocationCatalog.model_validate({"locations": [_load_fixture(f"location_{index}") for index in range(1, 6)]})
-    clues = ClueGraph.model_validate(_load_fixture("clue_chains"))
 
     token_map = _build_reference_token_map(
         plot=plot,
@@ -208,29 +222,25 @@ def test_branch_reference_token_map_accepts_faction_aliases_and_beats():
 
 
 def test_node_mode_lorebook_emission():
-    """Node-mode emits Node: entries, Points to lines reference nodes, and act
+    """Node-mode emits Node: entries with the new clue-edge model, and act
     entries omit the Beats: section so the GM has no scene sequence."""
-    from campaign_generator.stages.nodes import run as run_nodes
-
     pack = load_pack("genres/symbaroum_dark_fantasy")
-    plot = PlotSkeleton.model_validate(_load_fixture("plot_skeleton"))
-    clue_graph = ClueGraph.model_validate(_load_fixture("clue_chains"))
-    new_clues, node_graph, _warnings = run_nodes(plot=plot, clues=clue_graph)
+    plot, npcs, locations, node_graph, clue_graph = _ferryman_clue_and_node_graphs()
 
     lorebook = assemble_lorebook(
         pack=pack,
         premise=PremiseDocument.model_validate(_load_fixture("premise")),
         plot=plot,
         factions=FactionSet.model_validate(_load_fixture("factions")),
-        npcs=NPCRoster.model_validate({"npcs": [_load_fixture(f"npc_{index}") for index in range(1, 7)]}),
-        locations=LocationCatalog.model_validate({"locations": [_load_fixture(f"location_{index}") for index in range(1, 6)]}),
-        clue_graph=new_clues,
+        npcs=npcs,
+        locations=locations,
+        clue_graph=clue_graph,
         branches=BranchPlan.model_validate(_load_fixture("branches")),
         node_graph=node_graph,
     )
     entry_list = list(lorebook["entries"].values())
 
-    # Node entries are emitted with Kind:, Description:, Entry clues: sections.
+    # Node entries are emitted with Kind:, Description: sections.
     node_entries = [e for e in entry_list if e["comment"].startswith("Node:")]
     assert len(node_entries) == len(node_graph.nodes)
     sample_node = node_entries[0]
@@ -241,22 +251,19 @@ def test_node_mode_lorebook_emission():
     assert any(e["comment"].startswith("Node:") for e in entry_list)
 
     # Act entries in node-mode must NOT contain "Beats:" — the proposal removes
-    # the scene sequence. (Compare with beat-mode tests above where Act 1
-    # content includes "1.1 ...".)
+    # the scene sequence.
     current_act = next(e for e in entry_list if e["comment"].startswith("Current Act"))
     assert "Beats:" not in current_act["content"]
     assert "Goal:" in current_act["content"]
 
-    # Clue entries' Points-to lines reference nodes; beat targets are dropped.
+    # Clue entries carry "Found at node:" and "Points to node:" lines for the
+    # runtime parser.
     clue_entries = [e for e in entry_list if e["comment"].startswith("Clue:")]
-    assert any("- node:" in e["content"] for e in clue_entries), (
-        "expected at least one clue Points-to line to reference a node:<id>"
-    )
-    assert not any("- beat:" in e["content"] for e in clue_entries), (
-        "node-mode should drop beat references from clue Points-to"
-    )
+    assert clue_entries, "expected clue entries"
+    for entry in clue_entries:
+        assert "Found at node:" in entry["content"]
+        assert "Points to node:" in entry["content"]
 
-    # Victory node is present, gating-aware.
+    # Victory node is present and flagged.
     victory_entries = [e for e in node_entries if "Victory: true" in e["content"]]
     assert len(victory_entries) == 1
-    assert "Gating:" in victory_entries[0]["content"]

@@ -19,6 +19,7 @@ from .schemas import (
     ClueGraph,
     FactionSet,
     LocationCatalog,
+    NodeGraph,
     NPCRoster,
     PlotSkeleton,
     PremiseDocument,
@@ -32,7 +33,7 @@ from .stages import clue_chains as clue_chains_stage
 from .stages import factions as factions_stage
 from .stages import initial_an as initial_an_stage
 from .stages import locations as locations_stage
-from .stages import nodes as nodes_stage
+from .stages import node_generation as nodes_stage
 from .stages import npcs as npcs_stage
 from .stages import opening_hook as opening_hook_stage
 from .stages import plot_skeleton as plot_stage
@@ -50,6 +51,7 @@ STAGE_ALIASES = {
     "factions": "factions",
     "npcs": "npcs",
     "locations": "locations",
+    "nodes": "nodes",
     "clue_chains": "clue_chains",
     "clues": "clue_chains",
     "branches": "branches",
@@ -64,6 +66,7 @@ STAGE_MODELS: dict[str, type[BaseModel]] = {
     "factions": FactionSet,
     "npcs": NPCRoster,
     "locations": LocationCatalog,
+    "nodes": NodeGraph,
     "clue_chains": ClueGraph,
     "branches": BranchPlan,
     "sample_characters": SampleCharacterSet,
@@ -425,6 +428,47 @@ def run_pipeline(
     locations = sanitize_model(locations, protagonist_names=protagonist_names)
     _write_json(_stage_cache_path(stages_dir, "locations"), serialize_location_catalog(locations, plot))
 
+    # Node graph is generated before clues because clues are edges between nodes.
+    # The optional `node_mode` kwarg / CG_NODE_MODE env var are retained for
+    # backwards-compatibility but no longer toggle real behavior — node-mode
+    # is the only supported path.
+    if node_mode is False:
+        raise ValueError(
+            "node_mode=False is no longer supported; the clue model now requires nodes."
+        )
+    _ = get_node_mode()  # touched for env-var compatibility; value ignored
+
+    node_graph: NodeGraph
+    node_cache_path = _stage_cache_path(stages_dir, "nodes")
+    if "nodes" not in selected and "clue_chains" not in selected and node_cache_path.exists():
+        if progress_callback is not None:
+            progress_callback("Using cached stage: nodes")
+        with node_cache_path.open("r", encoding="utf-8") as handle:
+            node_graph = NodeGraph.model_validate(json.load(handle))
+    else:
+        if progress_callback is not None:
+            progress_callback("Starting stage: nodes")
+        node_prompts = {
+            nodes_stage.PROMPT_START: _load_prompt(nodes_stage.PROMPT_START),
+            nodes_stage.PROMPT_FINAL: _load_prompt(nodes_stage.PROMPT_FINAL),
+            nodes_stage.PROMPT_INTERMEDIATE: _load_prompt(nodes_stage.PROMPT_INTERMEDIATE),
+        }
+        node_graph = nodes_stage.run(
+            client=client,
+            premise=premise,
+            plot=plot,
+            npcs=npcs,
+            locations=locations,
+            model=resolved_model,
+            temperature=temperature,
+            validation_log=validation_log,
+            snapshot_path=partials_dir / "nodes.partial.json",
+            progress_callback=progress_callback,
+            prompts=node_prompts,
+            nodes_per_act=loaded_seed.resolved.nodes_per_act or nodes_stage.DEFAULT_NODES_PER_ACT,
+        )
+        _write_json(node_cache_path, node_graph.model_dump())
+
     clue_graph = _run_or_load_stage(
         name="clue_chains",
         selected=selected,
@@ -435,23 +479,21 @@ def run_pipeline(
         resume=resume,
         runner=lambda: clue_chains_stage.run(
             client=client,
-            system_prompt=_load_prompt(clue_chains_stage.PROMPT_FILE),
-            prose_system_prompt=_load_prompt(clue_chains_stage.PROSE_PROMPT_FILE),
+            node_graph=node_graph,
             premise=premise,
             plot=plot,
-            factions=factions,
             npcs=npcs,
             locations=locations,
-            density=loaded_seed.resolved.clue_chain_density or "medium",
             model=resolved_model,
             temperature=temperature,
             validation_log=validation_log,
             snapshot_path=partials_dir / "clue_chains.partial.json",
             progress_callback=progress_callback,
+            prose_system_prompt=_load_prompt(clue_chains_stage.PROSE_PROMPT_FILE),
         ),
     )
     clue_graph = sanitize_model(clue_graph, protagonist_names=protagonist_names)
-    _write_json(_stage_cache_path(stages_dir, "clue_chains"), serialize_clue_graph(clue_graph, plot))
+    _write_json(_stage_cache_path(stages_dir, "clue_chains"), serialize_clue_graph(clue_graph, node_graph))
 
     branches = _run_or_load_stage(
         name="branches",
@@ -514,42 +556,13 @@ def run_pipeline(
         if progress_callback is not None:
             progress_callback("Wrote sample_characters.json")
 
-    cross_stage_errors = validate_cross_stage(pack, plot, factions, npcs, locations, clue_graph, branches)
+    cross_stage_errors = validate_cross_stage(pack, plot, factions, npcs, locations, clue_graph, branches, node_graph=node_graph)
     if cross_stage_errors:
         for error in cross_stage_errors:
             validation_log.write(f"[cross-stage] {error}")
         raise ValueError("cross-stage validation failed; see stages/validation_log.txt")
     if progress_callback is not None:
         progress_callback("Cross-stage validation passed")
-
-    node_graph = None
-    # Precedence: explicit kwarg > CG_NODE_MODE env var > default (node-mode).
-    if node_mode is not None:
-        use_node_mode = node_mode
-    else:
-        env_value = get_node_mode()
-        use_node_mode = True if env_value is None else env_value
-    if use_node_mode:
-        clue_graph, node_graph, node_warnings = nodes_stage.run(
-            plot=plot,
-            clues=clue_graph,
-            progress_callback=progress_callback,
-        )
-        for warning in node_warnings:
-            validation_log.write(f"[nodes] {warning}")
-        if progress_callback is not None and node_warnings:
-            progress_callback(
-                f"Node graph: {len(node_warnings)} node(s) flagged underspecified "
-                "(player may get stuck — see validation log)"
-            )
-        # Rewrite the clue partial so it reflects post-node-rewiring state
-        # (the version the rest of the pipeline and the lorebook see), not
-        # the pre-rewiring state the clue stage wrote. Also drop a fresh
-        # nodes.partial.json so the node graph is independently inspectable.
-        _write_json(partials_dir / "clue_chains.partial.json", serialize_clue_graph(clue_graph, plot))
-        _write_json(partials_dir / "nodes.partial.json", node_graph.model_dump())
-        if progress_callback is not None:
-            progress_callback("Wrote partials/clue_chains.partial.json (post-node-rewire) and partials/nodes.partial.json")
 
     opening_hook = opening_hook_stage.render(
         pack,
@@ -570,12 +583,7 @@ def run_pipeline(
     if progress_callback is not None:
         progress_callback("Wrote opening_hook.txt")
 
-    if node_graph is not None:
-        initial_text = initial_an_stage.render_node_mode(plot, node_graph)
-    else:
-        initial_text = initial_an_stage.append_response_length_cap(
-            initial_an_stage.render(plot).render()
-        )
+    initial_text = initial_an_stage.render_node_mode(plot, node_graph, clue_graph)
     _write_text(output_dir / "initial_authors_note.txt", initial_text)
     if progress_callback is not None:
         progress_callback("Wrote initial_authors_note.txt")

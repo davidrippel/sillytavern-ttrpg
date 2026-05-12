@@ -11,9 +11,10 @@ from campaign_generator.pipeline import run_pipeline
 from campaign_generator.pipeline import _format_duration
 from campaign_generator.pipeline import _format_usage_summary
 from campaign_generator.placeholders import sanitize_text
-from campaign_generator.schemas import Clue, ClueGraph, ClueTarget, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
+from campaign_generator.schemas import Clue, ClueGraph, LocationCatalog, NodeGraph, NPCRoster, PlotSkeleton, PremiseDocument
 from campaign_generator.stages.npcs import _extract_required_npc_names
-from campaign_generator.stages.clue_chains import _build_hybrid_fallback_clue_graph, build_clue_skeleton
+from campaign_generator.stages.clue_chains import build_clue_graph
+from campaign_generator.stages.nodes import build_node_graph
 from campaign_generator.stages.opening_hook import _autofix_casing, _character_guidance, _detect_issues
 from campaign_generator.seed import CampaignSeed
 from campaign_generator.validation import validate_clue_graph
@@ -83,7 +84,10 @@ def test_pipeline_replay_writes_outputs(tmp_path):
     assert plot_payload["acts"][0]["beats"][0]["id"] == "act1_beat1"
     assert plot_payload["acts"][0]["beats"][0]["rendered"] == "1.1 Recover the ferryman's satchel"
     assert "plot_beats_detail" in locations_payload["locations"][0]
-    assert clues_payload["clues"][0]["supports_beats_detail"][0]["id"] == "act1_beat1"
+    # New clue model: each clue is an edge between two nodes.
+    sample_clue = clues_payload["clues"][0]
+    assert "found_at_node" in sample_clue and "points_to_node" in sample_clue
+    assert sample_clue["found_at_node"] != sample_clue["points_to_node"]
 
 
 def test_protagonist_name_sanitizer_uses_user_placeholder():
@@ -236,7 +240,62 @@ def test_usage_summary_formatter_includes_calls_tokens_and_cost():
     ) == "1 call, 150 tokens, 0.0125 credits"
 
 
-def test_hybrid_clue_fallback_preserves_valid_clues_and_synthesizes_missing_slots():
+def _ferryman_plot_npcs_locations_for_node_test():
+    plot = PlotSkeleton.model_validate(
+        json.loads((FIXTURE_DIR / "plot_skeleton.json").read_text())
+    )
+    npcs = NPCRoster.model_validate(
+        {"npcs": [json.loads((FIXTURE_DIR / f"npc_{i}.json").read_text()) for i in range(1, 7)]}
+    )
+    locations = LocationCatalog.model_validate(
+        {"locations": [json.loads((FIXTURE_DIR / f"location_{i}.json").read_text()) for i in range(1, 6)]}
+    )
+    return plot, npcs, locations
+
+
+def test_node_graph_has_shared_act_transition_nodes():
+    plot, _npcs, _locations = _ferryman_plot_npcs_locations_for_node_test()
+    graph = build_node_graph(plot, nodes_per_act=5)
+    # 4 acts × 5 nodes/act with shared transitions = 5 + 4 + 4 + 4 = 17 distinct nodes.
+    assert len(graph.nodes) == 17
+    # Exactly one victory node, on the last act, with no outbound role.
+    victories = [n for n in graph.nodes if n.is_victory]
+    assert len(victories) == 1
+    assert victories[0].act_number == len(plot.acts)
+    # Each act's start node exists.
+    for act_num in range(1, len(plot.acts) + 1):
+        if act_num == 1:
+            starts = [n for n in graph.nodes if n.act_number == 1 and n.is_act_start and not n.is_act_final]
+        else:
+            starts = [
+                n for n in graph.nodes
+                if n.act_number == act_num - 1 and n.is_act_final and n.is_act_start and not n.is_victory
+            ]
+        assert len(starts) == 1, f"act {act_num} should have exactly one start, got {starts}"
+
+
+def test_clue_graph_satisfies_inbound_outbound_and_no_self_loop():
+    plot, npcs, locations = _ferryman_plot_npcs_locations_for_node_test()
+    node_graph = build_node_graph(plot, nodes_per_act=5)
+    clue_graph = build_clue_graph(node_graph=node_graph, npcs=npcs, locations=locations, plot=plot)
+    errors = validate_clue_graph(plot, npcs, locations, clue_graph, node_graph)
+    assert errors == [], f"clue graph should be valid, got: {errors}"
+
+    # Inbound count >=3 for every non-act-1-start node.
+    inbound = {n.id: 0 for n in node_graph.nodes}
+    for clue in clue_graph.clues:
+        inbound[clue.points_to_node] += 1
+    for node in node_graph.nodes:
+        if node.is_act_start and node.act_number == 1 and not node.is_act_final:
+            continue
+        assert inbound[node.id] >= 3, f"node {node.id} has {inbound[node.id]} inbound clues"
+
+    # No self-loops.
+    for clue in clue_graph.clues:
+        assert clue.found_at_node != clue.points_to_node
+
+
+def _legacy_test_unused():
     plot = PlotSkeleton.model_validate(
         {
             "acts": [
@@ -472,7 +531,7 @@ def _ferryman_plot_npcs_locations():
     return plot, npcs, locations
 
 
-def test_build_clue_skeleton_produces_valid_graph_without_llm():
+def _legacy_test_skeleton_unused():
     plot, npcs, locations = _ferryman_plot_npcs_locations()
     skeleton = build_clue_skeleton(plot=plot, npcs=npcs, locations=locations)
     errors = validate_clue_graph(plot, npcs, locations, skeleton)

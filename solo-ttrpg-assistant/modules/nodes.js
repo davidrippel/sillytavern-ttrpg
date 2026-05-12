@@ -9,28 +9,12 @@ function entriesOf(lorebook) {
     return [];
 }
 
-function parseListSection(content, sectionName) {
-    const re = new RegExp(`^${sectionName}\\s*:\\s*$`, 'mi');
-    const after = content.split(re)[1];
-    if (!after) return [];
-    const items = [];
-    for (const rawLine of after.split('\n')) {
-        const line = rawLine.trim();
-        if (!line) continue;
-        if (/^[a-z][\w\s]*:\s*/i.test(line) && !/^[-*•]/.test(line)) break;
-        const bullet = line.match(/^[-*•]\s*(.+)$/);
-        if (!bullet) continue;
-        items.push(bullet[1].trim());
-    }
-    return items;
-}
-
 function parseInlineList(content, sectionName) {
     const re = new RegExp(`^${sectionName}\\s*:\\s*(.*)$`, 'mi');
     const m = content.match(re);
     if (!m) return [];
     const inline = m[1].trim();
-    if (!inline) return parseListSection(content, sectionName);
+    if (!inline) return [];
     return inline.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
@@ -49,11 +33,28 @@ function parseNodeEntry(entry) {
     const exitClues = parseInlineList(content, 'Exit clues');
     const gating = parseInlineList(content, 'Gating');
 
-    const underspecified = /^Underspecified:\s*true\s*$/im.test(content);
+    const actNumberRaw = (content.match(/^Act:\s*(\d+)$/m)?.[1] ?? '').trim();
+    const actNumber = actNumberRaw ? Number(actNumberRaw) : null;
+    const isActStart = /^Act start:\s*true\s*$/im.test(content);
+    const isActFinal = /^Act final:\s*true\s*$/im.test(content);
+    const isVictory = /^Victory:\s*true\s*$/im.test(content);
     const triggersText = (content.match(/^Triggers:\s*(.+)$/m)?.[1] ?? '').trim();
     const triggers = triggersText ? triggersText : null;
 
-    return { id, kind, description, entryClues, exitClues, gating, triggers, underspecified, entry };
+    return {
+        id,
+        kind,
+        description,
+        entryClues,
+        exitClues,
+        gating,
+        triggers,
+        actNumber,
+        isActStart,
+        isActFinal,
+        isVictory,
+        entry,
+    };
 }
 
 export async function loadAllNodes() {
@@ -78,54 +79,44 @@ export async function isCampaignNodeMode() {
     return false;
 }
 
-export function discoveredCluesPointingToNodes(clues, discoveredIds) {
-    const discovered = new Set(discoveredIds ?? []);
-    const targets = new Set();
-    for (const clue of clues) {
-        if (!discovered.has(clue.id)) continue;
-        for (const target of clue.pointsTo ?? []) {
-            if (target.type === 'node' && target.value) targets.add(target.value);
-        }
-    }
-    return targets;
+export function currentNodeId(state) {
+    const visited = state?.visitedNodes ?? [];
+    if (visited.length === 0) return null;
+    return visited[visited.length - 1];
 }
 
-function bootstrapPointedNodes(clues, nodes) {
-    const pointedAt = new Set();
-    for (const clue of clues) {
-        for (const target of clue.pointsTo ?? []) {
-            if (target.type === 'clue') pointedAt.add(target.value);
-        }
-    }
-    const pointed = new Set();
-    for (const clue of clues) {
-        if (pointedAt.has(clue.id)) continue;
-        for (const target of clue.pointsTo ?? []) {
-            if (target.type === 'node' && target.value) pointed.add(target.value);
-        }
-    }
-    if (pointed.size === 0) {
-        for (const node of nodes) {
-            if (!(node.gating ?? []).length) pointed.add(node.id);
-        }
-    }
-    return pointed;
-}
-
+/**
+ * Reachable nodes from the current state. A node is reachable if:
+ *   - it's the target of a clue currently emitted from the current node, OR
+ *   - it's the target of any clue the player has already discovered.
+ * The act-1 start node is included by default at the very beginning of play
+ * (when nothing has been visited yet).
+ */
 export function reachableNodes(nodes, clues, state, { maxResults = 8 } = {}) {
-    const visited = new Set(state?.visitedNodes ?? []);
     const completed = new Set(state?.completedNodes ?? []);
-    const discovered = state?.discoveredClues ?? [];
+    const visited = new Set(state?.visitedNodes ?? []);
+    const discovered = new Set(state?.discoveredClues ?? []);
+    const currentId = currentNodeId(state);
 
-    const pointed = discoveredCluesPointingToNodes(clues, discovered);
-    if (discovered.length === 0) {
-        for (const id of bootstrapPointedNodes(clues, nodes)) pointed.add(id);
+    const reachableIds = new Set();
+    for (const clue of clues) {
+        if (clue.foundAtNode === currentId && clue.pointsToNode) {
+            reachableIds.add(clue.pointsToNode);
+        }
+        if (discovered.has(clue.id) && clue.pointsToNode) {
+            reachableIds.add(clue.pointsToNode);
+        }
+    }
+    if (visited.size === 0 && reachableIds.size === 0) {
+        for (const node of nodes) {
+            if (node.isActStart && node.actNumber === 1) reachableIds.add(node.id);
+        }
     }
 
     const result = [];
     for (const node of nodes) {
         if (completed.has(node.id)) continue;
-        if (!pointed.has(node.id)) continue;
+        if (!reachableIds.has(node.id)) continue;
         const gatesUnmet = (node.gating ?? []).some((reqId) => !visited.has(reqId) && !completed.has(reqId));
         if (gatesUnmet) continue;
         result.push({
@@ -133,7 +124,6 @@ export function reachableNodes(nodes, clues, state, { maxResults = 8 } = {}) {
             kind: node.kind,
             description: node.description,
             visited: visited.has(node.id),
-            underspecified: node.underspecified,
         });
         if (result.length >= maxResults) break;
     }

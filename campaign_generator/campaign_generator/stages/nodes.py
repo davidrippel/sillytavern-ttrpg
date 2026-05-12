@@ -1,15 +1,13 @@
-"""Node-graph generator for Alexandrian (node-mode) campaigns.
+"""Node-graph generator for node-mode campaigns.
 
-Produces a NodeGraph deterministically from the beat structure: one node per
-beat plus a campaign-level victory node gating the ending. Entry clues are
-sourced from the existing clue graph (clues that supports_beats this beat
-become entry clues for that beat's node, and have node:<id> appended to their
-points_to so the runtime can compute reachability).
+Produces a NodeGraph deterministically from the plot's acts. Each act gets a
+configurable number of nodes; the last node of each act is shared with the
+first node of the next act (acting as a transition point). The very last
+node of the campaign is the victory node.
 
-This is the minimum viable node generator. An LLM-driven enrichment stage
-(rewriting node descriptions, choosing kind based on plot context) can be
-layered on later — the topology produced here is already correct and
-playable.
+Node count per act is configurable via `nodes_per_act` (default 5). With
+3 acts × 5 nodes/act and shared transitions, the campaign has 13 distinct
+nodes (5 + 4 + 4 = 13).
 """
 from __future__ import annotations
 
@@ -17,197 +15,185 @@ import re
 from collections.abc import Callable
 from typing import Optional
 
-from ..schemas import (
-    Clue,
-    ClueGraph,
-    ClueTarget,
-    Node,
-    NodeGraph,
-    PlotSkeleton,
-)
+from ..schemas import Beat, NodeGraph, Node, PlotSkeleton
 
 
 ProgressCallback = Optional[Callable[[str], None]]
 
+DEFAULT_NODES_PER_ACT = 5
+
 
 def _slug(text: str) -> str:
-    """Convert arbitrary text to a snake_case node id."""
     cleaned = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
     return cleaned[:48] or "node"
 
 
-def _classify_kind(beat_text: str) -> str:
-    """Heuristic: derive node kind from beat text. Locations dominate; specific
-    interaction or event language can flip the kind. Conservative defaults
-    keep the runtime's resolution test simple to satisfy.
-    """
-    text = beat_text.lower()
-    if any(w in text for w in (" meets ", " confronts ", "questions ", " asks ", " interrogates ", " bargains ", " accuses ")):
+def _classify_kind(text: str) -> str:
+    t = text.lower()
+    if any(w in t for w in (" meets ", " confronts ", "questions ", " asks ", " interrogates ", " bargains ", " accuses ")):
         return "npc_encounter"
-    if any(w in text for w in ("attack", "ambush", "explosion", "earthquake", "ritual", "ceremony", "fire breaks", "alarm")):
+    if any(w in t for w in ("attack", "ambush", "explosion", "earthquake", "ritual", "ceremony", "fire breaks", "alarm")):
         return "event"
     return "location"
 
 
-def build_node_graph(plot: PlotSkeleton) -> NodeGraph:
-    """One node per beat across the campaign, plus a victory node anchored to
-    the final act. Entry-clue lists are filled by `wire_clues_to_nodes`."""
-    nodes: list[Node] = []
+def _distribute_beats(beats: list[Beat], slot_count: int) -> list[list[Beat]]:
+    """Spread N beats across `slot_count` slots as evenly as possible.
+
+    Earlier beats go into earlier slots. Beats are not split: a single beat
+    lives in exactly one slot. If beats < slots, trailing slots get empty
+    lists (callers handle that).
+    """
+    if slot_count <= 0:
+        return []
+    slots: list[list[Beat]] = [[] for _ in range(slot_count)]
+    if not beats:
+        return slots
+    # Even distribution: every slot gets at least floor(N/slots), with the
+    # first (N mod slots) slots taking one extra.
+    n = len(beats)
+    base, remainder = divmod(n, slot_count)
+    cursor = 0
+    for index in range(slot_count):
+        take = base + (1 if index < remainder else 0)
+        slots[index] = beats[cursor : cursor + take]
+        cursor += take
+    return slots
+
+
+def _node_description(beats_in_slot: list[Beat], act_title: str, fallback_index: int) -> str:
+    """Build the node description from the beats assigned to this slot.
+
+    If the slot has beats, concatenate them. If empty, fall back to a stub
+    referencing the act title and slot index.
+    """
+    if beats_in_slot:
+        text = " | ".join(beat.text.strip() for beat in beats_in_slot if beat.text)
+        return text[:400] if text else f"{act_title} — scene {fallback_index}"
+    return f"{act_title} — scene {fallback_index}"
+
+
+def _unique_id(base: str, used: set[str]) -> str:
+    candidate = base
+    suffix = 1
+    while candidate in used:
+        suffix += 1
+        candidate = f"{base}_{suffix}"
+    used.add(candidate)
+    return candidate
+
+
+def build_node_graph(plot: PlotSkeleton, *, nodes_per_act: int = DEFAULT_NODES_PER_ACT) -> NodeGraph:
+    """Deterministically construct the node graph from the plot skeleton.
+
+    For each act, generate `nodes_per_act` nodes. The last node of each act
+    (except the final act) is the same node as the first node of the next act:
+    we materialize it once with `is_act_final=True` AND `is_act_start=True`
+    (for the next act's perspective, this same node serves as its start), and
+    its `act_number` is the *originating* act's number (clues *into* this node
+    come from act N; clues *out of* this node lead into act N+1, see
+    clue_chains stage). The campaign's last act's last node is the victory.
+
+    Returns a NodeGraph whose `nodes` list is ordered: act 1's nodes (with the
+    transition node shared with act 2), then act 2's intermediate nodes, ...,
+    ending at the victory node.
+    """
+    if nodes_per_act < 3:
+        raise ValueError("nodes_per_act must be at least 3 (constraints require >=3 inbound clues per non-start node)")
+
+    acts = plot.acts
+    if not acts:
+        raise ValueError("plot must have at least one act")
+
     used_ids: set[str] = set()
+    nodes: list[Node] = []
+    # Track the most recently created node so the next act can reuse it as
+    # its starting node.
+    prev_act_final_node: Node | None = None
 
-    for act in plot.acts:
-        for beat in act.beats:
-            base = _slug(beat.text)
-            node_id = base
-            suffix = 1
-            while node_id in used_ids:
-                suffix += 1
-                node_id = f"{base}_{suffix}"
-            used_ids.add(node_id)
-            nodes.append(
-                Node(
-                    id=node_id,
-                    kind=_classify_kind(beat.text),
-                    description=beat.text.strip()[:400],
-                    act_number=act.act_number or 1,
-                    entry_clues=[],
-                    exit_clues=[],
-                    gating=[],
-                    underspecified=False,
-                    is_victory=False,
-                )
+    for act_index, act in enumerate(acts):
+        act_number = act.act_number or (act_index + 1)
+        is_last_act = act_index == len(acts) - 1
+
+        # If this isn't the first act, the act's first slot is the previous act's
+        # final node (shared). Materialize remaining slots only.
+        slots_to_create = nodes_per_act - (1 if prev_act_final_node is not None else 0)
+        if slots_to_create < 2:
+            raise ValueError("nodes_per_act too small to support shared act transitions; use at least 3")
+
+        # Beat distribution: all beats from this act spread across this act's
+        # owned slots (slots_to_create). The shared (prev) start node is owned
+        # by the previous act and already has its description set.
+        beat_slots = _distribute_beats(list(act.beats), slots_to_create)
+
+        # The first new slot in this act is the act's start (unless it's a
+        # shared transition, which is already act_start=True from prev act).
+        first_owned_index = 0
+        for slot_index in range(slots_to_create):
+            beats_in_slot = beat_slots[slot_index]
+            slot_position_in_act = (slot_index + 1) if prev_act_final_node is None else (slot_index + 2)
+            description = _node_description(beats_in_slot, act.title, slot_position_in_act)
+            kind_source = beats_in_slot[0].text if beats_in_slot else act.title
+            kind = _classify_kind(kind_source)
+
+            # Build a stable id from a slug of the description (or fallback).
+            base = _slug(description) if description else f"act{act_number}_node{slot_position_in_act}"
+            node_id = _unique_id(base, used_ids)
+
+            is_act_start = (prev_act_final_node is None) and (slot_index == first_owned_index)
+            is_act_final = (slot_index == slots_to_create - 1)
+            # Mark this node a victory if it's the last node of the last act.
+            is_victory = is_act_final and is_last_act
+
+            node = Node(
+                id=node_id,
+                kind=kind,
+                description=description,
+                act_number=act_number,
+                is_act_start=is_act_start,
+                is_act_final=is_act_final,
+                is_victory=is_victory,
+                triggers="Resolve this node to advance toward the act's final scene." if not is_victory else "Campaign climax.",
             )
+            nodes.append(node)
+            if is_act_final and not is_last_act:
+                # This node will be shared with the next act: mark it as the
+                # next act's start node by also setting is_act_start=True.
+                # We re-assign with the start flag preserved across acts.
+                # (Note: act_number stays = current act; the next act 'inherits'
+                # this same node as its start, but the act_number reflects the
+                # act this node's *inbound* clues belong to. Outbound clues
+                # from this node will belong to the next act.)
+                # Cross-act sharing is encoded by leaving the node's act_number
+                # alone but flagging is_act_start=True so the next iteration
+                # of the loop skips creating a new start node.
+                node_copy = node.model_copy(update={"is_act_start": True})
+                # Replace the just-added node with the version that has both
+                # flags set.
+                nodes[-1] = node_copy
+                prev_act_final_node = node_copy
 
-    last_act = plot.acts[-1]
-    victory_id = "victory"
-    if victory_id in used_ids:
-        victory_id = "victory_node"
-    nodes.append(
-        Node(
-            id=victory_id,
-            kind="event",
-            description=f"Campaign victory — {last_act.title}: {last_act.goal}",
-            act_number=last_act.act_number or len(plot.acts),
-            entry_clues=[],
-            exit_clues=[],
-            gating=[n.id for n in nodes if n.act_number == (last_act.act_number or len(plot.acts))],
-            triggers="Player has resolved every other node in the final act.",
-            is_victory=True,
-        )
-    )
+        # If this act was not the last, the shared transition is set up.
+        # If this act IS the last, prev_act_final_node is irrelevant for the
+        # next iteration (loop ends).
+        if is_last_act:
+            prev_act_final_node = None
+        else:
+            # prev_act_final_node was set inside the loop above.
+            pass
+
     return NodeGraph(nodes=nodes)
 
 
-def wire_clues_to_nodes(plot: PlotSkeleton, clues: ClueGraph, graph: NodeGraph) -> tuple[ClueGraph, NodeGraph, list[str]]:
-    """Connect existing beat-anchored clues to their corresponding nodes.
-
-    Returns (updated_clue_graph, updated_node_graph, warnings).
-
-    For each beat → matching node we:
-      - append node:<id> to the clue's points_to (so the runtime's clue parser
-        sees the node reference);
-      - append the clue id to the node's entry_clues list;
-      - record the clue's id on the node's exit_clues if the clue's
-        points_to contains a different beat (the clue surfaces information
-        leading away from this node).
-
-    Warnings include "node has fewer than 3 entry clues" per the proposal's
-    three-clue rule (warn-and-accept).
-    """
-    nodes_by_id = {n.id: n for n in graph.nodes}
-    # Build a beat-id -> node-id index from the deterministic mapping.
-    # Generator preserves order; one node per beat; first len(beats) nodes are
-    # the beat nodes in source order.
-    beat_list = [b for act in plot.acts for b in act.beats]
-    if len(beat_list) > len([n for n in graph.nodes if not n.is_victory]):
-        raise ValueError("node graph beat-node count mismatch")
-    beat_to_node: dict[str, str] = {}
-    for beat, node in zip(beat_list, [n for n in graph.nodes if not n.is_victory]):
-        if beat.id is not None:
-            beat_to_node[beat.id] = node.id
-
-    text_to_id = plot.beat_text_to_id()
-
-    def _resolve_beat_ref(value: str) -> str | None:
-        """Beat refs in the wild can be either IDs (act1_beat1) or beat text
-        ('Recover the ferryman's satchel'). Map both to the canonical ID."""
-        if value in beat_to_node:
-            return value
-        return text_to_id.get(value)
-
-    new_clues: list[Clue] = []
-    for clue in clues.clues:
-        node_targets: list[str] = list(clue.points_to_nodes)
-        # supports_beats can carry either beat IDs or beat text — normalize both.
-        for beat_ref in clue.supports_beats:
-            beat_id = _resolve_beat_ref(beat_ref)
-            if beat_id is None:
-                continue
-            node_id = beat_to_node.get(beat_id)
-            if node_id and node_id not in node_targets:
-                node_targets.append(node_id)
-        # Also harvest beat targets from points_to so legacy fixtures that
-        # encoded beat references there still wire to the correct node.
-        for target in clue.points_to:
-            if target.type != "beat":
-                continue
-            beat_id = _resolve_beat_ref(target.value)
-            if beat_id is None:
-                continue
-            node_id = beat_to_node.get(beat_id)
-            if node_id and node_id not in node_targets:
-                node_targets.append(node_id)
-        # Mirror node targets onto points_to so the JS runtime's clue parser
-        # (which reads "Points to: node:<id>" from the lorebook) sees them.
-        new_points_to = list(clue.points_to)
-        for nid in node_targets:
-            if not any(t.type == "node" and t.value == nid for t in new_points_to):
-                new_points_to.append(ClueTarget(type="node", value=nid))
-        # Drop beat targets from points_to in node-mode — beats no longer exist
-        # at runtime as discrete entities; the node references replace them.
-        new_points_to = [t for t in new_points_to if t.type != "beat"]
-        if not new_points_to:
-            # Fall back to a node target so points_to remains non-empty per schema.
-            if node_targets:
-                new_points_to = [ClueTarget(type="node", value=node_targets[0])]
-        updated_clue = clue.model_copy(update={
-            "points_to": new_points_to,
-            "points_to_nodes": node_targets,
-            # supports_beats is left intact for spoilers/reference; runtime ignores it in node-mode.
-        })
-        new_clues.append(updated_clue)
-        for node_id in node_targets:
-            node = nodes_by_id.get(node_id)
-            if node is None:
-                continue
-            if clue.id not in node.entry_clues:
-                node.entry_clues.append(clue.id)
-
-    # Warn-and-accept on the three-clue rule.
-    warnings: list[str] = []
-    for node in graph.nodes:
-        if node.is_victory:
-            continue
-        if len(node.entry_clues) < 3:
-            node.underspecified = True
-            warnings.append(
-                f"node '{node.id}' has only {len(node.entry_clues)} entry clue(s); "
-                "marked underspecified (player may get stuck here)."
-            )
-
-    new_clue_graph = clues.model_copy(update={"clues": new_clues})
-    return new_clue_graph, graph, warnings
-
-
-def run(*, plot: PlotSkeleton, clues: ClueGraph, progress_callback: ProgressCallback = None) -> tuple[ClueGraph, NodeGraph, list[str]]:
+def run(*, plot: PlotSkeleton, nodes_per_act: int = DEFAULT_NODES_PER_ACT, progress_callback: ProgressCallback = None) -> NodeGraph:
     if progress_callback is not None:
-        progress_callback("Building node graph (deterministic, one node per beat + victory node)")
-    graph = build_node_graph(plot)
-    wired_clues, wired_graph, warnings = wire_clues_to_nodes(plot, clues, graph)
+        progress_callback(f"Building node graph (deterministic, {nodes_per_act} nodes/act with shared act transitions)")
+    graph = build_node_graph(plot, nodes_per_act=nodes_per_act)
     if progress_callback is not None:
+        starts = sum(1 for n in graph.nodes if n.is_act_start)
+        finals = sum(1 for n in graph.nodes if n.is_act_final)
         progress_callback(
-            f"Node graph: {len(wired_graph.nodes)} nodes "
-            f"({sum(1 for n in wired_graph.nodes if n.underspecified)} underspecified). "
-            f"Re-wired {len(wired_clues.clues)} clues to point at nodes."
+            f"Node graph: {len(graph.nodes)} distinct nodes "
+            f"({starts} act-start, {finals} act-final, 1 victory)"
         )
-    return wired_clues, wired_graph, warnings
+    return graph

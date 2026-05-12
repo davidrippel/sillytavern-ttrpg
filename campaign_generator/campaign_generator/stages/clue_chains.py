@@ -1,84 +1,56 @@
+"""Deterministic node-edge clue generator.
+
+A clue is a directed edge from a source node (`found_at_node`) to a target
+node (`points_to_node`). For each act independently, we build a clue graph
+that satisfies:
+
+- Every non-act-start node has >=3 inbound clues (from same-act sources).
+- Every non-terminal source node emits >=1 outbound clue.
+- The act-start node emits >=3 outbound clues (so the player has leads
+  upon entering the act).
+- No self-loops (source != target).
+- Source and target belong to the same act (act-final/act-start sharing is
+  resolved by the rule: the shared node belongs to act N for inbound clues
+  and to act N+1 for outbound clues).
+
+Topology is built deterministically. The LLM is used only to enrich the
+`hint` and `reveals` prose (the 06b_clue_prose.md path).
+"""
 from __future__ import annotations
 
 import json
-from collections import defaultdict
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
-
-from pydantic import BaseModel, Field
 
 from ..artifacts import serialize_clue_graph
 from common.llm import LLMClient, LLMError, generate_structured
-from ..schemas import Clue, ClueGraph, ClueTarget, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
-from common.settings import get_use_llm_clue_graph
-from ..validation import ValidationLog, validate_clue_graph
+from ..schemas import (
+    Clue,
+    ClueGraph,
+    LocationCatalog,
+    Node,
+    NodeGraph,
+    NPCRoster,
+    PlotSkeleton,
+    PremiseDocument,
+)
+from ..validation import ValidationLog
 
 
-PROMPT_FILE = "06_clue_chains.md"
+PROMPT_FILE = "06_clue_chains.md"  # legacy; topology is now deterministic
 PROSE_PROMPT_FILE = "06b_clue_prose.md"
 
-
-class StageClueTarget(BaseModel):
-    type: Literal["clue", "npc", "location", "beat"]
-    value: str
+# Re-export a tiny shim so existing imports `from .stages.clue_chains import StageClue`
+# do not break if used elsewhere. The schema is for prose enrichment only.
+from pydantic import BaseModel, Field as _PField
 
 
 class StageClue(BaseModel):
     id: str
-    found_at_type: Literal["npc", "location"]
+    found_at_type: str
     found_at: str
-    hint: str = Field(default="", max_length=120)
-    reveals: str = Field(max_length=280)
-    points_to: list[StageClueTarget] = Field(min_length=1)
-    supports_beats: list[str] = Field(min_length=1)
-
-
-class StageClueGraph(BaseModel):
-    entry_clue_ids: list[str] = Field(min_length=1)
-    clues: list[StageClue] = Field(min_length=4, max_length=24)
-
-
-def _target_clue_count(density: str, beat_count: int) -> int:
-    normalized = density.lower().strip()
-    if normalized == "light":
-        return max(8, min(beat_count, 12))
-    if normalized == "heavy":
-        return max(14, min(beat_count + 6, 20))
-    return max(10, min(beat_count + 2, 16))
-
-
-def _build_beat_lookup(plot: PlotSkeleton) -> dict[str, str]:
-    return plot.beat_id_to_text()
-
-
-def _convert_stage_graph(stage_graph: StageClueGraph, beat_lookup: dict[str, str]) -> ClueGraph:
-    converted_clues: list[Clue] = []
-    beat_text_to_id = {text: beat_id for beat_id, text in beat_lookup.items()}
-    for clue in stage_graph.clues:
-        converted_targets = []
-        for target in clue.points_to:
-            if target.type == "beat":
-                value = target.value if target.value in beat_lookup else beat_text_to_id.get(target.value, target.value)
-            else:
-                value = target.value
-            converted_targets.append(ClueTarget(type=target.type, value=value))
-        converted_supports = [
-            beat_id if beat_id in beat_lookup else beat_text_to_id.get(beat_id, beat_id)
-            for beat_id in clue.supports_beats
-        ]
-        converted_clues.append(
-            Clue(
-                id=clue.id,
-                found_at_type=clue.found_at_type,
-                found_at=clue.found_at,
-                hint=clue.hint,
-                reveals=clue.reveals,
-                points_to=converted_targets,
-                supports_beats=converted_supports,
-            )
-        )
-    return ClueGraph(entry_clue_ids=stage_graph.entry_clue_ids, clues=converted_clues)
+    hint: str = _PField(default="", max_length=120)
+    reveals: str = _PField(max_length=280)
 
 
 def _write_snapshot(path: Path, payload: dict) -> None:
@@ -86,288 +58,223 @@ def _write_snapshot(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def _normalize_beat_reference(plot: PlotSkeleton, value: str) -> str | None:
-    beat_lookup = plot.beat_id_to_text()
-    if value in beat_lookup:
-        return value
-    return plot.beat_text_to_id().get(value)
+def _nodes_in_act_inbound(node_graph: NodeGraph, act_number: int) -> list[Node]:
+    """Nodes that receive inbound clues belonging to this act.
+
+    Shared act-final/act-start nodes are owned (for inbound) by their
+    originating act (the act whose `act_number` matches the node's stored
+    `act_number`). They also serve as the *start* of the next act for
+    outbound purposes — see _nodes_in_act_outbound.
+    """
+    return [n for n in node_graph.nodes if n.act_number == act_number]
 
 
-def _extract_candidate_beats(plot: PlotSkeleton, clue: Clue) -> list[str]:
-    beat_ids: list[str] = []
-    for beat_ref in clue.supports_beats:
-        normalized = _normalize_beat_reference(plot, beat_ref)
-        if normalized and normalized not in beat_ids:
-            beat_ids.append(normalized)
-    for target in clue.points_to:
-        if target.type != "beat":
-            continue
-        normalized = _normalize_beat_reference(plot, target.value)
-        if normalized and normalized not in beat_ids:
-            beat_ids.append(normalized)
-    return beat_ids
+def _nodes_in_act_outbound(node_graph: NodeGraph, act_number: int) -> list[Node]:
+    """Nodes that emit outbound clues belonging to this act.
+
+    A "transition node" is a node with is_act_final=True AND is_act_start=True
+    (and not victory) — it's the final node of one act AND the start node of
+    the next. Its inbound clues belong to its `act_number`; its outbound clues
+    belong to `act_number + 1`.
+
+    For act N's outbound sources, return all nodes with `act_number == N`
+    EXCEPT a transition node owned by act N (its outbounds belong to N+1),
+    PLUS the transition node owned by act N-1 (if any; it acts as act N's
+    start node and its outbounds belong to act N).
+    """
+    sources: list[Node] = []
+    for node in node_graph.nodes:
+        is_transition = node.is_act_final and node.is_act_start and not node.is_victory
+        if node.act_number == act_number:
+            # Exclude transition nodes owned by this act (their outbound act = N+1).
+            if is_transition:
+                continue
+            sources.append(node)
+        elif node.act_number == act_number - 1 and is_transition:
+            # Previous act's transition node = this act's start node.
+            sources.append(node)
+    return sources
 
 
-def _valid_anchor(clue: Clue, npc_names: set[str], location_names: set[str]) -> bool:
-    if clue.found_at_type == "npc":
-        return clue.found_at in npc_names
-    if clue.found_at_type == "location":
-        return clue.found_at in location_names
-    return False
+def _act_start_node(node_graph: NodeGraph, act_number: int) -> Node | None:
+    """Find the node that serves as act N's start node.
+
+    For act 1: the node with act_number=1 and is_act_start=True.
+    For act N>1: the previous act's transition node (act_number=N-1, is_act_final=True, not victory).
+    """
+    if act_number == 1:
+        for node in node_graph.nodes:
+            if node.act_number == 1 and node.is_act_start:
+                return node
+        return None
+    # For act N>1, find the (N-1)-th act's transition node (is_act_final, not victory).
+    for node in node_graph.nodes:
+        if node.act_number == act_number - 1 and node.is_act_final and not node.is_victory:
+            return node
+    return None
 
 
-def _next_synthetic_id(used_ids: set[str], beat_index: int, slot_label: str) -> str:
-    base = f"repair_clue{beat_index:02d}{slot_label}"
-    candidate = base
-    suffix = 1
-    while candidate in used_ids:
-        suffix += 1
-        candidate = f"{base}_{suffix}"
-    used_ids.add(candidate)
-    return candidate
-
-
-_REVEALS_MAX = 280
-
-
-def _truncate(value: str, limit: int) -> str:
-    """Trim a string to `limit` characters, ending on a word boundary with an ellipsis."""
-    if len(value) <= limit:
-        return value
-    cut = value[: max(0, limit - 1)].rstrip()
-    if " " in cut:
-        cut = cut.rsplit(" ", 1)[0]
-    return cut + "…"
-
-
-def _synthetic_reveals(plot: PlotSkeleton, beat_text: str, slot_label: str) -> str:
-    if slot_label == "a":
-        prefix = "Evidence tied to '"
-        suffix_template = "' points toward a larger pattern behind {mystery}"
-        mystery = plot.driving_mystery.lower()
-        budget = _REVEALS_MAX - len(prefix) - len(suffix_template.format(mystery=""))
-        if budget < 1:
-            return _truncate(f"{prefix}{beat_text}{suffix_template.format(mystery=mystery)}", _REVEALS_MAX)
-        beat_part = _truncate(beat_text, max(1, budget))
-        candidate = f"{prefix}{beat_part}{suffix_template.format(mystery=mystery)}"
-        return _truncate(candidate, _REVEALS_MAX)
-    prefix = "A second lead reinforces '"
-    suffix = "' and adds pressure from the campaign's factions and witnesses."
-    budget = _REVEALS_MAX - len(prefix) - len(suffix)
-    beat_part = _truncate(beat_text, max(1, budget))
-    return _truncate(f"{prefix}{beat_part}{suffix}", _REVEALS_MAX)
-
-
-def _synthetic_hint(slot_label: str) -> str:
-    if slot_label == "a":
-        return "Physical evidence on site, easy to overlook."
-    return "A second lead worth chasing here."
-
-
-def _build_synthetic_clue(
+def _select_found_at(
+    source_node: Node,
     *,
-    plot: PlotSkeleton,
     npcs: NPCRoster,
     locations: LocationCatalog,
-    beat_index: int,
-    beat_id: str,
-    beat_text: str,
-    slot_label: str,
-    used_ids: set[str],
-) -> Clue:
-    npc_cycle = npcs.npcs or []
-    location_cycle = locations.locations or []
-    if not npc_cycle and not location_cycle:
-        raise LLMError("cannot build fallback clue graph without NPCs or locations")
-    location = location_cycle[(beat_index - 1) % len(location_cycle)] if location_cycle else None
-    npc = npc_cycle[(beat_index - 1) % len(npc_cycle)] if npc_cycle else None
+    used_anchors: dict[str, int],
+) -> tuple[str, str]:
+    """Pick an NPC or location to anchor a clue at this source node.
 
-    if slot_label == "a":
-        found_at_type = "location" if location is not None else "npc"
-        found_at = location.name if location is not None else npc.name
+    Preference order:
+      1. NPCs/location explicitly marked relevant to this node (best — most grounded).
+      2. The global NPC/location pool (fallback when the node has no relevance hints).
+
+    Within the chosen pool, prefer NPCs vs locations based on `source_node.kind`,
+    and round-robin to avoid reusing the same anchor for every clue at this node.
+    """
+    npc_pool_global = [npc.name for npc in npcs.npcs]
+    loc_pool_global = [loc.name for loc in locations.locations]
+
+    node_npcs = list(source_node.relevant_npcs)
+    node_location = source_node.relevant_location
+
+    prefer_npc = source_node.kind == "npc_encounter"
+
+    # Tier 1: the node's own relevant NPCs/location.
+    if prefer_npc and node_npcs:
+        chosen = min(node_npcs, key=lambda n: used_anchors.get(n, 0))
+        used_anchors[chosen] = used_anchors.get(chosen, 0) + 1
+        return ("npc", chosen)
+    if node_location:
+        used_anchors[node_location] = used_anchors.get(node_location, 0) + 1
+        return ("location", node_location)
+    if node_npcs:
+        chosen = min(node_npcs, key=lambda n: used_anchors.get(n, 0))
+        used_anchors[chosen] = used_anchors.get(chosen, 0) + 1
+        return ("npc", chosen)
+
+    # Tier 2: global pools.
+    primary = npc_pool_global if prefer_npc else loc_pool_global
+    secondary = loc_pool_global if prefer_npc else npc_pool_global
+
+    def pick(pool: list[str]) -> str | None:
+        if not pool:
+            return None
+        return min(pool, key=lambda n: used_anchors.get(n, 0))
+
+    chosen = pick(primary) or pick(secondary)
+    if chosen is None:
+        raise LLMError("cannot anchor clue: no NPCs or locations available")
+    used_anchors[chosen] = used_anchors.get(chosen, 0) + 1
+    if chosen in npc_pool_global and chosen not in loc_pool_global:
+        anchor_type = "npc"
+    elif chosen in loc_pool_global and chosen not in npc_pool_global:
+        anchor_type = "location"
     else:
-        found_at_type = "npc" if npc is not None else "location"
-        found_at = npc.name if npc is not None else location.name
-
-    return Clue(
-        id=_next_synthetic_id(used_ids, beat_index, slot_label),
-        found_at_type=found_at_type,
-        found_at=found_at,
-        hint=_synthetic_hint(slot_label),
-        reveals=_synthetic_reveals(plot, beat_text, slot_label),
-        points_to=[ClueTarget(type="beat", value=beat_id)],
-        supports_beats=[beat_id],
-    )
+        anchor_type = "npc" if prefer_npc else "location"
+    return anchor_type, chosen
 
 
-def _dedupe_targets(targets: list[ClueTarget]) -> list[ClueTarget]:
-    seen: set[tuple[str, str]] = set()
-    deduped: list[ClueTarget] = []
-    for target in targets:
-        key = (target.type, target.value)
-        if key in seen:
+def _templated_hint(source: Node, target: Node) -> str:
+    return f"A lead found in {source.id} pointing toward {target.id}."[:120]
+
+
+def _templated_reveals(source: Node, target: Node) -> str:
+    return (
+        f"Evidence at {source.id} suggests the next thread runs through {target.id}: "
+        f"{target.description.strip()[:140]}"
+    )[:280]
+
+
+def _assign_clue_edges(
+    *,
+    node_graph: NodeGraph,
+    act_count: int,
+) -> list[tuple[Node, Node]]:
+    """For each act, decide the (source, target) edges for that act's clues.
+
+    Returns a flat list of (source_node, target_node) pairs across all acts,
+    in deterministic order. Constraints satisfied:
+      - every non-start target gets >=3 inbound edges from same-act sources;
+      - act-start emits >=3 outbound edges;
+      - every non-terminal source emits >=1 outbound edge;
+      - no self-loops.
+    """
+    edges: list[tuple[Node, Node]] = []
+    for act_number in range(1, act_count + 1):
+        inbound_targets = _nodes_in_act_inbound(node_graph, act_number)
+        outbound_sources = _nodes_in_act_outbound(node_graph, act_number)
+        start_node = _act_start_node(node_graph, act_number)
+        if not outbound_sources:
             continue
-        seen.add(key)
-        deduped.append(target)
-    return deduped
+        # Targets needing inbound clues are all non-start nodes in this act.
+        # The act-1 self-contained start node (is_act_start=True, is_act_final=False)
+        # is the only one in `inbound_targets` we exclude — it has no inbound role.
+        # Transition nodes (is_act_final=True, is_act_start=True) DO need inbound
+        # clues from their owning act (the act whose number matches their act_number).
+        non_start_targets = [
+            n for n in inbound_targets
+            if not (n.is_act_start and not n.is_act_final and n.act_number == act_number)
+        ]
+
+        # Build inbound demand: 3 clues per non-start target.
+        # Multiple clues from the same source to the same target are allowed
+        # (clues are not uniquely keyed by (source, target)). When the act has
+        # fewer than 3 distinct sources, sources cycle (the same source
+        # contributes multiple clues at this target).
+        for target in non_start_targets:
+            candidates = [s for s in outbound_sources if s.id != target.id]
+            if not candidates:
+                continue
+            target_index = inbound_targets.index(target)
+            for offset in range(3):
+                source = candidates[(target_index + offset) % len(candidates)]
+                edges.append((source, target))
+
+        # Top up act-start outbound count to >=3. Duplicate edges allowed when
+        # the act has fewer than 3 available targets.
+        if start_node is not None:
+            outbound_from_start = sum(1 for s, _ in edges if s.id == start_node.id)
+            possible_start_targets = [
+                t for t in non_start_targets if t.id != start_node.id
+            ]
+            cursor = 0
+            while outbound_from_start < 3 and possible_start_targets:
+                extra_target = possible_start_targets[cursor % len(possible_start_targets)]
+                edges.append((start_node, extra_target))
+                outbound_from_start += 1
+                cursor += 1
+    return edges
 
 
-def _rebuild_clue_targets(
-    clue: Clue,
+def build_clue_graph(
     *,
-    beat_id: str,
-    next_primary_id: str | None,
-    secondary_id: str | None,
-    npc_names: set[str],
-    location_names: set[str],
-) -> list[ClueTarget]:
-    targets: list[ClueTarget] = [ClueTarget(type="beat", value=beat_id)]
-    if secondary_id is not None and secondary_id != clue.id:
-        targets.append(ClueTarget(type="clue", value=secondary_id))
-    if next_primary_id is not None and next_primary_id != clue.id:
-        targets.append(ClueTarget(type="clue", value=next_primary_id))
-    for target in clue.points_to:
-        if target.type == "npc" and target.value in npc_names:
-            targets.append(target)
-        if target.type == "location" and target.value in location_names:
-            targets.append(target)
-    return _dedupe_targets(targets)
-
-
-def _build_hybrid_fallback_clue_graph(
-    *,
-    plot: PlotSkeleton,
+    node_graph: NodeGraph,
     npcs: NPCRoster,
     locations: LocationCatalog,
-    candidate_graph: ClueGraph | None,
-) -> tuple[ClueGraph, int, int]:
-    beat_list = [beat for act in plot.acts for beat in act.beats]
-    if not beat_list:
-        raise LLMError("cannot build fallback clue graph without plot beats")
-    if not npcs.npcs and not locations.locations:
-        raise LLMError("cannot build fallback clue graph without NPCs or locations")
-
-    npc_names = {npc.name for npc in npcs.npcs}
-    location_names = {location.name for location in locations.locations}
-    beat_order = {beat.id: index for index, beat in enumerate(beat_list)}
-    beat_lookup = plot.beat_id_to_text()
-    used_ids: set[str] = set()
-    preserved_by_beat: dict[str, list[Clue]] = defaultdict(list)
-
-    candidate_clues = candidate_graph.clues if candidate_graph is not None else []
-    for clue in candidate_clues:
-        if not _valid_anchor(clue, npc_names, location_names):
-            continue
-        clue_beats = _extract_candidate_beats(plot, clue)
-        if not clue_beats:
-            continue
-        primary_beat = min(clue_beats, key=lambda beat_id: beat_order[beat_id])
-        if len(preserved_by_beat[primary_beat]) >= 2:
-            continue
-        preserved_by_beat[primary_beat].append(clue)
-        used_ids.add(clue.id)
-
-    selected_pairs: list[tuple[Clue, Clue]] = []
-    preserved_count = 0
-    synthetic_count = 0
-    for beat_index, beat in enumerate(beat_list, start=1):
-        preserved = list(preserved_by_beat.get(beat.id, []))
-        preserved_count += len(preserved)
-        while len(preserved) < 2:
-            preserved.append(
-                _build_synthetic_clue(
-                    plot=plot,
-                    npcs=npcs,
-                    locations=locations,
-                    beat_index=beat_index,
-                    beat_id=beat.id,
-                    beat_text=beat.text,
-                    slot_label="a" if len(preserved) == 0 else "b",
-                    used_ids=used_ids,
-                )
-            )
-            synthetic_count += 1
-        selected_pairs.append((preserved[0], preserved[1]))
-
-    rebuilt_clues: list[Clue] = []
-    for beat_index, beat in enumerate(beat_list):
-        primary, secondary = selected_pairs[beat_index]
-        next_primary_id = selected_pairs[beat_index + 1][0].id if beat_index + 1 < len(selected_pairs) else None
-        rebuilt_clues.append(
-            primary.model_copy(
-                update={
-                    "points_to": _rebuild_clue_targets(
-                        primary,
-                        beat_id=beat.id,
-                        next_primary_id=next_primary_id,
-                        secondary_id=secondary.id,
-                        npc_names=npc_names,
-                        location_names=location_names,
-                    ),
-                    "supports_beats": [beat.id],
-                }
-            )
-        )
-        rebuilt_clues.append(
-            secondary.model_copy(
-                update={
-                    "points_to": _rebuild_clue_targets(
-                        secondary,
-                        beat_id=beat.id,
-                        next_primary_id=next_primary_id,
-                        secondary_id=None,
-                        npc_names=npc_names,
-                        location_names=location_names,
-                    ),
-                    "supports_beats": [beat.id],
-                }
-            )
-        )
-
-    graph = ClueGraph(entry_clue_ids=[selected_pairs[0][0].id, selected_pairs[0][1].id], clues=rebuilt_clues)
-    return graph, preserved_count, synthetic_count
-
-
-def build_clue_skeleton(
-    *,
     plot: PlotSkeleton,
-    npcs: NPCRoster,
-    locations: LocationCatalog,
 ) -> ClueGraph:
-    """Build a structurally-valid clue graph deterministically from the plot,
-    NPCs, and locations. Every beat receives exactly two clues that point at
-    it, and the ordering wires successive beats together so that every clue is
-    reachable from the entry pair (the two clues attached to the first beat)."""
-    graph, _, _ = _build_hybrid_fallback_clue_graph(
-        plot=plot,
-        npcs=npcs,
-        locations=locations,
-        candidate_graph=None,
-    )
-    return graph
-
-
-def _summarize_npc(npcs: NPCRoster, name: str) -> dict[str, str] | None:
-    for npc in npcs.npcs:
-        if npc.name == name:
-            return {
-                "name": npc.name,
-                "role": npc.role,
-                "speaking_style": npc.speaking_style,
-                "motivation": npc.motivation,
-            }
-    return None
-
-
-def _summarize_location(locations: LocationCatalog, name: str) -> dict[str, object] | None:
-    for location in locations.locations:
-        if location.name == name:
-            return {
-                "name": location.name,
-                "type": location.type,
-                "notable_features": location.notable_features,
-            }
-    return None
+    """Deterministic clue graph builder: produces edges, anchors them, and
+    fills in templated hint/reveals prose.
+    """
+    act_count = len(plot.acts)
+    edges = _assign_clue_edges(node_graph=node_graph, act_count=act_count)
+    used_anchors: dict[str, int] = {}
+    clues: list[Clue] = []
+    for index, (source, target) in enumerate(edges, start=1):
+        anchor_type, anchor_name = _select_found_at(
+            source, npcs=npcs, locations=locations, used_anchors=used_anchors,
+        )
+        clues.append(
+            Clue(
+                id=f"clue_{index:02d}",
+                found_at_node=source.id,
+                points_to_node=target.id,
+                found_at_type=anchor_type,
+                found_at=anchor_name,
+                hint=_templated_hint(source, target),
+                reveals=_templated_reveals(source, target),
+            )
+        )
+    return ClueGraph(clues=clues)
 
 
 def _enrich_clue_prose(
@@ -375,7 +282,8 @@ def _enrich_clue_prose(
     client: LLMClient,
     system_prompt: str,
     clue: Clue,
-    plot: PlotSkeleton,
+    source: Node,
+    target: Node,
     npcs: NPCRoster,
     locations: LocationCatalog,
     premise: PremiseDocument,
@@ -383,24 +291,32 @@ def _enrich_clue_prose(
     temperature: float,
     validation_log: ValidationLog,
 ) -> tuple[Clue, bool]:
-    """Ask the LLM to rewrite the `hint` and `reveals` fields of a single clue.
-    Returns (possibly-updated clue, llm_success_flag). All-or-nothing: if either
-    field comes back invalid, both fall back to the templated defaults."""
-    beat_lookup = plot.beat_id_to_text()
-    beat_targets = [t.value for t in clue.points_to if t.type == "beat"]
-    beat_context = [
-        {"id": beat_id, "text": beat_lookup.get(beat_id, beat_id)}
-        for beat_id in beat_targets
-    ] or [
-        {"id": beat_id, "text": beat_lookup.get(beat_id, beat_id)}
-        for beat_id in clue.supports_beats
-    ]
+    """Ask the LLM to rewrite `hint` and `reveals` for a single clue.
 
-    if clue.found_at_type == "npc":
-        anchor_context = _summarize_npc(npcs, clue.found_at)
-    else:
-        anchor_context = _summarize_location(locations, clue.found_at)
+    Returns (clue, used_llm). On any failure, returns the input clue unchanged.
+    """
+    def _npc_context() -> dict | None:
+        for npc in npcs.npcs:
+            if npc.name == clue.found_at:
+                return {
+                    "name": npc.name,
+                    "role": npc.role,
+                    "speaking_style": npc.speaking_style,
+                    "motivation": npc.motivation,
+                }
+        return None
 
+    def _location_context() -> dict | None:
+        for loc in locations.locations:
+            if loc.name == clue.found_at:
+                return {
+                    "name": loc.name,
+                    "type": loc.type,
+                    "notable_features": loc.notable_features,
+                }
+        return None
+
+    anchor_ctx = _npc_context() if clue.found_at_type == "npc" else _location_context()
     context = {
         "premise_summary": {
             "central_conflict": premise.central_conflict,
@@ -410,11 +326,12 @@ def _enrich_clue_prose(
             "id": clue.id,
             "found_at_type": clue.found_at_type,
             "found_at": clue.found_at,
-            "points_to": [t.model_dump() for t in clue.points_to],
-            "supports_beats": clue.supports_beats,
+            "found_at_node": clue.found_at_node,
+            "points_to_node": clue.points_to_node,
         },
-        "found_at_context": anchor_context or {"name": clue.found_at},
-        "beat_context": beat_context,
+        "found_at_context": anchor_ctx or {"name": clue.found_at},
+        "source_node": {"id": source.id, "description": source.description},
+        "target_node": {"id": target.id, "description": target.description},
     }
 
     try:
@@ -431,116 +348,29 @@ def _enrich_clue_prose(
         )
     except LLMError as exc:
         validation_log.write(
-            f"[clue_chains] prose enrichment for {clue.id} failed; keeping templated hint and reveals. {exc}"
+            f"[clue_chains] prose enrichment for {clue.id} failed; keeping templated text. {exc}"
         )
         return clue, False
 
     new_hint = (result.hint or "").strip()
     new_reveals = (result.reveals or "").strip()
-    if not new_hint:
+    if not new_hint or len(new_hint) > 120 or not new_reveals or len(new_reveals) > 280:
         validation_log.write(
-            f"[clue_chains] prose enrichment for {clue.id} returned empty hint; keeping templated text."
-        )
-        return clue, False
-    if len(new_hint) > 120:
-        validation_log.write(
-            f"[clue_chains] prose enrichment for {clue.id} returned {len(new_hint)}-char hint "
-            f"(cap 120); keeping templated text."
-        )
-        return clue, False
-    if not new_reveals:
-        validation_log.write(
-            f"[clue_chains] prose enrichment for {clue.id} returned empty reveals; keeping templated text."
-        )
-        return clue, False
-    if len(new_reveals) > 280:
-        validation_log.write(
-            f"[clue_chains] prose enrichment for {clue.id} returned {len(new_reveals)}-char reveals "
-            f"(cap 280); keeping templated text."
+            f"[clue_chains] prose enrichment for {clue.id} returned out-of-bounds text; keeping templated text."
         )
         return clue, False
 
-    return Clue.model_validate({**clue.model_dump(), "hint": new_hint, "reveals": new_reveals}), True
-
-
-def _run_legacy_llm_first(
-    *,
-    client: LLMClient,
-    system_prompt: str,
-    premise: PremiseDocument,
-    plot: PlotSkeleton,
-    factions: FactionSet,
-    npcs: NPCRoster,
-    locations: LocationCatalog,
-    density: str,
-    model: str,
-    temperature: float,
-    validation_log: ValidationLog,
-    snapshot_path: Path | None,
-    progress_callback: Callable[[str], None] | None,
-) -> ClueGraph | None:
-    """Legacy path: ask the LLM to produce the entire graph, retry on validation
-    failure. Returns the graph on success, or None on persistent failure (caller
-    should fall through to the deterministic skeleton)."""
-    repair_note = ""
-    beat_lookup = _build_beat_lookup(plot)
-    target_clues = _target_clue_count(density, len(beat_lookup))
-    clue_graph: ClueGraph | None = None
-    for attempt in range(1, 4):
-        context = {
-            "premise_summary": {
-                "central_conflict": premise.central_conflict,
-                "tone_statement": premise.tone_statement,
-                "thematic_pillars": premise.thematic_pillars,
-            },
-            "plot_summary": {
-                "hook": plot.hook,
-                "driving_mystery": plot.driving_mystery,
-                "act_titles": [act.title for act in plot.acts],
-            },
-            "faction_names": [faction.name for faction in factions.factions],
-            "npc_menu": [{"name": npc.name, "role": npc.role} for npc in npcs.npcs],
-            "location_menu": [{"name": location.name, "type": location.type} for location in locations.locations],
-            "beat_menu": beat_lookup,
-            "clue_chain_density": density,
-            "target_clue_count": target_clues,
-            "repair_note": repair_note,
-        }
-        try:
-            stage_graph = generate_structured(
-                client=client,
-                stage_name="clue_chains",
-                system_prompt=system_prompt,
-                user_prompt=json.dumps(context, indent=2),
-                schema=StageClueGraph,
-                model=model,
-                temperature=temperature,
-                validation_log=validation_log,
-            )
-        except LLMError as exc:
-            validation_log.write(f"[clue_chains] legacy LLM-first attempt {attempt} raised: {exc}")
-            return None
-        clue_graph = _convert_stage_graph(stage_graph, beat_lookup)
-        if snapshot_path is not None:
-            _write_snapshot(snapshot_path, serialize_clue_graph(clue_graph, plot))
-        errors = validate_clue_graph(plot, npcs, locations, clue_graph)
-        if not errors:
-            return clue_graph
-        validation_log.write(f"[clue_chains] legacy LLM-first attempt {attempt} validation: {'; '.join(errors)}")
-        repair_note = "Repair these constraint failures: " + "; ".join(errors)
-    return None
+    return clue.model_copy(update={"hint": new_hint, "reveals": new_reveals}), True
 
 
 def run(
     *,
     client: LLMClient,
-    system_prompt: str,
-    premise: PremiseDocument,
-    plot: PlotSkeleton,
-    factions: FactionSet,
+    node_graph: NodeGraph,
     npcs: NPCRoster,
     locations: LocationCatalog,
-    density: str,
+    premise: PremiseDocument,
+    plot: PlotSkeleton,
     model: str,
     temperature: float,
     validation_log: ValidationLog,
@@ -548,54 +378,15 @@ def run(
     progress_callback: Callable[[str], None] | None = None,
     prose_system_prompt: str | None = None,
 ) -> ClueGraph:
-    """Generate a clue graph by:
-    1. Optionally trying the legacy LLM-builds-whole-graph path (off by default,
-       opt-in via CG_LLM_CLUE_GRAPH=1).
-    2. Otherwise (default) building a deterministic skeleton from beats/NPCs/
-       locations, then asking the LLM to enrich each clue's `reveals` prose in
-       isolation. The graph topology is never at risk; only prose can degrade,
-       and degradation falls back to the deterministic templated text.
+    """Build the clue graph deterministically from the node graph, then
+    optionally enrich `hint`/`reveals` prose via the LLM.
     """
-    if get_use_llm_clue_graph():
-        if progress_callback is not None:
-            progress_callback("Clue graph: attempting LLM-first mode (CG_LLM_CLUE_GRAPH=1)")
-        legacy_graph = _run_legacy_llm_first(
-            client=client,
-            system_prompt=system_prompt,
-            premise=premise,
-            plot=plot,
-            factions=factions,
-            npcs=npcs,
-            locations=locations,
-            density=density,
-            model=model,
-            temperature=temperature,
-            validation_log=validation_log,
-            snapshot_path=snapshot_path,
-            progress_callback=progress_callback,
-        )
-        if legacy_graph is not None:
-            errors = validate_clue_graph(plot, npcs, locations, legacy_graph)
-            if not errors:
-                if progress_callback is not None:
-                    progress_callback("Clue graph: LLM-first succeeded")
-                validation_log.write(
-                    "[clue_chains] LLM-first mode produced a valid graph with "
-                    f"{len(legacy_graph.clues)} clues"
-                )
-                return legacy_graph
-        if progress_callback is not None:
-            progress_callback("Clue graph: LLM-first failed; falling through to deterministic skeleton")
-        validation_log.write("[clue_chains] LLM-first mode failed; falling through to deterministic skeleton")
+    if progress_callback is not None:
+        progress_callback("Building clue graph (deterministic edges between nodes)")
 
-    skeleton = build_clue_skeleton(plot=plot, npcs=npcs, locations=locations)
-    skeleton_errors = validate_clue_graph(plot, npcs, locations, skeleton)
-    if skeleton_errors:
-        raise LLMError(
-            "clue_chains deterministic skeleton failed validation; this indicates a bug. "
-            f"Errors: {'; '.join(skeleton_errors)}"
-        )
+    skeleton = build_clue_graph(node_graph=node_graph, npcs=npcs, locations=locations, plot=plot)
 
+    node_by_id = {n.id: n for n in node_graph.nodes}
     enriched_clues: list[Clue] = []
     enriched_count = 0
     if prose_system_prompt is None:
@@ -604,11 +395,14 @@ def run(
         for index, clue in enumerate(skeleton.clues, start=1):
             if progress_callback is not None:
                 progress_callback(f"Enriching clue prose {index}/{len(skeleton.clues)}: {clue.id}")
+            source = node_by_id[clue.found_at_node]
+            target = node_by_id[clue.points_to_node]
             updated, used_llm = _enrich_clue_prose(
                 client=client,
                 system_prompt=prose_system_prompt,
                 clue=clue,
-                plot=plot,
+                source=source,
+                target=target,
                 npcs=npcs,
                 locations=locations,
                 premise=premise,
@@ -620,17 +414,10 @@ def run(
             if used_llm:
                 enriched_count += 1
 
-    final_graph = ClueGraph(entry_clue_ids=skeleton.entry_clue_ids, clues=enriched_clues)
-    final_errors = validate_clue_graph(plot, npcs, locations, final_graph)
-    if final_errors:
-        raise LLMError(
-            "clue_chains failed validation after prose enrichment (this should not happen — "
-            f"prose enrichment must not alter topology). Errors: {'; '.join(final_errors)}"
-        )
-
+    final_graph = ClueGraph(clues=enriched_clues)
     template_count = len(final_graph.clues) - enriched_count
     summary = (
-        f"Clue graph: skeleton produced {len(final_graph.clues)} clues, "
+        f"Clue graph: {len(final_graph.clues)} clues, "
         f"{enriched_count} enriched by LLM, {template_count} used template fallback"
     )
     validation_log.write(f"[clue_chains] {summary}")
@@ -638,6 +425,6 @@ def run(
         progress_callback(summary)
 
     if snapshot_path is not None:
-        _write_snapshot(snapshot_path, serialize_clue_graph(final_graph, plot))
+        _write_snapshot(snapshot_path, serialize_clue_graph(final_graph, node_graph))
 
     return final_graph

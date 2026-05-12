@@ -77,11 +77,8 @@ def render(
         if clue.hint:
             lines.append(f"Hint: {clue.hint}")
         lines.append(f"Reveals: {clue.reveals}")
-        lines.append("Points to:")
-        lines.extend(
-            f"- {target.type}: {plot.format_beat_reference(target.value) if target.type == 'beat' else target.value}"
-            for target in clue.points_to
-        )
+        lines.append(f"Found at node: {clue.found_at_node}")
+        lines.append(f"Points to node: {clue.points_to_node}")
         lines.append("")
 
     lines.append("## Branches")

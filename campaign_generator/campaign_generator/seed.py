@@ -41,6 +41,7 @@ class CampaignSeed(BaseModel):
     num_npcs: int | None = None
     num_locations: int | None = None
     num_sample_characters: int | None = None
+    nodes_per_act: int | None = Field(default=None, ge=3, le=10)
     clue_chain_density: str | None = None
     branch_points: int | None = None
     random_seed: int | None = None

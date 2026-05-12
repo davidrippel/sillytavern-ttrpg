@@ -12,6 +12,6 @@ Requirements:
 The `references` field — read carefully:
 
 - Each entry in `references` MUST be a verbatim token from the supplied `reference_menu`. The validator rejects any entry that isn't in the menu, and the campaign fails to generate.
-- Valid tokens look like: `act1_beat3`, `act2_beat2`, an NPC's exact name (e.g. `"Morris Katz"`), a faction's exact name (e.g. `"The Whisper Network"`), a location's exact name, or a clue id (e.g. `"repair_clue03a"`).
+- Valid tokens look like: `act1_beat3`, `act2_beat2`, an NPC's exact name (e.g. `"Morris Katz"`), a faction's exact name (e.g. `"The Whisper Network"`), a location's exact name, or a clue id (e.g. `"clue_03"`).
 - Do NOT put paraphrased plot beats, sentence fragments, ellipsis-trailing summaries (`"Elara confronts the protagonist..."`), or invented identifiers in `references`. Those belong in the prose fields, not in `references`.
 - If a branch's prose talks about an event but no menu token captures it, omit that reference rather than inventing one.

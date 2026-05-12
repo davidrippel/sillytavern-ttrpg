@@ -1,0 +1,8 @@
+{
+  "kind": "npc_encounter",
+  "description": "Dren Halvek, rattled by the previous confrontation, offers {{user}} a meeting away from prying eyes \u2014 and a name {{user}} did not expect to hear.",
+  "relevant_npcs": [
+    "Dren Halvek"
+  ],
+  "relevant_location": "Saint's Rest Waystation"
+}

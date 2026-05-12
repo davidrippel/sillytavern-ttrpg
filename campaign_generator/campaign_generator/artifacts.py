@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .schemas import ClueGraph, Location, LocationCatalog, PlotSkeleton
+from .schemas import ClueGraph, Location, LocationCatalog, NodeGraph, PlotSkeleton
 
 
 def beat_detail(plot: PlotSkeleton, beat_ref: str) -> dict[str, str]:
@@ -56,11 +56,28 @@ def serialize_location_list(locations: list[Location], plot: PlotSkeleton) -> di
     return payload
 
 
-def serialize_clue_graph(clue_graph: ClueGraph, plot: PlotSkeleton) -> dict[str, Any]:
+def serialize_clue_graph(clue_graph: ClueGraph, node_graph: NodeGraph | None = None) -> dict[str, Any]:
+    """Serialize the node-edge clue graph. If `node_graph` is provided, enrich
+    each clue's payload with the source/target node descriptions for easier
+    spoiler-side inspection.
+    """
     payload = clue_graph.model_dump()
+    if node_graph is None:
+        return payload
+    node_by_id = {n.id: n for n in node_graph.nodes}
     for clue_payload, clue in zip(payload["clues"], clue_graph.clues):
-        clue_payload["supports_beats_detail"] = [beat_detail(plot, beat_ref) for beat_ref in clue.supports_beats]
-        for target_payload, target in zip(clue_payload["points_to"], clue.points_to):
-            if target.type == "beat":
-                target_payload["beat_detail"] = beat_detail(plot, target.value)
+        source = node_by_id.get(clue.found_at_node)
+        target = node_by_id.get(clue.points_to_node)
+        if source is not None:
+            clue_payload["found_at_node_detail"] = {
+                "id": source.id,
+                "description": source.description,
+                "act_number": source.act_number,
+            }
+        if target is not None:
+            clue_payload["points_to_node_detail"] = {
+                "id": target.id,
+                "description": target.description,
+                "act_number": target.act_number,
+            }
     return payload

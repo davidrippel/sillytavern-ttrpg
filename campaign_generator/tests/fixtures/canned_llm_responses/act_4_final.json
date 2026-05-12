@@ -1,0 +1,19 @@
+{
+  "kind": "event",
+  "description": "At the Root-Glass Chapel as dawn cracks through the broken vault, {{user}} decides who carries the ledger out alive and who pays for the Open Stone \u2014 the campaign's final reckoning.",
+  "relevant_npcs": [
+    "Ivara Kelm",
+    "Sister Orsa",
+    "Archivist Serel"
+  ],
+  "relevant_location": "Root-Glass Chapel",
+  "relevant_npcs_for_act": [
+    "Ivara Kelm",
+    "Sister Orsa",
+    "Archivist Serel"
+  ],
+  "relevant_locations_for_act": [
+    "Sunken Watchtower",
+    "Root-Glass Chapel"
+  ]
+}

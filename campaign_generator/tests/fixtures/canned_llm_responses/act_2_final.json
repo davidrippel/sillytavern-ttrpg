@@ -1,0 +1,17 @@
+{
+  "kind": "event",
+  "description": "Sister Orsa intercepts {{user}} at the entrance to the Lantern Hall Cellar, choir voices rising overhead. She will let {{user}} pass only if convinced the truth is safer in their hands than the Sun Choir's.",
+  "relevant_npcs": [
+    "Sister Orsa"
+  ],
+  "relevant_location": "Lantern Hall Cellar",
+  "relevant_npcs_for_act": [
+    "Maelin Voss",
+    "Sister Orsa",
+    "Dren Halvek"
+  ],
+  "relevant_locations_for_act": [
+    "Saint's Rest Waystation",
+    "Lantern Hall Cellar"
+  ]
+}

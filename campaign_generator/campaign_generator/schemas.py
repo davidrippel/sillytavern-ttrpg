@@ -203,28 +203,22 @@ class LocationCatalog(BaseModel):
         return self
 
 
-class ClueTarget(BaseModel):
-    type: str
-    value: str
-
-    @field_validator("type")
-    @classmethod
-    def validate_type(cls, value: str) -> str:
-        allowed = {"clue", "npc", "location", "beat", "node"}
-        if value not in allowed:
-            raise ValueError(f"type must be one of {sorted(allowed)}")
-        return value
-
-
 class Clue(BaseModel):
+    """A clue is a directed edge between two nodes.
+
+    Discovered at `found_at` (an NPC or location reachable from `found_at_node`),
+    the clue points the player toward `points_to_node`. No clue-to-clue chaining;
+    no beat references. Source and target nodes must belong to the same act,
+    and a clue cannot point to its own source node.
+    """
+
     id: str
+    found_at_node: str = Field(min_length=1)
+    points_to_node: str = Field(min_length=1)
     found_at_type: str
     found_at: str
     hint: str = Field(default="", max_length=120)
     reveals: str = Field(max_length=280)
-    points_to: list[ClueTarget] = Field(min_length=1)
-    supports_beats: list[str] = Field(default_factory=list)
-    points_to_nodes: list[str] = Field(default_factory=list)
 
     @field_validator("found_at_type")
     @classmethod
@@ -234,24 +228,16 @@ class Clue(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def require_beat_or_node_anchor(self) -> "Clue":
-        # A clue must anchor to either a beat (legacy) or a node (new). The
-        # generator may emit only one or the other depending on campaign mode.
-        if not self.supports_beats and not self.points_to_nodes:
-            # Synthesize from points_to if it contains a beat or node ref.
-            for target in self.points_to:
-                if target.type == "beat" and target.value not in self.supports_beats:
-                    self.supports_beats.append(target.value)
-                if target.type == "node" and target.value not in self.points_to_nodes:
-                    self.points_to_nodes.append(target.value)
-        if not self.supports_beats and not self.points_to_nodes:
-            raise ValueError("clue must anchor to at least one beat (supports_beats) or node (points_to_nodes)")
+    def forbid_self_loop(self) -> "Clue":
+        if self.found_at_node == self.points_to_node:
+            raise ValueError(
+                f"clue {self.id} has self-loop (found_at_node == points_to_node == {self.found_at_node!r})"
+            )
         return self
 
 
 class ClueGraph(BaseModel):
-    entry_clue_ids: list[str] = Field(min_length=1)
-    clues: list[Clue] = Field(min_length=4)
+    clues: list[Clue] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_unique_ids(self) -> "ClueGraph":
@@ -262,23 +248,36 @@ class ClueGraph(BaseModel):
 
 
 class Node(BaseModel):
-    """Alexandrian node — a discrete situation the player can engage with.
+    """A discrete situation the player can engage with.
 
     Nodes replace the linear beat sequence in node-mode campaigns. The player
-    navigates the graph by acting on clues (which point to nodes) rather than
-    being shepherded along a beat list.
+    navigates the graph by acting on clues, which are now pure edges between
+    nodes (see `Clue`).
+
+    Acts share node boundaries: a node may be the final node of act N AND the
+    starting node of act N+1 (the `is_act_start` and `is_act_final` flags can
+    both be true on the same node). The very first node of act 1 has
+    `is_act_start=True` and no inbound clues; the campaign's victory node has
+    `is_victory=True` and no outbound clues.
+
+    `entry_clues` and `exit_clues` are derived views computed from the clue
+    graph at lorebook-emission time; they are not authoritative storage and
+    should be left empty by generators.
     """
 
     id: str = Field(min_length=1)
-    kind: str  # validated below
+    kind: str
     description: str = Field(min_length=1, max_length=400)
     act_number: int = Field(ge=1)
     entry_clues: list[str] = Field(default_factory=list)
     exit_clues: list[str] = Field(default_factory=list)
     gating: list[str] = Field(default_factory=list)
     triggers: str | None = Field(default=None, max_length=200)
-    underspecified: bool = False
+    is_act_start: bool = False
+    is_act_final: bool = False
     is_victory: bool = False
+    relevant_npcs: list[str] = Field(default_factory=list)
+    relevant_location: str | None = None
 
     @field_validator("kind")
     @classmethod
@@ -313,6 +312,15 @@ class NodeGraph(BaseModel):
         if victory_count > 1:
             raise ValueError("at most one node may have is_victory=true")
         return self
+
+    def by_act(self, act_number: int) -> list[Node]:
+        return [n for n in self.nodes if n.act_number == act_number]
+
+    def act_start_for(self, act_number: int) -> Node | None:
+        for node in self.nodes:
+            if node.act_number == act_number and node.is_act_start:
+                return node
+        return None
 
 
 class Branch(BaseModel):

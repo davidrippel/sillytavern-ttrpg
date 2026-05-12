@@ -16,18 +16,10 @@ function parseClueEntry(entry) {
     const content = String(entry?.content ?? '');
     const hint = (content.match(/^Hint:\s*(.+)$/m)?.[1] ?? '').trim();
     const reveals = (content.match(/^Reveals:\s*(.+)$/m)?.[1] ?? '').trim();
+    const foundAtNode = (content.match(/^Found at node:\s*(.+)$/m)?.[1] ?? '').trim();
+    const pointsToNode = (content.match(/^Points to node:\s*(.+)$/m)?.[1] ?? '').trim();
 
-    const pointsTo = [];
-    const pointsBlock = content.split(/^Points to:\s*$/m)[1] ?? '';
-    for (const line of pointsBlock.split('\n')) {
-        const m = line.match(/^[-*•]\s*(\w+):\s*(.+)$/);
-        if (!m) continue;
-        pointsTo.push({ type: m[1].toLowerCase().trim(), value: m[2].trim() });
-    }
-
-    const pointsToNodes = pointsTo.filter((t) => t.type === 'node').map((t) => t.value);
-
-    return { id, hint, reveals, pointsTo, pointsToNodes };
+    return { id, hint, reveals, foundAtNode, pointsToNode };
 }
 
 export async function loadAllClues() {
@@ -44,43 +36,19 @@ export function clueExists(clues, id) {
     return clues.some((c) => c.id === id);
 }
 
-export function reachableClues(clues, discoveredIds, { maxResults = 5 } = {}) {
+/**
+ * Clues findable at the current node that haven't been discovered yet.
+ * The GM should drop these into the scene during play.
+ */
+export function reachableClues(clues, discoveredIds, currentNodeId, { maxResults = 5 } = {}) {
+    if (!currentNodeId) return [];
     const discovered = new Set(discoveredIds ?? []);
-    const byId = new Map(clues.map((c) => [c.id, c]));
-
-    const seeds = new Set(discovered);
-    if (seeds.size === 0) {
-        const pointedAt = new Set();
-        for (const clue of clues) {
-            for (const target of clue.pointsTo) {
-                if (target.type === 'clue') pointedAt.add(target.value);
-            }
-        }
-        for (const clue of clues) {
-            if (!pointedAt.has(clue.id)) seeds.add(clue.id);
-        }
-        if (seeds.size === 0 && clues.length > 0) {
-            seeds.add(clues[0].id);
-        }
-    }
-
-    const reachable = new Set();
-    for (const seedId of seeds) {
-        const seed = byId.get(seedId);
-        if (!seed) continue;
-        for (const target of seed.pointsTo) {
-            if (target.type !== 'clue') continue;
-            if (discovered.has(target.value)) continue;
-            reachable.add(target.value);
-        }
-    }
-
     const result = [];
-    for (const id of reachable) {
-        const clue = byId.get(id);
-        if (!clue) continue;
+    for (const clue of clues) {
+        if (clue.foundAtNode !== currentNodeId) continue;
+        if (discovered.has(clue.id)) continue;
         const label = clue.hint?.trim() ? clue.hint.trim() : fallbackLabelFromReveals(clue.reveals);
-        result.push({ id, label });
+        result.push({ id: clue.id, label });
         if (result.length >= maxResults) break;
     }
     return result;

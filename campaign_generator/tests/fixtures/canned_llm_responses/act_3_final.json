@@ -1,0 +1,18 @@
+{
+  "kind": "npc_encounter",
+  "description": "Beneath the Sunken Watchtower's collapsed dome, Ivara Kelm and Sister Orsa stand on opposite sides of the open stone, the Heartwood ledger in {{user}}'s hands \u2014 and a binding choice between them.",
+  "relevant_npcs": [
+    "Ivara Kelm",
+    "Sister Orsa"
+  ],
+  "relevant_location": "Sunken Watchtower",
+  "relevant_npcs_for_act": [
+    "Sister Orsa",
+    "Ivara Kelm",
+    "Archivist Serel"
+  ],
+  "relevant_locations_for_act": [
+    "Lantern Hall Cellar",
+    "Sunken Watchtower"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "kind": "location",
+  "description": "{{user}} arrives at Gloam Bridge in the cold mist of dawn, the ferryman's body still tangled in the rushes. Odel Fen waits with a lantern, anxious to settle the matter before sunup.",
+  "relevant_npcs": [
+    "Odel Fen"
+  ],
+  "relevant_location": "Gloam Bridge",
+  "relevant_npcs_for_act": [
+    "Maelin Voss",
+    "Dren Halvek",
+    "Odel Fen"
+  ],
+  "relevant_locations_for_act": [
+    "Gloam Bridge",
+    "Saint's Rest Waystation"
+  ]
+}
