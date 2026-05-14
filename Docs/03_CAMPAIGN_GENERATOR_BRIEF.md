@@ -365,6 +365,22 @@ In node-mode the extension does NOT advance a destination — Reachable nodes is
 
 This becomes `initial_authors_note.txt` in the output.
 
+### 8.5. `pc_known_npcs`
+
+Input: premise, plot, node graph, NPC roster, seed.
+
+Output: `stages/pc_known_npcs.json` — `{ known_names, introduced_now_names, start_location_name, start_node_id }`. Captures which NPCs the protagonist *already knew* when play begins versus which are *introduced for the first time* in the opening scene.
+
+Why: the opening hook's "What you already know" section and the sample-character relationship hooks both need a tight, accurate "already known" set. Per-NPC flags set during NPC generation are unreliable — the LLM lacks context about whose backstory is established in the premise vs. who is merely present at the opening location. The node graph already encodes who is present at the opening scene (`relevant_npcs` on the act-1 start node), so this stage uses that as the candidate pool and then runs an LLM vet over it.
+
+Generation strategy:
+1. Find the act-1 start node (`act_number == 1 AND is_act_start == true`).
+2. Take `start_node.relevant_npcs ∩ {npc names in roster}` as the candidate set.
+3. Call `09c_pc_known_npc_vet.md` with the premise, opening node description, candidate NPC cards, and `seed.protagonist_known_facts`. The prompt returns a partition of candidates into `known_names` (family, longtime ties, anyone whose relationship to `{{user}}` predates the campaign) and `introduced_now_names` (first-meeting in the opening scene, "catches your eye", co-present strangers).
+4. If the LLM call fails or returns names outside the candidate set, fall back to "all candidates known" and log a warning so the run still produces sensible output.
+
+The result is consumed by `sample_characters` (drives the pool that pregen relationship hooks are drawn from) and `opening_hook` (drives the "What you already know" section; pairs with `start_location_name` for the single known location).
+
 ### 9. `opening_hook`
 
 Input: premise, Act 1 hook, tone, structured genre pack mechanics, seed protagonist hints, plus the full NPC roster and location catalog (used to build the proper-noun set for post-validation).
@@ -374,6 +390,7 @@ Output: the `opening_hook.txt` the player reads. Contains:
 - Tone statement
 - Character creation guidance (specific to this campaign and genre pack — central pressure, reason to care about the opener, relevant attributes, ability categories, and resources)
 - Opening scene (the first scene the GM will narrate, from the player's point of view — where they are, what they see, what prompts them to act)
+- "What you already know" — a short section naming the NPCs and the location the protagonist already knows when play begins. Driven by the `pc_known_npcs` stage (§9.5 below); not derived from per-NPC flags or substring scans of the opening prose.
 
 MUST NOT contain: antagonist identity, clue chain, plot beats beyond Act 1 opener, NPC secrets, branch contingencies.
 

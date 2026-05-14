@@ -44,42 +44,50 @@ def _collect_pc_prior_knowledge(
     *,
     npcs: NPCRoster | None,
     locations: LocationCatalog | None,
-    opening_scene: str,
     seed: CampaignSeed,
+    known_npc_names: set[str],
+    start_location_name: str | None,
 ) -> dict[str, list[dict[str, str]] | list[str]]:
-    """Extract structured PC prior-knowledge facts from existing campaign data.
+    """Extract structured PC prior-knowledge facts.
 
-    - known_npcs: NPCs whose `relationships` contain an entry keyed to {{user}}.
-    - known_locations: locations whose `name` appears in the opening scene text.
+    - known_npcs: NPCs whose name appears in `known_npc_names` (the vetted set
+      from the pc_known_npcs stage). Pulls the `{{user}}` relationship description
+      when available so the prose stage can describe the bond.
+    - known_locations: zero or one entry — the act-1 start node's location.
     - background_facts: pass-through of seed.protagonist_known_facts.
     """
     known_npcs: list[dict[str, str]] = []
-    if npcs is not None:
+    if npcs is not None and known_npc_names:
         for npc in npcs.npcs:
+            if npc.name not in known_npc_names:
+                continue
+            relation_description = ""
             for relation in npc.relationships:
-                if _is_user_alias(relation.name) and relation.known_at_start:
-                    known_npcs.append(
-                        {
-                            "name": npc.name,
-                            "role": npc.role,
-                            "relation": relation.description,
-                        }
-                    )
+                if _is_user_alias(relation.name):
+                    relation_description = relation.description
                     break
+            known_npcs.append(
+                {
+                    "name": npc.name,
+                    "role": npc.role,
+                    "relation": relation_description,
+                }
+            )
 
     known_locations: list[dict[str, str]] = []
-    if locations is not None and opening_scene:
+    if locations is not None and start_location_name:
+        location_type = ""
         for location in locations.locations:
-            if not location.name:
-                continue
-            if re.search(rf"\b{re.escape(location.name)}\b", opening_scene, flags=re.IGNORECASE):
-                known_locations.append(
-                    {
-                        "name": location.name,
-                        "type": location.type,
-                        "why_known": "Named in the opening scene; the PC begins or wakes here.",
-                    }
-                )
+            if location.name == start_location_name:
+                location_type = location.type
+                break
+        known_locations.append(
+            {
+                "name": start_location_name,
+                "type": location_type,
+                "why_known": "The act-1 starting node's location; the PC begins or wakes here.",
+            }
+        )
 
     background_facts: list[str] = list(seed.protagonist_known_facts or [])
 
@@ -347,6 +355,8 @@ def render(
     *,
     npcs: NPCRoster | None = None,
     locations: LocationCatalog | None = None,
+    known_npc_names: set[str] | None = None,
+    start_location_name: str | None = None,
     client: LLMClient | None = None,
     system_prompt: str | None = None,
     prior_knowledge_system_prompt: str | None = None,
@@ -389,8 +399,9 @@ def render(
     structured_prior_knowledge = _collect_pc_prior_knowledge(
         npcs=npcs,
         locations=locations,
-        opening_scene=opening_scene,
         seed=seed,
+        known_npc_names=set(known_npc_names or ()),
+        start_location_name=start_location_name,
     )
     has_prior_knowledge = (
         bool(structured_prior_knowledge["known_npcs"])

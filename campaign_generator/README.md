@@ -65,11 +65,11 @@ Successful runs write:
 - `spoilers/full_campaign.md`
 - `spoilers/campaign_graph.mmd` — Mermaid source for the acts/nodes/clues graph (renders on GitHub, in VS Code, Obsidian, etc.)
 - `spoilers/campaign_graph.html` — self-contained interactive viewer: pan/zoom the graph, hover any node or clue edge to see full details in a floating panel near the cursor. Open directly in a browser; no server needed.
-- `stages/*.json` (one cache per pipeline stage: `premise`, `plot_skeleton`, `factions`, `npcs`, `locations`, `nodes`, `clue_chains`, `branches`, `sample_characters`)
+- `stages/*.json` (one cache per pipeline stage: `premise`, `plot_skeleton`, `factions`, `npcs`, `locations`, `nodes`, `clue_chains`, `branches`, `pc_known_npcs`, `sample_characters`)
 - `stages/calls.jsonl`
 - `stages/validation_log.txt`
 
-`opening_hook.txt` includes player-facing character creation guidance derived from the current campaign premise, Act 1 hook, and the selected genre pack's attributes, ability categories, and non-static resources.
+`opening_hook.txt` includes player-facing character creation guidance derived from the current campaign premise, Act 1 hook, and the selected genre pack's attributes, ability categories, and non-static resources. Its **"What you already know"** section is grounded in the act-1 starting node: the candidate NPCs come from that node's `relevant_npcs`, the location is its `relevant_location`, and the `pc_known_npcs` stage runs an LLM vet to drop NPCs the protagonist is merely meeting for the first time in the opening scene (keeping only those the premise establishes as already-known — family, longtime ties, etc.). The same vetted set is used to draw relationship hooks for the pregen sample characters in `sample_characters.json`.
 
 The campaign uses **node-based scenario design**: each act is a small graph of unordered situations the player can engage with, connected by clues. Each clue is a directed edge from a source node to a target node. Node count per act is seed-configurable via `nodes_per_act` (range 3–10, default 5). See [`Docs/03_CAMPAIGN_GENERATOR_BRIEF.md`](../Docs/03_CAMPAIGN_GENERATOR_BRIEF.md) §6/§6.5 and [`Docs/09_SEED_FORMAT.md`](../Docs/09_SEED_FORMAT.md) for the contract.
 

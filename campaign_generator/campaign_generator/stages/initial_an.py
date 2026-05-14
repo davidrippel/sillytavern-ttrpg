@@ -1,6 +1,21 @@
 from __future__ import annotations
 
-from ..schemas import ClueGraph, InitialAuthorsNote, NodeGraph, PlotSkeleton
+from ..schemas import ClueGraph, InitialAuthorsNote, Node, NodeGraph, PlotSkeleton
+
+
+def find_act_one_start_node(plot: PlotSkeleton, node_graph: NodeGraph) -> Node | None:
+    """Return the node that opens act 1, or None if no such node exists.
+
+    The act-1 start node is identified by `act_number == act_one.act_number`
+    and `is_act_start == True`. Its `relevant_npcs` and `relevant_location`
+    drive the opening scene's PC prior-knowledge logic.
+    """
+    act_one = plot.acts[0]
+    act_one_number = act_one.act_number or 1
+    for node in node_graph.nodes:
+        if node.act_number == act_one_number and node.is_act_start:
+            return node
+    return None
 
 RESPONSE_LENGTH_BLOCK = "\n".join(
     [
@@ -42,12 +57,7 @@ def render_node_mode(plot: PlotSkeleton, node_graph: NodeGraph, clue_graph: Clue
     act_one = plot.acts[0]
     act_one_number = act_one.act_number or 1
 
-    # Find the act-1 start node.
-    start_node = None
-    for node in node_graph.nodes:
-        if node.act_number == act_one_number and node.is_act_start:
-            start_node = node
-            break
+    start_node = find_act_one_start_node(plot, node_graph)
 
     # Outbound clues from the start node.
     outbound_clues = []

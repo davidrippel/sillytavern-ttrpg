@@ -108,7 +108,7 @@ How many named NPCs to generate. Range 6–15 reasonable.
 How many locations to generate. Range 5–12 reasonable.
 
 **`num_sample_characters`** *(integer, default 5)*
-How many ready-to-play pregen characters to generate. Range 1–10. Each pregen is grounded in `protagonist_archetype` / `protagonist_known_facts` (when set) and may only hook into NPCs marked `known_at_start: true` for the protagonist.
+How many ready-to-play pregen characters to generate. Range 1–10. Each pregen is grounded in `protagonist_archetype` / `protagonist_known_facts` (when set) and may only hook into NPCs the protagonist already knows when play begins — see the `pc_known_npcs` stage in [`03_CAMPAIGN_GENERATOR_BRIEF.md`](03_CAMPAIGN_GENERATOR_BRIEF.md) §8.5 for how that set is derived from the act-1 start node and the LLM vet step.
 
 **`nodes_per_act`** *(integer, default 5, range 3–10)*
 How many nodes each act contains: one start, `nodes_per_act - 2` intermediate "points of interest", and one final. Adjacent acts share a transition node (act N's final = act N+1's start), so total distinct nodes for N acts = `nodes_per_act + (N-1) * (nodes_per_act - 1)`. With defaults (3 acts × 5 nodes): 13 distinct nodes. Smaller values produce tighter, more linear campaigns; larger values produce more parallel side investigations.

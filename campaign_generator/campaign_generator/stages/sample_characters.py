@@ -33,19 +33,18 @@ def run(
     model: str,
     temperature: float,
     validation_log: ValidationLog,
+    known_npc_names: set[str] | None = None,
 ) -> SampleCharacterSet:
     pack_attribute_keys = list(pack.attribute_keys)
     ability_names = sorted(pack.ability_names)
 
     count = seed.num_sample_characters or 5
 
-    known_npcs = [
-        n for n in npcs.npcs
-        if any(getattr(rel, "known_at_start", True) for rel in (n.relationships or []))
-    ]
+    known_set = set(known_npc_names or ())
+    known_npcs = [n for n in npcs.npcs if n.name in known_set]
     if not known_npcs:
         validation_log.write(
-            "[sample-characters] no NPCs marked known_at_start; falling back to full roster for hooks"
+            "[sample-characters] no vetted known NPCs; falling back to full roster for hooks"
         )
         known_npcs = list(npcs.npcs)
 

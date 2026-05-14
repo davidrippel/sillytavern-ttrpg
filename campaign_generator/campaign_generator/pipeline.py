@@ -21,6 +21,7 @@ from .schemas import (
     LocationCatalog,
     NodeGraph,
     NPCRoster,
+    PCKnownNPCs,
     PlotSkeleton,
     PremiseDocument,
     SampleCharacterSet,
@@ -37,6 +38,7 @@ from .stages import locations as locations_stage
 from .stages import node_generation as nodes_stage
 from .stages import npcs as npcs_stage
 from .stages import opening_hook as opening_hook_stage
+from .stages import pc_known_npcs as pc_known_npcs_stage
 from .stages import plot_skeleton as plot_stage
 from .stages import premise as premise_stage
 from .stages import sample_characters as sample_characters_stage
@@ -56,6 +58,7 @@ STAGE_ALIASES = {
     "clue_chains": "clue_chains",
     "clues": "clue_chains",
     "branches": "branches",
+    "pc_known_npcs": "pc_known_npcs",
     "sample_characters": "sample_characters",
     "samples": "sample_characters",
     "all": "all",
@@ -70,6 +73,7 @@ STAGE_MODELS: dict[str, type[BaseModel]] = {
     "nodes": NodeGraph,
     "clue_chains": ClueGraph,
     "branches": BranchPlan,
+    "pc_known_npcs": PCKnownNPCs,
     "sample_characters": SampleCharacterSet,
 }
 
@@ -528,6 +532,30 @@ def run_pipeline(
     branches = sanitize_model(branches, protagonist_names=protagonist_names)
     _write_json(_stage_cache_path(stages_dir, "branches"), branches.model_dump())
 
+    pc_known_npcs = _run_or_load_stage(
+        name="pc_known_npcs",
+        selected=selected,
+        stages_dir=stages_dir,
+        model_cls=PCKnownNPCs,
+        client=client,
+        progress_callback=progress_callback,
+        resume=resume,
+        runner=lambda: pc_known_npcs_stage.run(
+            client=client,
+            system_prompt=_load_prompt(pc_known_npcs_stage.PROMPT_FILE),
+            premise=premise,
+            plot=plot,
+            node_graph=node_graph,
+            npcs=npcs,
+            seed=loaded_seed.resolved,
+            model=resolved_model,
+            temperature=temperature,
+            validation_log=validation_log,
+        ),
+    )
+    known_npc_names = set(pc_known_npcs.known_names)
+    start_location_name = pc_known_npcs.start_location_name
+
     sample_characters: SampleCharacterSet | None = None
     sample_cache_path = _stage_cache_path(stages_dir, "sample_characters")
     if "sample_characters" in selected or sample_cache_path.exists():
@@ -552,6 +580,7 @@ def run_pipeline(
                 model=resolved_model,
                 temperature=temperature,
                 validation_log=validation_log,
+                known_npc_names=known_npc_names,
             ),
         )
         sample_payload = {
@@ -578,6 +607,8 @@ def run_pipeline(
         loaded_seed.resolved,
         npcs=npcs,
         locations=locations,
+        known_npc_names=known_npc_names,
+        start_location_name=start_location_name,
         client=client,
         system_prompt=_load_prompt(opening_hook_stage.PROMPT_FILE),
         prior_knowledge_system_prompt=_load_prompt(opening_hook_stage.PRIOR_KNOWLEDGE_PROMPT_FILE),

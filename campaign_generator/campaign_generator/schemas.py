@@ -131,9 +131,10 @@ class FactionSet(BaseModel):
 
 
 class NPCRelationship(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     name: str
     description: str = Field(max_length=160)
-    known_at_start: bool = True
 
 
 class NPC(BaseModel):
@@ -359,6 +360,22 @@ class InitialAuthorsNote(BaseModel):
             *(f"- {reminder}" for reminder in self.reminders),
         ]
         return "\n".join(sections)
+
+
+class PCKnownNPCs(BaseModel):
+    """Result of the PC prior-knowledge vetting stage.
+
+    `known_names` are NPCs the PC genuinely knew before the campaign began
+    (family, longtime ties, etc.). `introduced_now_names` are NPCs merely
+    co-present in the opening scene who the PC meets for the first time there.
+    Together they should partition the candidates drawn from the act-1 start
+    node's `relevant_npcs`.
+    """
+
+    known_names: list[str] = Field(default_factory=list)
+    introduced_now_names: list[str] = Field(default_factory=list)
+    start_location_name: str | None = None
+    start_node_id: str | None = None
 
 
 class StoryModeProfile(BaseModel):
