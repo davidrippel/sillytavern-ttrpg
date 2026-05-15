@@ -189,3 +189,18 @@ After generating a campaign, import `campaign_lorebook.json` into a fresh SillyT
 - The import succeeds without schema errors.
 - `__pack_gm_overlay`, `__pack_failure_moves`, and `__pack_reference` are present.
 - The player-facing files do not reveal antagonist secrets or late-act spoilers.
+
+### Prompt-size hygiene (recursion controls)
+
+Campaign data is heavily cross-referential — locations list NPCs, NPCs list relationships, clues reference nodes and locations. SillyTavern's default world-info scan depth is only **2 chat messages**, and the Author's Note sits outside that window, so the generator emits each entry category with a per-entry `scanDepth` (25 for entities and clues, 10 for nodes) to keep recent-but-not-latest mentions in scope. Without per-entry recursion suppression, the recursive keyword scanner would then cascade through the entire world on a single mention. The generator emits each entry category with targeted `excludeRecursion` / `preventRecursion` / `matchWholeWords` / `scanDepth` flags so that:
+
+- Clues fire only when their `found_at` is named explicitly and never pull further entries.
+- Nodes fire only on full-id matches (from the Author's Note's reachable/visited lists).
+- Locations and NPCs do not cascade into every entity their content mentions.
+- Non-current acts, branch contingencies, and sample characters never fire by cascade.
+
+Additionally, each location's `hidden_elements` is split into a disabled `Location Secret: <name>` companion (mirroring the NPC secret pattern); the GM enables it by setting `disable: false` when the secret should become discoverable. NPC `Relationships:` are rendered as compact `Name — tag` lines (first-clause trim of the full description).
+
+Clue entries are keyed on the clue's own ID (`clue_07`) rather than its `found_at` location. The extension lists currently-available clue IDs in the Author's Note's `Available clues` section, and SillyTavern's keyword scanner picks up those IDs from the AN. This keeps clue firing perfectly aligned with the small reachable set the extension already computes, with no dynamic enable/disable required.
+
+See [`Docs/03_CAMPAIGN_GENERATOR_BRIEF.md`](../Docs/03_CAMPAIGN_GENERATOR_BRIEF.md) §10 for the full per-category flag matrix.

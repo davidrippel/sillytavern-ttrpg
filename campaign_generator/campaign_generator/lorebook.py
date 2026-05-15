@@ -132,6 +132,24 @@ def _name_variants(name: str, *, type_hint: str | None = None) -> list[str]:
     return seen
 
 
+def _short_relationship_tag(description: str, *, max_len: int = 80) -> str:
+    """Trim a relationship sentence to its first clause for compact NPC entries.
+    The full prose is GM-eyes-only; the LLM only needs a short tag so it knows
+    *that* a relationship exists and its flavor."""
+    text = (description or "").strip()
+    if not text:
+        return ""
+    # First clause: cut at the first sentence terminator or semicolon.
+    for sep in (". ", "; ", " — ", ", "):
+        idx = text.find(sep)
+        if 0 < idx <= max_len:
+            text = text[:idx]
+            break
+    if len(text) > max_len:
+        text = text[: max_len - 1].rstrip() + "…"
+    return text.rstrip(".").strip()
+
+
 def _entry(
     uid: int,
     *,
@@ -143,6 +161,10 @@ def _entry(
     selective: bool | None = None,
     order: int = 100,
     disable: bool = False,
+    exclude_recursion: bool = False,
+    prevent_recursion: bool = False,
+    match_whole_words: bool | None = None,
+    scan_depth: int | None = None,
 ) -> dict[str, Any]:
     keys = keys or []
     if selective is None:
@@ -161,8 +183,8 @@ def _entry(
         "order": order,
         "position": 0,
         "disable": disable,
-        "excludeRecursion": False,
-        "preventRecursion": False,
+        "excludeRecursion": exclude_recursion,
+        "preventRecursion": prevent_recursion,
         "delayUntilRecursion": 0,
         "probability": 100,
         "useProbability": True,
@@ -170,9 +192,9 @@ def _entry(
         "group": "",
         "groupOverride": False,
         "groupWeight": 100,
-        "scanDepth": None,
+        "scanDepth": scan_depth,
         "caseSensitive": None,
-        "matchWholeWords": None,
+        "matchWholeWords": match_whole_words,
         "useGroupScoring": None,
         "automationId": "",
         "role": 0,
@@ -291,6 +313,8 @@ def assemble_lorebook(
                 keys=act_keys,
                 constant=is_first_act,
                 order=850 - act_index,
+                exclude_recursion=not is_first_act,
+                prevent_recursion=not is_first_act,
             )
         )
 
@@ -313,11 +337,17 @@ def assemble_lorebook(
                 content=content,
                 keys=_name_variants(faction.name),
                 order=500,
+                prevent_recursion=True,
+                match_whole_words=True,
+                scan_depth=25,
             )
         )
 
     for npc in npcs.npcs:
-        relationships = ", ".join(f"{rel.name} ({rel.description})" for rel in npc.relationships) or "none recorded"
+        relationships = "; ".join(
+            f"{rel.name} — {_short_relationship_tag(rel.description)}"
+            for rel in npc.relationships
+        ) or "none recorded"
         public_content = "\n".join(
             [
                 f"Name: {npc.name}",
@@ -338,6 +368,8 @@ def assemble_lorebook(
                 content=public_content,
                 keys=_name_variants(npc.name),
                 order=450,
+                prevent_recursion=True,
+                scan_depth=25,
             )
         )
 
@@ -376,7 +408,6 @@ def assemble_lorebook(
                     for sense, value in location.sensory_description.model_dump(exclude_none=True).items()
                 ),
                 "Notable features:\n" + "\n".join(f"- {item}" for item in location.notable_features),
-                "Hidden elements:\n" + "\n".join(f"- {item}" for item in location.hidden_elements),
                 f"NPCs present: {', '.join(location.npc_names) if location.npc_names else 'varies'}",
             ]
         )
@@ -388,8 +419,36 @@ def assemble_lorebook(
                 content=content,
                 keys=_name_variants(location.name, type_hint=location.type),
                 order=350,
+                prevent_recursion=True,
+                scan_depth=25,
             )
         )
+
+        hidden = [item for item in location.hidden_elements if str(item).strip()]
+        if hidden:
+            secret_content = "\n".join(
+                [
+                    f"Hidden elements — {location.name}",
+                    "(GM-only. Reveal only when the player has earned the discovery. Enable this entry by setting disable=false when the secret should become active.)",
+                    "",
+                    *(f"- {item}" for item in hidden),
+                ]
+            )
+            uid += 1
+            add(
+                _entry(
+                    uid,
+                    comment=f"Location Secret: {location.name}",
+                    content=secret_content,
+                    keys=[],
+                    selective=False,
+                    constant=False,
+                    order=340,
+                    disable=True,
+                    exclude_recursion=True,
+                    prevent_recursion=True,
+                )
+            )
 
     if node_graph is not None:
         # Derive per-node entry/exit clue lists from the clue graph.
@@ -433,6 +492,9 @@ def assemble_lorebook(
                     content=content,
                     keys=[node.id],
                     order=320,
+                    exclude_recursion=True,
+                    match_whole_words=True,
+                    scan_depth=10,
                 )
             )
 
@@ -453,8 +515,12 @@ def assemble_lorebook(
                 uid,
                 comment=f"Clue: {clue.id}",
                 content=content,
-                keys=[clue.found_at] if clue.found_at else [clue.id],
+                keys=[clue.id],
                 order=300,
+                exclude_recursion=True,
+                prevent_recursion=True,
+                match_whole_words=True,
+                scan_depth=10,
             )
         )
 
@@ -474,6 +540,7 @@ def assemble_lorebook(
             content=branch_content,
             keys=branch_keys,
             order=700,
+            prevent_recursion=True,
         )
     )
 
@@ -495,6 +562,9 @@ def assemble_lorebook(
                 content=sample_content,
                 keys=["sample characters", "pregens", "make a character", "character creation"],
                 order=750,
+                exclude_recursion=True,
+                prevent_recursion=True,
+                match_whole_words=True,
             )
         )
 

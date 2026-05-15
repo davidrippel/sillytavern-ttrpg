@@ -444,6 +444,28 @@ Generate these entry types:
 
 A small stop-list of articles, prepositions, and generic nouns (`the, a, an, of, and, or, tavern, church, temple, shrine, guild, house, family, order, company, ...`) plus a 3-character minimum filters out useless single-token aliases.
 
+**Per-entry `scanDepth` (the global default is too tight).** SillyTavern's global `world_info_depth` defaults to **2** — only the last 2 chat messages are scanned for keywords. The Author's Note is injected at chat depth `note_depth` (default 4) and therefore sits *outside* that window unless the entry overrides scan depth itself. Without `scanDepth`, keyword-triggered entries silently fail to fire even when their key obviously appears in recent chat or the AN. Set per category:
+
+- **NPCs, Locations, Factions, Clues, Sample Characters, Branch Contingencies**: `scanDepth: 25` — generous chat window so recurring mentions of a character/place keep their entry in scope across a multi-turn scene.
+- **Nodes**: `scanDepth: 10` — node IDs realistically appear only in the AN's Reachable/Recently-visited lists, so just enough depth to include the AN.
+
+**Recursion controls (cascade containment).** Without per-entry recursion flags, SillyTavern recursively scans every fired entry's content for further keyword matches — a Location entry that lists "NPCs present: A, B, C" pulls all three NPCs, each NPC's `Relationships:` line pulls every other named NPC, and the Campaign Bible's premise drags the entire cast into context after a single mention. The default `excludeRecursion: false` / `preventRecursion: false` therefore causes a full-world cascade in any campaign with a moderately connected cast. The generator must set, per category:
+
+- **Clues**: `excludeRecursion: true`, `preventRecursion: true`, `matchWholeWords: true`. A clue should only fire when its `found_at` is named in the chat or Author's Note, never via recursion, and its own text should not pull further entries.
+- **Nodes**: `excludeRecursion: true`, `matchWholeWords: true`. Nodes fire only when their full id is explicitly referenced (typically by the Author's Note's reachable/visited lists).
+- **Locations**: `preventRecursion: true`. The location's `NPCs present:` line should not summon every listed NPC. Substring matching stays on so partial phrases ("the bar") still trigger.
+- **NPCs**: `preventRecursion: true`. Mentioning another character in `Relationships:` should not chain to that character's full entry. Substring matching stays on.
+- **Factions**: `preventRecursion: true`, `matchWholeWords: true`.
+- **Non-current Acts, Branch Contingencies, Sample Characters**: `excludeRecursion: true` and `preventRecursion: true` (sample characters and branches further set `matchWholeWords: true`) — these should only fire on explicit triggers, never by cascade.
+
+The pack-derived constant entries and the Campaign Bible / Current Act remain fully scannable (the cascade *into* them is fine; what we suppress is the cascade *from* connected campaign data).
+
+**Location secrets** mirror the NPC secret pattern: `hidden_elements` are split into a companion `Location Secret: <name>` entry with `disable: true`, `key: []`, `selective: false`, `excludeRecursion: true`, `preventRecursion: true`. The GM enables it by setting `disable: false` when the secret should become discoverable.
+
+**Clue keying — clue ID, not `found_at`.** Clue entries are keyed on the clue's own ID (`clue_07`), with `scanDepth: 10` (just enough to cover the AN). Earlier iterations keyed clues on their `found_at` location/NPC string so a mention of the place would surface its clues; in a connected campaign that fires every clue at every in-scope location/NPC, including clues at not-yet-reachable nodes whose places are merely *named* in the AN's "Reachable nodes" prose. The runtime extension already curates the small set of currently-available clues into the AN's `Available clues` section as `- clue_07 — hint`; SillyTavern's keyword scanner picks up those IDs and fires only the matching entries. No dynamic enable/disable is needed.
+
+**Relationship compaction.** The public NPC entry's `Relationships:` line is rendered as `Name — short-tag` rather than `Name (full-sentence description)`; the helper `_short_relationship_tag` trims each description to its first clause (capped ~80 chars). The verbose prose is GM-eyes-only and is intentionally not preserved in the prompt — the LLM only needs the tag for portrayal.
+
 Output the final structure as a valid SillyTavern World Info JSON file. The schema moves — verify against live SillyTavern docs during development.
 
 The `__pack_*` naming convention is a hard requirement: the extension uses this prefix to identify pack-derived entries (for the compatibility check, and to distinguish them from campaign content in any hygiene dashboards).

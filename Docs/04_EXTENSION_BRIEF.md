@@ -275,6 +275,8 @@ The AN has structured sections. The extension parses and writes each independent
 - On-screen NPCs (NPCs whose `last_seen_turn` is within 8 turns of the current chat length, with attitude and last action)
 - Discovered clues
 - Available clues — **simple filter**: undiscovered clues whose `found_at_node` matches the current node. No graph walk, no chain logic, no ranking. Each entry renders as `- ID — hint`. On turn 1 (no visits yet) the act-1 start node is treated as the current node.
+
+  Listing each clue's `ID` here doubles as the firing trigger for its lorebook entry: clue entries are keyed on the clue's own ID (e.g. `clue_07`), so SillyTavern's keyword scanner picks up exactly the IDs written into the AN. No enable/disable toggling required — the AN content *is* the curation.
 - Active threads
 - Recent scenes
 - Reminders

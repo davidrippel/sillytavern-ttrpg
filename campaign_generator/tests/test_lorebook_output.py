@@ -267,3 +267,16 @@ def test_node_mode_lorebook_emission():
     # Victory node is present and flagged.
     victory_entries = [e for e in node_entries if "Victory: true" in e["content"]]
     assert len(victory_entries) == 1
+
+    # Clue entries are keyed on the clue ID itself (not the found_at location)
+    # so they fire only when the AN explicitly lists the clue ID. This avoids
+    # firing every clue that happens to share an in-scope location.
+    clue_entries = [e for e in entry_list if e["comment"].startswith("Clue:")]
+    assert clue_entries
+    for entry in clue_entries:
+        clue_id = entry["comment"].split(": ", 1)[1].strip()
+        assert entry["key"] == [clue_id], (
+            f"clue {entry['comment']!r} must be keyed on its own id "
+            f"(got {entry['key']!r}); keying on found_at causes mass over-firing"
+        )
+        assert entry["disable"] is False
