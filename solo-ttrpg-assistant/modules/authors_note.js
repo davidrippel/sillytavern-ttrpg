@@ -323,14 +323,17 @@ async function renderNodeModeAuthorsNote(state, { preserveSummaries }) {
         sections['Current node'] = '(none)';
     }
 
-    const reachableForRender = reachableNodes(nodes, clues, state, { maxResults: 12 })
-        .filter((n) => n.id !== currentId);
-    sections['Reachable nodes'] = reachableForRender.length
-        ? reachableForRender.map((n) => {
-            const desc = n.description ? ` — ${truncate(n.description, 80)}` : '';
-            return `- ${n.id}${desc}`;
-        }).join('\n')
-        : '(none)';
+    const reachableRaw = reachableNodes(nodes, clues, state, { maxResults: 12 });
+    const reachableForRender = reachableRaw.filter((n) => n.id !== currentId);
+    const undiscoveredCount = reachableRaw.undiscoveredCount ?? 0;
+    const reachableLines = reachableForRender.map((n) => {
+        const desc = n.description ? ` — ${truncate(n.description, 80)}` : '';
+        return `- ${n.id}${desc}`;
+    });
+    if (undiscoveredCount > 0) {
+        reachableLines.push(`- (${undiscoveredCount} undiscovered path${undiscoveredCount === 1 ? '' : 's'} from here — surface clue opportunities, do not name targets)`);
+    }
+    sections['Reachable nodes'] = reachableLines.length ? reachableLines.join('\n') : '(none)';
 
     const visited = state.visitedNodes ?? [];
     const recent = visited.slice(-3);

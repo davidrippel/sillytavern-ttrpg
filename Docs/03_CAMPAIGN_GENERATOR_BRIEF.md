@@ -352,7 +352,7 @@ ahead than Next beat.
 
 **Node-mode** sections (the only supported mode):
 - Current Act: `Act 1: [title]`
-- Reachable nodes: bullet list of the **targets of the start node's outbound clues** (the act-1 start node is implicitly visited on turn 1). At runtime this re-computes as the player moves between nodes and discovers more clues.
+- Reachable nodes: empty at start — no clues have been discovered yet. A single line `- (N undiscovered paths from here — surface clue opportunities, do not name targets)` tells the GM how many latent paths the start node has, without naming the targets. At runtime this re-computes as the player discovers clues; only discovered-clue targets are listed, with the latent count appended for undiscovered outbound clues at the current node.
 - Recently visited: `(none)` at start
 - On-screen NPCs: `(none)` at start; populated at runtime as NPCs appear in scenes
 - Discovered clues: `(none)` at start

@@ -270,7 +270,7 @@ The AN has structured sections. The extension parses and writes each independent
 **Node-mode sections** (the only supported mode — node-based design with each clue as a directed edge between two nodes):
 - Current Act (header only — premise and stakes only, no scene sequence)
 - Current node (the node the player is effectively "at": last visited, or the act-1 start node when nothing has been visited yet). Renders as `- ID — description`.
-- Reachable nodes (computed from clues: targets of clues the player has discovered, plus targets of the **current node's outbound clues** as a forward-looking menu). Each entry renders as `- ID — description`. The current node is excluded from this list (it has its own section). The "current node" resolution uses the same fallback as Available clues: last visited, else the act-1 start node. The list is a *menu* the player picks from by acting, not a queue.
+- Reachable nodes (targets of clues the player has **already discovered**). Each entry renders as `- ID — description`. The current node is excluded from this list (it has its own section). The "current node" resolution uses the same fallback as Available clues: last visited, else the act-1 start node. The list is a *menu* the player picks from by acting, not a queue. Targets of the current node's *undiscovered* outbound clues are hidden, but their count is appended as `- (N undiscovered paths from here — surface clue opportunities, do not name targets)` so the LLM knows latent paths exist without learning where they lead.
 - Recently visited (last 3 visited node IDs)
 - On-screen NPCs (NPCs whose `last_seen_turn` is within 8 turns of the current chat length, with attitude and last action)
 - Discovered clues

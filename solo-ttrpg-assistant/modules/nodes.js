@@ -98,41 +98,47 @@ export function effectiveCurrentNodeId(nodes, state) {
 }
 
 /**
- * Reachable nodes from the current state. A node is reachable if:
- *   - it's the target of a clue currently emitted from the current node, OR
- *   - it's the target of any clue the player has already discovered.
- * The act-1 start node is included by default at the very beginning of play
- * (when nothing has been visited yet).
+ * Reachable nodes from the current state. A node is reachable only if it's
+ * the target of a clue the player has already discovered. Undiscovered clues
+ * emitted from the current node count as latent paths and are reported via
+ * `undiscoveredCount` so the LLM knows more exists without learning the targets.
  */
-export function reachableNodes(nodes, clues, state, { maxResults = 8 } = {}) {
+export function reachableNodes(nodes, clues, state, { maxResults = 8, includeLatent = false } = {}) {
     const completed = new Set(state?.completedNodes ?? []);
     const visited = new Set(state?.visitedNodes ?? []);
     const discovered = new Set(state?.discoveredClues ?? []);
     const currentId = effectiveCurrentNodeId(nodes, state);
 
     const reachableIds = new Set();
+    const latentTargets = new Set();
     for (const clue of clues) {
-        if (clue.foundAtNode === currentId && clue.pointsToNode) {
+        if (!clue.pointsToNode) continue;
+        if (discovered.has(clue.id)) {
             reachableIds.add(clue.pointsToNode);
-        }
-        if (discovered.has(clue.id) && clue.pointsToNode) {
-            reachableIds.add(clue.pointsToNode);
+        } else if (clue.foundAtNode === currentId) {
+            if (includeLatent) reachableIds.add(clue.pointsToNode);
+            else latentTargets.add(clue.pointsToNode);
         }
     }
 
-    const result = [];
+    const nodes_ = [];
     for (const node of nodes) {
         if (completed.has(node.id)) continue;
         if (!reachableIds.has(node.id)) continue;
         const gatesUnmet = (node.gating ?? []).some((reqId) => !visited.has(reqId) && !completed.has(reqId));
         if (gatesUnmet) continue;
-        result.push({
+        nodes_.push({
             id: node.id,
             kind: node.kind,
             description: node.description,
             visited: visited.has(node.id),
         });
-        if (result.length >= maxResults) break;
+        if (nodes_.length >= maxResults) break;
     }
-    return result;
+
+    for (const id of reachableIds) latentTargets.delete(id);
+    const undiscoveredCount = latentTargets.size;
+
+    nodes_.undiscoveredCount = undiscoveredCount;
+    return nodes_;
 }

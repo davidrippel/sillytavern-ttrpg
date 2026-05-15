@@ -52,10 +52,12 @@ def render_node_mode(plot: PlotSkeleton, node_graph: NodeGraph, clue_graph: Clue
     """Render the initial Author's Note for a node-mode campaign.
 
     Seeds `Available clues` with the start node's outbound clues (so the GM
-    can drop them on turn 1) and `Reachable nodes` with their targets.
+    can drop them on turn 1). Reachable nodes is empty at turn 1 because no
+    clues are discovered yet; the count of latent (undiscovered) paths is
+    surfaced so the GM knows how many directions to foreshadow without
+    naming the targets.
     """
     act_one = plot.acts[0]
-    act_one_number = act_one.act_number or 1
 
     start_node = find_act_one_start_node(plot, node_graph)
 
@@ -66,23 +68,14 @@ def render_node_mode(plot: PlotSkeleton, node_graph: NodeGraph, clue_graph: Clue
             if clue.found_at_node == start_node.id:
                 outbound_clues.append(clue)
 
-    if outbound_clues:
-        available_lines = [f"- {clue.id} — {clue.hint or clue.reveals[:80]}" for clue in outbound_clues]
-        target_ids = []
-        node_by_id = {n.id: n for n in node_graph.nodes}
-        for clue in outbound_clues:
-            if clue.points_to_node not in target_ids:
-                target_ids.append(clue.points_to_node)
-        reachable_lines = []
-        for nid in target_ids:
-            node = node_by_id.get(nid)
-            if node is not None:
-                reachable_lines.append(f"- {node.id}: {node.description[:80]}")
-    else:
-        # Fall back to listing act-1 non-victory nodes if no clues yet.
-        act_one_nodes = [n for n in node_graph.nodes if n.act_number == act_one_number and not n.is_victory]
-        reachable_lines = [f"- {n.id}: {n.description[:80]}" for n in act_one_nodes[:8]]
-        available_lines = []
+    available_lines = [f"- {clue.id} — {clue.hint or clue.reveals[:80]}" for clue in outbound_clues]
+    latent_targets = {clue.points_to_node for clue in outbound_clues if clue.points_to_node}
+    reachable_lines = []
+    if latent_targets:
+        n = len(latent_targets)
+        reachable_lines.append(
+            f"- ({n} undiscovered path{'' if n == 1 else 's'} from here — surface clue opportunities, do not name targets)"
+        )
 
     threads = [plot.hook, plot.driving_mystery, act_one.goal]
     sections = [

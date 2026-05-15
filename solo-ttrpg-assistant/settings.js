@@ -1159,7 +1159,7 @@ export async function mountSettingsPanel() {
     async function openNodePickerPopup() {
         const [nodes, clues] = await Promise.all([loadAllNodes(), loadAllClues()]);
         const state = ensureStoryStateShape(readStoryState());
-        const reachable = reachableNodes(nodes, clues, state, { maxResults: 50 });
+        const reachable = reachableNodes(nodes, clues, state, { maxResults: 50, includeLatent: true });
 
         const wrapper = document.createElement('div');
         wrapper.style.minWidth = '280px';
