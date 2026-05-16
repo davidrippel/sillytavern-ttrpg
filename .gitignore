@@ -29,5 +29,6 @@ pack_generator/.venv/
 campaigns/
 genres/
 
-# Opens file
+# Draft file
 opens.txt
+inputs.txt
