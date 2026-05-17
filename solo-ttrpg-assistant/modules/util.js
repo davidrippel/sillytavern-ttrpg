@@ -23,6 +23,7 @@ export function getSettings() {
     target.authorsNote ??= structuredClone(DEFAULT_SETTINGS.authorsNote);
     target.statusUpdate ??= structuredClone(DEFAULT_SETTINGS.statusUpdate);
     target.canonDetection ??= structuredClone(DEFAULT_SETTINGS.canonDetection);
+    target.analyzer ??= structuredClone(DEFAULT_SETTINGS.analyzer);
     target.characters ??= {};
     if (!('activeCharacterId' in target)) {
         target.activeCharacterId = null;

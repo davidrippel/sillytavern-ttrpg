@@ -285,13 +285,14 @@ The AN has structured sections. The extension parses and writes each independent
 
 - **GM closure tags** — on every assistant message, the extension parses tags, strips them from display, and advances `solo_ttrpg_story_state` in `chatMetadata`. The Author's Note is regenerated from state + lorebook on every change. No user click required. Tags from the wrong-mode vocabulary are logged and ignored (e.g. `<<beat:>>` in node-mode is a no-op, not an error). The full vocabulary by mode:
   - Beat-mode: `<<beat:LABEL:resolved>>`, `<<act:N:complete>>`, `<<clue:found:ID>>`.
-  - Node-mode: `<<node:ID:visited>>`, `<<node:ID:complete>>`, `<<npc:ID:state:KEY=VALUE,KEY=VALUE>>`, `<<clue:found:ID>>`.
+  - Node-mode: `<<npc:ID:state:KEY=VALUE,KEY=VALUE>>` is the only GM-emitted tag. Node and clue tags emitted by the GM are silently dropped — the scene analyzer (below) is authoritative for both.
+- **Scene analyzer** (node-mode) — after each assistant message, a separate `generateRaw` call classifies the prose against the Reachable nodes and Available clues from current state. It returns JSON: `{ clues_found: [{id, evidence}], node_visited, node_completed, notes }`. The extension validates that each clue's `evidence` substring appears in the prose (fingerprint test), drops unknown ids, caps clues per turn, then feeds the surviving decisions through the same `applyClueFound` / `applyNodeVisited` / `applyNodeComplete` functions as legacy tags. Toggle: `analyzer.enabled` (default `true`). Manual re-run: "Run analysis on last message" button in **Automation → Scene analyzer**.
 - **Beat advancement** (beat-mode) — on `<<beat:LABEL:resolved>>` the extension marks the labeled beat (and any earlier unresolved beats) as resolved and promotes Next beat to Current beat. Resolving the last beat of an act auto-advances to act N+1 by rewriting the `Current Act` lorebook entry from the next-act entry already shipped in the campaign lorebook.
-- **Node visiting & NPC state** (node-mode) — `<<node:ID:visited>>` appends to `state.visitedNodes` (capped, deduped); `<<node:ID:complete>>` appends to `state.completedNodes` and removes the node from Reachable. `<<npc:ID:state:KEY=VALUE,...>>` merges into `state.npcs[ID]` and bumps `last_seen_turn`. Each tag pushes a single `_lastStateChange` undo record.
+- **Node visiting & NPC state** (node-mode) — analyzer-decided `node_visited` appends to `state.visitedNodes` (capped, deduped); `node_completed` appends to `state.completedNodes` and removes the node from Reachable. GM-emitted `<<npc:ID:state:KEY=VALUE,...>>` merges into `state.npcs[ID]` and bumps `last_seen_turn`. Each state change pushes a single `_lastStateChange` undo record.
 - **Silent summary refresh** — Recent beats / scenes / Active threads / Reminders are regenerated silently every N assistant messages (configurable, default 3). No popup, no diff. The user can inspect the result via SillyTavern's native Author's Note editor.
 - **"Move plot forward" button** — repurposes by mode:
   - Beat-mode: manual immersion-safe nudge. Marks the Current beat resolved exactly as a `<<beat:current:resolved>>` tag would. No spoiler text, no popup. Used when fiction stalls.
-  - Node-mode: opens a popup listing currently Reachable nodes; selecting one writes the equivalent of `<<node:ID:visited>>`. This is a *correction* tool for when the GM forgot to emit the tag — not a progression tool. In node-mode, player progression comes from clue discovery and NPC agendas, not button clicks.
+  - Node-mode: opens a popup listing currently Reachable nodes; selecting one marks the node visited (same code path the scene analyzer uses). This is a *correction* tool for when the analyzer missed a transition — not a progression tool. In node-mode, player progression comes from clue discovery and NPC agendas, not button clicks.
 - **"Move plot back" button** — also mode-aware:
   - Beat-mode: undoes the last beat advance / act advance / drained pending reveal.
   - Node-mode: pops the most recent `_lastStateChange` (visit / complete / clue / npc state) and inverts it.
@@ -418,7 +419,7 @@ Manual test checklist in `TESTING.md`:
 - `/backup-import` into a fresh chat, verify state matches and compatibility check fires if pack is not loaded
 - Send a GM message with a STATUS_UPDATE block, verify parse + modal; verify the field whitelist from `resources.yaml` is enforced
 - Send a GM message with a new NPC, verify canon detection proposal
-- Send GM messages containing closure tags, verify state advances and tags are stripped from display (test both modes — beat-mode `<<beat:LABEL:resolved>>` and node-mode `<<node:ID:visited>>` / `<<npc:ID:state:K=V>>`)
+- Send GM messages containing closure tags, verify state advances and tags are stripped from display. Beat-mode: `<<beat:LABEL:resolved>>`. Node-mode: `<<npc:ID:state:K=V>>` advances NPC state; any GM-emitted `<<node:...>>` / `<<clue:...>>` are silently dropped. Confirm the scene analyzer fires after each assistant turn (settings → Log) and that its decisions update Discovered clues / Current node correctly.
 - In beat-mode, click "Move plot forward", verify Current beat advances to Next beat and AN re-renders. In node-mode, verify the same button opens a Reachable-nodes picker and selecting one updates `visitedNodes`.
 - Stress-test with 200+ message chat, check performance
 

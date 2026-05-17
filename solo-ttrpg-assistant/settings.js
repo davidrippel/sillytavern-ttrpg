@@ -1232,6 +1232,61 @@ export async function mountSettingsPanel() {
     }
     $(settingsRoot).find('#solo-reset-campaign, #solo-play-reset-campaign').on('click', handleResetCampaign);
 
+    const $analyzerEnabled = $(settingsRoot).find('#solo-analyzer-enabled');
+    $analyzerEnabled.prop('checked', getSettings().analyzer?.enabled !== false);
+    $analyzerEnabled.on('change', function () {
+        const settings = getSettings();
+        settings.analyzer ??= { enabled: true };
+        settings.analyzer.enabled = !!this.checked;
+        saveSettings();
+        toastr.info(settings.analyzer.enabled ? 'Scene analyzer enabled.' : 'Scene analyzer disabled.', 'Solo TTRPG Assistant', { timeOut: 2000 });
+    });
+
+    async function handleAnalyzerRun() {
+        const $btn = $(settingsRoot).find('#solo-analyzer-run');
+        try {
+            if (!(await isCampaignNodeMode())) {
+                toastr.warning('Scene analyzer only runs in node-mode campaigns.', 'Solo TTRPG Assistant', { timeOut: 2500 });
+                return;
+            }
+            const chat = context.chat;
+            if (!Array.isArray(chat) || chat.length === 0) {
+                toastr.warning('No messages in chat yet.', 'Solo TTRPG Assistant', { timeOut: 2000 });
+                return;
+            }
+            let assistantMsg = null;
+            let userMsg = null;
+            for (let i = chat.length - 1; i >= 0; i--) {
+                const m = chat[i];
+                if (!m) continue;
+                if (!assistantMsg && !m.is_user) { assistantMsg = m; continue; }
+                if (assistantMsg && m.is_user) { userMsg = m; break; }
+            }
+            if (!assistantMsg) {
+                toastr.warning('No assistant message found to analyze.', 'Solo TTRPG Assistant', { timeOut: 2000 });
+                return;
+            }
+            setBusy($btn, 'Analyzing…');
+            const { runAnalyzerAndApply } = await import('./modules/scene_analyzer.js');
+            const result = await runAnalyzerAndApply({
+                messageText: String(assistantMsg.mes ?? ''),
+                userTurnText: String(userMsg?.mes ?? ''),
+            });
+            const summary = [
+                result.clueIds.length ? `clues=[${result.clueIds.join(', ')}]` : null,
+                result.nodeVisitedId ? `visited=${result.nodeVisitedId}` : null,
+                result.nodeCompletedId ? `completed=${result.nodeCompletedId}` : null,
+            ].filter(Boolean).join(' · ') || 'no changes';
+            toastr.info(`Analyzer: ${summary}`, 'Solo TTRPG Assistant', { timeOut: 4000 });
+            await refreshStoryStatusRow();
+        } catch (error) {
+            toastr.error(error.message);
+        } finally {
+            clearBusy($btn);
+        }
+    }
+    $(settingsRoot).find('#solo-analyzer-run').on('click', handleAnalyzerRun);
+
     async function refreshStoryStatusRow() {
         let text = '';
         if (await isCampaignNodeMode()) {

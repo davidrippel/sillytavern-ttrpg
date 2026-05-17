@@ -217,7 +217,7 @@ function applyNpcState(npcId, kvString, state, turnCount) {
     return { state: next, changed: true };
 }
 
-export async function applyTagsToState(tags, { turnCount = 0 } = {}) {
+export async function applyTagsToState(tags, { turnCount = 0, fromAnalyzer = false } = {}) {
     const nodeMode = await isCampaignNodeMode();
 
     let state = ensureStoryStateShape(readStoryState());
@@ -241,9 +241,17 @@ export async function applyTagsToState(tags, { turnCount = 0 } = {}) {
                 continue;
             }
             if (tag.kind === 'node' && tag.value === 'visited') {
+                if (!fromAnalyzer) {
+                    log(`node tag ${tag.raw} ignored — scene analyzer is authoritative in node-mode.`, 'info');
+                    continue;
+                }
                 const result = await applyNodeVisited(tag.key, state);
                 if (result.changed) { state = result.state; anyChanged = true; }
             } else if (tag.kind === 'node' && tag.value === 'complete') {
+                if (!fromAnalyzer) {
+                    log(`node tag ${tag.raw} ignored — scene analyzer is authoritative in node-mode.`, 'info');
+                    continue;
+                }
                 const result = await applyNodeComplete(tag.key, state);
                 if (result.changed) { state = result.state; anyChanged = true; }
             } else if (tag.kind === 'npc') {
@@ -258,6 +266,10 @@ export async function applyTagsToState(tags, { turnCount = 0 } = {}) {
                     log(`npc tag ${tag.raw} ignored — unrecognized form.`, 'warn');
                 }
             } else if (tag.kind === 'clue' && tag.key === 'found') {
+                if (!fromAnalyzer) {
+                    log(`clue tag ${tag.raw} ignored — scene analyzer is authoritative in node-mode.`, 'info');
+                    continue;
+                }
                 const result = await applyClueFound(tag.value, state);
                 if (result.changed) { state = result.state; anyChanged = true; }
             }
@@ -507,32 +519,67 @@ export async function moveBeatForwardManually() {
 export async function handleAssistantMessage(message) {
     if (!message || message.is_user) return;
     const text = String(message.mes ?? '');
-    if (!text.includes('<<')) return;
 
+    const nodeMode = await isCampaignNodeMode();
+
+    // Always parse and strip any GM-emitted tags so they don't leak into render.
     const tags = parseClosureTags(text);
-    if (tags.length === 0) return;
-
-    const stripped = stripClosureTags(text, tags);
-    if (stripped !== text) {
-        message.mes = stripped;
+    if (tags.length > 0) {
+        const stripped = stripClosureTags(text, tags);
+        if (stripped !== text) {
+            message.mes = stripped;
+        }
     }
 
     let turnCount = 0;
+    let priorUserText = '';
     try {
         const ctx = (await import('./util.js')).getContext();
-        turnCount = Array.isArray(ctx?.chat) ? ctx.chat.length : 0;
+        if (Array.isArray(ctx?.chat)) {
+            turnCount = ctx.chat.length;
+            // Walk backwards from the just-rendered assistant message to find
+            // the most recent user message — that's the input the GM was
+            // responding to.
+            for (let i = ctx.chat.length - 1; i >= 0; i--) {
+                const m = ctx.chat[i];
+                if (!m) continue;
+                if (m === message) continue;
+                if (m.is_user) { priorUserText = String(m.mes ?? ''); break; }
+            }
+        }
     } catch { /* turnCount stays 0 — only used for npc:state, which still works */ }
 
+    // Beat-mode: existing tag-driven flow.
+    if (!nodeMode) {
+        if (tags.length === 0) return;
+        try {
+            const result = await applyTagsToState(tags, { turnCount });
+            if (result.changed) {
+                const s = result.state;
+                const summary = `currentBeat=${s.currentBeatLabel}, nextBeat=${s.nextBeatLabel}, clues=${s.discoveredClues?.length ?? 0}`;
+                log(`Closure tags applied: ${summary}`, 'info');
+            }
+        } catch (error) {
+            log('Closure-tag handler failed.', 'warn', error.message);
+        }
+        return;
+    }
+
+    // Node-mode: NPC tags still come from the GM; node/clue state changes go
+    // through the scene analyzer.
     try {
-        const result = await applyTagsToState(tags, { turnCount });
-        if (result.changed) {
-            const s = result.state;
-            const summary = (s.visitedNodes?.length || s.completedNodes?.length || Object.keys(s.npcs ?? {}).length)
-                ? `nodes=${s.visitedNodes?.length ?? 0}/${s.completedNodes?.length ?? 0}, npcs=${Object.keys(s.npcs ?? {}).length}, clues=${s.discoveredClues?.length ?? 0}`
-                : `currentBeat=${s.currentBeatLabel}, nextBeat=${s.nextBeatLabel}`;
-            log(`Closure tags applied: ${summary}`, 'info');
+        if (tags.length > 0) {
+            // Dispatches npc:state tags; node/clue tags are silently ignored.
+            await applyTagsToState(tags, { turnCount });
         }
     } catch (error) {
         log('Closure-tag handler failed.', 'warn', error.message);
+    }
+
+    try {
+        const { runAnalyzerAndApply } = await import('./scene_analyzer.js');
+        await runAnalyzerAndApply({ messageText: message.mes ?? text, userTurnText: priorUserText });
+    } catch (error) {
+        log('Scene analyzer dispatch failed.', 'warn', error.message);
     }
 }

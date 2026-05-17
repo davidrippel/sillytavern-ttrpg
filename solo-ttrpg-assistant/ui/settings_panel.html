@@ -178,6 +178,20 @@
 
                             <section class="solo-section solo-stack">
                                 <div class="solo-row spread">
+                                    <h4>Scene analyzer (node-mode)</h4>
+                                </div>
+                                <p class="solo-muted">A silent LLM call runs after each GM response to detect which clues were revealed and which node was reached. When disabled, node-mode state stops advancing automatically.</p>
+                                <label class="solo-row solo-row-start">
+                                    <input id="solo-analyzer-enabled" type="checkbox" class="solo-requires-enabled" />
+                                    <span>Run analyzer automatically on each assistant message</span>
+                                </label>
+                                <div class="solo-actions">
+                                    <button id="solo-analyzer-run" class="menu_button solo-requires-enabled" type="button" title="Re-run the analyzer against the most recent assistant message. Useful when a turn's bookkeeping was dropped.">Run analysis on last message</button>
+                                </div>
+                            </section>
+
+                            <section class="solo-section solo-stack">
+                                <div class="solo-row spread">
                                     <h4>Backup</h4>
                                 </div>
                                 <div class="solo-actions">

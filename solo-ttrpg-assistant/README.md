@@ -14,7 +14,8 @@ SillyTavern extension for solo narrative campaigns with pack-aware character she
   - `STATUS_UPDATE` block parsing with confirmation/edit flow
   - GM closure-tag parsing — auto-advances story state and rewrites the Author's Note. Tag vocabulary depends on the campaign mode (auto-detected from the lorebook):
     - Beat-mode: `<<beat:LABEL:resolved>>`, `<<act:N:complete>>`, `<<clue:found:ID>>`
-    - Node-mode (Alexandrian node-based design): `<<node:ID:visited>>`, `<<node:ID:complete>>`, `<<npc:ID:state:KEY=VALUE,...>>`, `<<clue:found:ID>>`
+    - Node-mode (Alexandrian node-based design): `<<npc:ID:state:KEY=VALUE,...>>` is the only GM-emitted tag. Node transitions and clue reveals are detected by a **silent post-response scene analyzer** (see below) instead of GM-emitted tags.
+  - Scene analyzer (node-mode) — after each GM response, a separate LLM call classifies the prose against the lorebook to decide which Reachable node was entered/completed and which Available clue was revealed (matching the clue's authored `reveals` text). Toggle and a "Run analysis on last message" button live in **Automation → Scene analyzer**.
   - Silent debounced summary refresh (Recent beats / scenes, Active threads, Reminders)
   - "Move plot forward" / "Move plot back" buttons — mode-aware. Beat-mode: nudge Current beat forward / undo last advance. Node-mode: open a Reachable-nodes picker / undo the last state change. In node-mode the buttons are correction tools; player progression comes from clue discovery and NPC agendas.
 

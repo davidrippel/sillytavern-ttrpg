@@ -76,6 +76,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
     canonDetection: {
         enabled: false,
     },
+    analyzer: {
+        enabled: true,
+    },
 });
 
 export function getExtensionPath() {

@@ -361,7 +361,7 @@ ahead than Next beat.
 - Recent scenes: `(empty at start)`
 - Reminders: anything the GM must not forget from the opening situation
 
-In node-mode the extension does NOT advance a destination — Reachable nodes is a *menu* the player picks from by acting on clues, asking NPCs, going somewhere. Closure tags `<<node:ID:visited>>`, `<<node:ID:complete>>`, `<<npc:ID:state:KEY=VALUE,...>>`, and `<<clue:found:ID>>` mutate state. `Available clues` at runtime is a simple filter: undiscovered clues whose `found_at_node` matches the player's current node — no graph walk, no chain logic.
+In node-mode the extension does NOT advance a destination — Reachable nodes is a *menu* the player picks from by acting on clues, asking NPCs, going somewhere. Node transitions and clue reveals are detected by the extension's scene analyzer (a silent post-response LLM classifier) rather than by GM-emitted closure tags. The only GM-emitted tag still consumed in node-mode is `<<npc:ID:state:KEY=VALUE,...>>`. `Available clues` at runtime is a simple filter: undiscovered clues whose `found_at_node` matches the player's current node — no graph walk, no chain logic.
 
 This becomes `initial_authors_note.txt` in the output.
 
