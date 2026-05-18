@@ -136,9 +136,21 @@ class OpenRouterClient(LLMClient):
         response = self._call_api(payload)
         self._record_usage(response.get("usage"))
         try:
-            content = response["choices"][0]["message"]["content"]
+            choice = response["choices"][0]
+            content = choice["message"]["content"]
         except (KeyError, IndexError) as exc:  # pragma: no cover - depends on provider error shape.
             raise LLMError(f"unexpected OpenRouter response shape: {response}") from exc
+
+        if content is None or (isinstance(content, str) and not content.strip()):
+            finish_reason = choice.get("finish_reason")
+            usage = response.get("usage") or {}
+            reasoning_tokens = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+            raise LLMError(
+                f"model {model!r} returned empty content "
+                f"(finish_reason={finish_reason!r}, reasoning_tokens={reasoning_tokens}). "
+                "The model likely exhausted its completion budget on hidden reasoning before "
+                "emitting visible output."
+            )
 
         if self.call_log_path:
             self.call_log_path.parent.mkdir(parents=True, exist_ok=True)

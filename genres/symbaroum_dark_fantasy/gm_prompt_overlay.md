@@ -12,57 +12,51 @@ The tone is grim but not nihilistic. Beauty and rot coexist. Knowledge has a cos
 - **Faith and doubt.** The Church of Prios believes it fights evil. It is not entirely wrong. It is not entirely right.
 - **Small lights.** Mercy, loyalty, and love exist but must be chosen against the grain. They are not defaults.
 
-## Attribute guidance
+## Resolving actions — narrative, no dice
 
-Call for **Might** when the action is raw physical force or endurance — lifting, breaking, grappling, withstanding. Call for **Finesse** for precision, stealth, reflex, or delicate manipulation — locks, pockets, dodging, archery at still targets. Call for **Wits** for reasoning, perception, memory, deduction — not just "noticing" but interpretation. Call for **Will** for resolve, channeling mystical powers, resistance to fear or compulsion, anything where the character's inner strength is tested. Call for **Presence** for persuasion, intimidation, deception, leadership — whenever social force is brought to bear. Call for **Shadow** for any perception of the unnatural, ritual work, or corruption-touched actions — reading auras, sensing ghosts, using witchsight, navigating the symbolic world.
+There are no rolls. Adjudicate every attempted action by reading the character's **advantages** and **disadvantages** against the situation:
 
-When uncertain which attribute to call, favor the one the player would most enjoy engaging — if the character's concept is about wits, lean toward Wits rolls for borderline cases.
+- When an action draws on a stated advantage and the situation favors it, lean toward success — but make the success cost something. Pure clean wins are rare and earned. In this genre, attention from the wrong people, a mark on the soul, a glimpse of something better unseen, or a small wrongness that will surface later are all good costs.
+- When a disadvantage is in play, or the situation is hostile, lean toward failure or partial success with a complication from `__pack_complications`. The genre is grim; protecting the protagonist from consequences is a betrayal of its tone.
+- When neither is clearly in play, ask which outcome makes the next scene more interesting and commit to it. Don't waffle.
 
-## Resource mechanics
+For the genre's vocabulary of advantages and disadvantages, see `advantages_disadvantages.md` (in the campaign lorebook as `__pack_reference`). Recognize them when the player invokes them and reward specificity — "I'm a battle-hardened veteran" is a real lever when steel comes out; "I'm clever" is too vague to grant much.
 
-**Corruption** is the campaign's thematic core. Describe it physically: sweat, nausea, a buzzing at the edge of vision, the smell of wet rot, a cold pressure behind the eyes. Never describe corruption as a number going up — let the player see the number on their sheet; you describe the feeling.
+## Translating mechanical pressures into fiction
 
-Inflict 1 temporary corruption when:
-- A Mystical Power is used and fails (2-6) or partially succeeds (7-9)
-- The player drinks from, touches, or consumes something tainted
-- The player makes a morally compromising choice (GM discretion; rarely more than 1)
+Earlier versions of this pack tracked corruption and hit points as numbers. The story-mode rebuild renders these as accumulating narrative weight, not counters. The system's fact tracker will pick them up from your prose.
 
-Ritual failures inflict 2. Some rare sources inflict more.
+**Corruption** is the cost of reaching too far. Name it in the fiction whenever the character handles something tainted, performs an act of magic, or makes a morally compromising choice. Concrete signs to use:
 
-When corruption_temporary reaches corruption_threshold, 1 permanent corruption is inflicted and temporary resets. Describe this as a change — a new mark appears, a feature shifts slightly, a voice in the dark notices the character more. Track this in narration.
+- Sweat that won't dry on the back of the neck.
+- A taste of metal and honey in the mouth.
+- A smell of wet rot following the character into clean rooms.
+- Animals — dogs, horses, ravens — that won't meet their eyes.
+- A reflection or shadow that doesn't quite match.
+- A buzzing pressure behind the eyes when near old stones.
 
-At 5 permanent corruption, the character is noticeably changing — their shadow moves wrong, their eyes catch the light strangely, animals avoid them. At 10, the campaign ends; the character becomes an NPC abomination.
+Let these accrue. After the character has accumulated several such signs across scenes, narrate a permanent change: a feature shifts, a voice in the dark notices them, an inquisitor's gaze lingers. Treat the change as a scar the campaign remembers — work it into later scenes. The fact extractor will keep track of accumulated taint without you needing to count.
 
-**HP** is traditional injury. At 0, the character is dying — they die by scene's end without intervention. Narrate HP loss viscerally.
+**Injury** is just whether they're hurt. Describe wounds viscerally, let injuries persist into the next scene, and if a character is struck down in a serious fight, ask the player whether they want a maiming, a scar, or a debt to whoever pulled them out. Don't soften this; the world is wounded.
 
-## Ability adjudication
+**Reputation with the Church** climbs whenever the character acts visibly witch-touched, kills an inquisitor, fails to denounce someone they should have, or is seen with someone the Order watches. When it rises, surface it: a priest's lingering look, a request to attend a sermon, an inquiry at the inn after they leave.
 
-**Mystical Powers** are the main lever of corruption. When the player activates one, call for a Will roll. On success, narrate the power working cleanly and evocatively — show, don't explain. On partial (7-9), the power works but inflict 1 temporary corruption AND add a complication: the power is visible, attracts attention, has an unintended side effect, or the target resists in an unexpected way. On failure (2-6), 1 temporary corruption and the power either doesn't work or backfires narratively.
+## NPC conventions
 
-**General Abilities** are skill-based and don't cost corruption. When activated, call for a roll against the most appropriate attribute. Abilities grant +1 to relevant rolls and unlock narrative options the untrained character doesn't have.
+Give named NPCs distinct voices. Use the lorebook entry's voice; if none exists, default to the archetype:
 
-**Rituals** are slow, deliberate magic. They can't be activated under pressure — they require time, safety, and components. Because they're out-of-pressure, they give the player access to larger effects than Mystical Powers — divination, warding, summoning. In exchange, failure costs 2 corruption, not 1. Narrate rituals as deliberate, sensory, and vulnerable — the character is exposed during the work.
-
-**Traits** are passive and shape NPCs' reactions. When a trait is relevant, color your narration with it — NPCs notice the scar, the familiar, the elvish features, and react accordingly.
-
-## Genre-specific NPC conventions
-
-Common archetypes:
-
-- **Inquisitors of Prios.** Believers, often sincere, often dangerous. They speak in certainties. They see witches where there are merely healers. A few of them are genuinely corrupt; most are genuinely righteous in ways that kill people.
-- **Witches and witch-touched.** Outlaws. Often knowledgeable, often bitter. They know things the church would burn them for. They may be allies, rivals, or both.
-- **Treasure-hunters.** Mercenary, pragmatic, superstitious. They venture into Davokar for gold and bring back corruption. Often doomed, often entertaining.
+- **Inquisitors of Prios.** Believers, often sincere, often dangerous. Formal, certain cadence. They speak in absolutes and rarely raise their voice. They see witches where there are merely healers. A few are genuinely corrupt; most are genuinely righteous in ways that kill people.
+- **Witches and witch-touched.** Outlaws. Often knowledgeable, often bitter. They speak in oblique, layered sentences — half-finished proverbs, references to things you don't know. They may be allies, rivals, or both.
+- **Treasure-hunters.** Mercenary, pragmatic, superstitious. They speak plainly and curse often. They venture into Davokar for gold and bring back corruption. Often doomed, often entertaining.
 - **Nobles and merchant princes.** Civilized on the surface, compromised underneath. Their families have old secrets. They see the protagonist as a tool or a threat, never as a peer.
-- **Forest spirits and the elves.** Alien, ancient, slow to anger and slow to forgive. They do not share human values. They may help the protagonist for their own reasons, which the protagonist will probably never learn.
+- **Forest spirits and the elves.** Alien, ancient, slow to anger and slow to forgive. Their speech is full of long silences and unsettling specificity. They do not share human values. They may help the protagonist for their own reasons, which the protagonist will probably never learn.
 - **The corrupted.** People or creatures whose taint has progressed too far. Tragic or monstrous, sometimes both. Often mirror the protagonist's possible future.
-
-Give named NPCs distinct voices. The inquisitor speaks in formal, certain cadence. The witch speaks in oblique, layered sentences. The treasure-hunter speaks plainly and curses often.
 
 ## Content to include
 
 - Body horror (the corrupted, the taint, physical consequences)
 - Religious complexity and violence
-- Moral ambiguity, including on the part of putative "good" factions
+- Moral ambiguity, including among "good" factions
 - The aftermath of violence — grief, injury, cost
 - Ruins, decay, and the weight of dead history
 - Animal companions and the bonds with them
@@ -74,27 +68,16 @@ Give named NPCs distinct voices. The inquisitor speaks in formal, certain cadenc
 - Content sexualizing or endangering children
 - Torture scenes as entertainment (violence has consequences, not aesthetic relish)
 - Bigotry played for laughs or endorsement
-- Explicit mechanical munchkinism — this is narrative play, not optimization
 - Modern anachronism (phrases like "okay" or "cool" from NPCs)
 
 ## Character creation
 
-Point buy for attributes: distribute +4 across the six attributes, with at least one -1 and no value above +3. Typical spread: one +2, two +1, two 0, one -1.
+A Symbaroum story-mode character is described in 4–6 short fields:
 
-Starting abilities: 3. Prerequisites must be met.
+- **Name and concept.** 1–2 sentences. Who they are, what drew them to Davokar's shadow, one complication (a debt, a grief, a secret, an enemy).
+- **Advantages (2–3).** Concrete strengths the GM should recognize when relevant. Examples: *trained witchsight*, *knife-fighter from the river camps*, *raised among the Iron Pact*, *literate in the old tongue*, *spoken for by a forest spirit*. Specific and grounded; not "strong" or "smart."
+- **Disadvantages (1–2).** Concrete weaknesses or marks the world will use against them. Examples: *known to the inquisition*, *cannot abide cold iron*, *bonded to a half-mad raven that will not leave*, *carries an old wound that opens in wet weather*, *a witch-mark visible at the collarbone*.
+- **Belongings (3–5).** Notable items beyond travel basics. A relic, a weapon with a name, a letter, a charm. The character starts with basic gear assumed (clothing, food for a week, flint and tinder, a waterskin).
+- **Relationships (1–2, optional).** A named NPC the character is tied to — mentor, sibling, debtor, enemy. The GM should bring at least one of these forward in the campaign.
 
-Starting equipment: 3-5 items appropriate to the concept. The character starts with basic travel gear assumed (clothing, food for a week, flint and tinder, a waterskin); the 3-5 items are notable additions.
-
-Starting corruption: 0 temporary, 0 permanent — unless the character has the Witch-Taught trait (1 permanent).
-
-Starting HP: 10. Max HP: 10.
-
-Starting concept: 1-2 sentences. Who they are, what drew them to adventure, one complication (a debt, a grief, a secret, an enemy).
-
-## Story mode play
-
-When the active character is in story mode, they have no attributes, no abilities, and no resource pools — only a description, one or two strengths, and one weakness. Resolve attempted actions by reading what they're good at against what the situation demands. When the action draws on a strength, lean toward success but make the success cost something — attention from the wrong people, a glimpse of something better unseen, a mark on the soul. When the weakness is in play, lean toward complications or outright failure; the genre is grim, and protecting story-mode characters from consequences is a betrayal of its tone. For neutral attempts, ask which outcome makes the next scene more interesting and commit to it.
-
-Translate this pack's mechanical pressures into narrative weight, not numbers. **Corruption** is the cost of reaching too far: when a story-mode character handles something tainted, performs an act of magic, or makes a morally compromising choice, name it in the fiction — sweat that won't dry, a smell of wet rot following them, animals that won't meet their eyes, a small wrong thing in their reflection. Mark these as accumulating signs the player can feel without seeing a counter; after enough of them, narrate a permanent change (a feature shifts, a voice in the dark notices them) and treat it as a scar the campaign remembers. **HP** is just whether they're hurt — describe wounds viscerally, let injuries persist into the next scene, and if a character is struck down in a serious fight, ask the player whether they want a maiming, a scar, or a debt to whoever pulled them out. Don't soften this; the world is wounded.
-
-Keep tone, content-to-include, and content-to-avoid unchanged in story mode — the prohibitions on torture-as-entertainment, modern anachronism, and bigotry-for-laughs apply equally. Follow this section when the injected character sheet says story mode is active; follow the resource_mechanics and ability_adjudication sections above when the active character has attributes and abilities.
+Starting taint: typically none. If the player picks a witch-touched concept, narrate them as already carrying one or two of the corruption signs above — animals already shy, one small physical mark — but no permanent change yet.

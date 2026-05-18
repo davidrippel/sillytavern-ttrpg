@@ -27,7 +27,6 @@ def run(
     context = {
         "premise": premise.model_dump(),
         "gm_overlay_excerpt": pack.gm_prompt_overlay,
-        "requested_num_acts": seed.num_acts,
         "target_supporting_cast_size": target_supporting_cast_size,
     }
     return generate_structured(

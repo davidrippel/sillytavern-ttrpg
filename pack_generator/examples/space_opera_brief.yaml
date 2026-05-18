@@ -1,6 +1,6 @@
 pack_name: space_opera_adventure
 display_name: "Space Opera Adventure"
-schema_version: 1
+schema_version: 2
 
 one_line_pitch: >
   Smugglers, derelict colonies, and ancient alien tech on the frontier
@@ -14,22 +14,38 @@ thematic_pillars_hint: >
 
 content_to_avoid: [military_jingoism, grimdark_nihilism, racial_essentialism]
 
-attribute_flavor: >
-  Six attributes covering physical, mental, social, and tech/skill capabilities.
-  Lean into the genre: piloting and mechanical intuition matter, as does
-  social navigation in a multicultural frontier. Use names that feel
-  space-opera, not generic fantasy.
+pressure_flavor: >
+  The signature pressure is heat — the wanted-level / attention a crew
+  accumulates from corp security, system patrols, and the people they
+  cross. Heat is not a counter; it shows up as ships in the next system
+  asking pointed questions, a corp data-spike on the lift terminal, a
+  fixer who suddenly won't return calls, a familiar face in the wrong
+  bar. Concrete signs to give the GM: a tail two berths over, a quiet
+  meeting in the corner that goes silent when the crew enters, a credit
+  freeze, an old contact who now claims not to know them.
 
-resource_flavor: >
-  One primary resource representing long-term wear — could be ship condition,
-  fuel, or crew morale, whichever best captures the genre's stakes.
-  One short-term resource representing immediate pressure — heat (wanted
-  level), oxygen, or adrenaline. Pick what fits the one-line pitch best.
+advantages_disadvantages_hint: >
+  Genre axes: crew-role (pilot, mechanic, fixer, fighter, face),
+  contact-network (which bar / station / corp lets them in),
+  shipboard (rigging, EVA, low-grav fighting), and mark/debt (who
+  remembers them and how). Example advantages: "best stick on the
+  Verge route", "knows every fixer on Hadrian Station", "ex-corp
+  security from Helion — knows their playbook", "speaks the ship-cant
+  three port crews use". Example disadvantages: "a corp warrant in
+  the inner systems", "an unpaid debt to a syndicate fixer",
+  "an old comrade who hunts them", "a piece of cybernetics that
+  pings on corp scanners".
 
-ability_categories_hint: >
-  Include piloting/navigation, combat/small arms, ship systems/mechanics,
-  and at least one "weird" category — psionics, alien tech, or
-  something genre-defining. Decide on the final set.
+complications_hint: >
+  Heat climbs (corp notice, system-patrol interest, fixer drops them).
+  Ship takes a hit (engine, life-support, comms — pick one). Cargo is
+  gone, moved, or no longer what they thought. An old comrade surfaces
+  with their own agenda. Alien tech reacts in a way the crew can't
+  explain. A passenger turns out to be someone else. The corp lawyer
+  arrives at the wrong time. Generate 10-15 in this vein, plus a "you
+  succeed but..." list (you get the cargo but you owe Hadrian Station
+  a favor, you escape but lose a crewmate's confidence, you make
+  jump but burn fuel you don't have, ...).
 
 example_inspiration_list: >
   Firefly, Alien, The Expanse, early Star Wars (pre-prequel), Outer Wilds.
@@ -37,8 +53,8 @@ example_inspiration_list: >
 example_characters: >
   A smuggler-captain with a haunted past. A xenoarcheologist who's seen
   too much. A mechanic who talks to ships. An ex-corporate-security
-  trying to disappear. Use these as a vibe check for ability catalog
-  and tone.
+  trying to disappear. Use these as a vibe check for advantages
+  vocabulary and complications.
 
 campaign_style_hint: >
   Episodic adventures with an overarching mystery. Ships as homes.

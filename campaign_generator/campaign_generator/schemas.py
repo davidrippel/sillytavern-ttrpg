@@ -5,6 +5,9 @@ import re
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
+# --- Premise + plot spine (v2) -----------------------------------------
+
+
 class PremiseDocument(BaseModel):
     title: str = Field(min_length=1, max_length=80)
     paragraphs: list[str] = Field(min_length=2, max_length=2)
@@ -24,81 +27,56 @@ class Antagonist(BaseModel):
     relationship_to_protagonist: str
 
 
-class Beat(BaseModel):
-    id: str | None = None
-    text: str
-
-    @model_validator(mode="before")
-    @classmethod
-    def coerce_string(cls, value):
-        if isinstance(value, str):
-            return {"text": value}
-        return value
-
-    @property
-    def label(self) -> str | None:
-        if not self.id:
-            return None
-        match = re.fullmatch(r"act(\d+)_beat(\d+)", self.id)
-        if not match:
-            return self.id
-        return f"{match.group(1)}.{match.group(2)}"
-
-    @property
-    def rendered(self) -> str:
-        label = self.label
-        return f"{label} {self.text}" if label else self.text
-
-
-class ActOutline(BaseModel):
-    act_number: int | None = None
-    title: str
-    goal: str
-    beats: list[Beat] = Field(min_length=3, max_length=5)
-
-
 class SupportingCastMember(BaseModel):
     name: str = Field(min_length=1)
     archetype: str = Field(min_length=1, max_length=120)
     narrative_role: str = Field(min_length=1, max_length=240)
 
 
+class ActOutline(BaseModel):
+    """An act in the v2 system is a *thematic chapter*, not a list of beats.
+
+    Acts give the campaign generator a way to group locations and NPCs by
+    when they come into play, but the runtime has no concept of "current
+    act" — the extension tracks facts and threads, not act numbers. So
+    we keep `act_number`, `title`, and `goal`; the v1 `beats` field is
+    retired.
+    """
+
+    act_number: int | None = None
+    title: str
+    goal: str
+
+
 class PlotSkeleton(BaseModel):
-    acts: list[ActOutline] = Field(min_length=3, max_length=6)
+    """The campaign's thematic spine, plus a small cast of supporting
+    fixtures. There are no beats. The GM is told *what the campaign is
+    about*, not *what should happen next*.
+    """
+
+    acts: list[ActOutline] = Field(min_length=2, max_length=4)
     main_antagonist: Antagonist
     driving_mystery: str
     hook: str
     escalation_arc: str
+    thematic_spine: list[str] = Field(
+        min_length=3,
+        max_length=5,
+        description=(
+            "3-5 short escalation themes the GM should honor as the campaign "
+            "progresses. Not beats; not ordered. A vibe vector."
+        ),
+    )
     supporting_cast: list[SupportingCastMember] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def assign_beat_ids(self) -> "PlotSkeleton":
-        for act_index, act in enumerate(self.acts, start=1):
-            act.act_number = act_index
-            for beat_index, beat in enumerate(act.beats, start=1):
-                beat.id = f"act{act_index}_beat{beat_index}"
+    def assign_act_numbers(self) -> "PlotSkeleton":
+        for idx, act in enumerate(self.acts, start=1):
+            act.act_number = idx
         return self
 
-    def all_beats(self) -> list[Beat]:
-        return [beat for act in self.acts for beat in act.beats]
 
-    def beat_id_to_text(self) -> dict[str, str]:
-        return {beat.id: beat.text for beat in self.all_beats() if beat.id is not None}
-
-    def beat_text_to_id(self) -> dict[str, str]:
-        return {beat.text: beat.id for beat in self.all_beats() if beat.id is not None}
-
-    def format_beat_reference(self, value: str) -> str:
-        id_to_text = self.beat_id_to_text()
-        text_to_id = self.beat_text_to_id()
-        if value in id_to_text:
-            beat = Beat(id=value, text=id_to_text[value])
-            return beat.rendered
-        if value in text_to_id:
-            beat_id = text_to_id[value]
-            beat = Beat(id=beat_id, text=value)
-            return beat.rendered
-        return value
+# --- Factions ----------------------------------------------------------
 
 
 class Faction(BaseModel):
@@ -130,6 +108,9 @@ class FactionSet(BaseModel):
         return self
 
 
+# --- NPCs --------------------------------------------------------------
+
+
 class NPCRelationship(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -146,13 +127,29 @@ class NPC(BaseModel):
     motivation: str = Field(max_length=220)
     secret: str = Field(max_length=320)
     relationships: list[NPCRelationship] = Field(default_factory=list)
-    abilities: list[str] = Field(default_factory=list)
-    act_presence: list[str] = Field(default_factory=list)
+    advantages: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Short story-mode advantage phrases describing what the NPC "
+            "is good at. Free-form; the GM picks them up from prose."
+        ),
+    )
+    discovery_surfaces: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional hints about what the player can learn through this "
+            "NPC. Used by the GM as nudges; not a clue chain."
+        ),
+    )
+    act_presence: list[str] = Field(
+        default_factory=list,
+        description="Which acts the NPC most naturally appears in (free-form labels).",
+    )
     image_generation_prompt: str = Field(default="", max_length=600)
 
 
 class NPCRoster(BaseModel):
-    npcs: list[NPC] = Field(min_length=6, max_length=15)
+    npcs: list[NPC] = Field(min_length=6, max_length=25)
 
     @model_validator(mode="after")
     def validate_unique_names(self) -> "NPCRoster":
@@ -160,6 +157,9 @@ class NPCRoster(BaseModel):
         if len(names) != len(set(names)):
             raise ValueError("NPC names must be unique")
         return self
+
+
+# --- Locations ---------------------------------------------------------
 
 
 class SensoryDescription(BaseModel):
@@ -182,7 +182,10 @@ class Location(BaseModel):
     notable_features: list[str] = Field(min_length=1)
     hidden_elements: list[str] = Field(min_length=1)
     npc_names: list[str] = Field(default_factory=list)
-    plot_beats: list[str] = Field(min_length=1)
+    discovery_surfaces: list[str] = Field(
+        default_factory=list,
+        description="Hints the player can pick up by paying attention here.",
+    )
 
     @field_validator("notable_features", "hidden_elements")
     @classmethod
@@ -194,7 +197,7 @@ class Location(BaseModel):
 
 
 class LocationCatalog(BaseModel):
-    locations: list[Location] = Field(min_length=5, max_length=12)
+    locations: list[Location] = Field(min_length=5, max_length=20)
 
     @model_validator(mode="after")
     def validate_unique_names(self) -> "LocationCatalog":
@@ -204,131 +207,89 @@ class LocationCatalog(BaseModel):
         return self
 
 
-class Clue(BaseModel):
-    """A clue is a directed edge between two nodes.
+# --- Truths (v2) -------------------------------------------------------
 
-    Discovered at `found_at` (an NPC or location reachable from `found_at_node`),
-    the clue points the player toward `points_to_node`. No clue-to-clue chaining;
-    no beat references. Source and target nodes must belong to the same act,
-    and a clue cannot point to its own source node.
+
+class Truth(BaseModel):
+    """A single atomic fact that defines the campaign's underlying
+    situation. The GM never sees the whole truth set; the extension's
+    pacing module picks one at a time and injects it as a director's
+    note when the player's threads and recent facts brush against it.
     """
 
-    id: str
-    found_at_node: str = Field(min_length=1)
-    points_to_node: str = Field(min_length=1)
-    found_at_type: str
-    found_at: str
-    hint: str = Field(default="", max_length=120)
-    reveals: str = Field(max_length=280)
-
-    @field_validator("found_at_type")
-    @classmethod
-    def validate_found_at_type(cls, value: str) -> str:
-        if value not in {"npc", "location"}:
-            raise ValueError("found_at_type must be npc or location")
-        return value
-
-    @model_validator(mode="after")
-    def forbid_self_loop(self) -> "Clue":
-        if self.found_at_node == self.points_to_node:
-            raise ValueError(
-                f"clue {self.id} has self-loop (found_at_node == points_to_node == {self.found_at_node!r})"
-            )
-        return self
-
-
-class ClueGraph(BaseModel):
-    clues: list[Clue] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def validate_unique_ids(self) -> "ClueGraph":
-        ids = [clue.id for clue in self.clues]
-        if len(ids) != len(set(ids)):
-            raise ValueError("clue ids must be unique")
-        return self
-
-
-class Node(BaseModel):
-    """A discrete situation the player can engage with.
-
-    Nodes replace the linear beat sequence in node-mode campaigns. The player
-    navigates the graph by acting on clues, which are now pure edges between
-    nodes (see `Clue`).
-
-    Acts share node boundaries: a node may be the final node of act N AND the
-    starting node of act N+1 (the `is_act_start` and `is_act_final` flags can
-    both be true on the same node). The very first node of act 1 has
-    `is_act_start=True` and no inbound clues; the campaign's victory node has
-    `is_victory=True` and no outbound clues.
-
-    `entry_clues` and `exit_clues` are derived views computed from the clue
-    graph at lorebook-emission time; they are not authoritative storage and
-    should be left empty by generators.
-    """
-
-    id: str = Field(min_length=1)
-    kind: str
-    description: str = Field(min_length=1, max_length=400)
-    act_number: int = Field(ge=1)
-    entry_clues: list[str] = Field(default_factory=list)
-    exit_clues: list[str] = Field(default_factory=list)
-    gating: list[str] = Field(default_factory=list)
-    triggers: str | None = Field(default=None, max_length=200)
-    is_act_start: bool = False
-    is_act_final: bool = False
-    is_victory: bool = False
-    relevant_npcs: list[str] = Field(default_factory=list)
-    relevant_location: str | None = None
-
-    @field_validator("kind")
-    @classmethod
-    def validate_kind(cls, value: str) -> str:
-        allowed = {"location", "npc_encounter", "event"}
-        if value not in allowed:
-            raise ValueError(f"kind must be one of {sorted(allowed)}")
-        return value
+    id: str = Field(min_length=2)
+    text: str = Field(min_length=10, max_length=240)
+    hint: str = Field(default="", max_length=200)
+    adjacency_keys: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Lowercase tokens (NPC names, location names, faction names, "
+            "concepts) that signal a director's note for this truth is "
+            "in scope. The extension's pacing module matches these against "
+            "live threads and recent facts."
+        ),
+    )
 
     @field_validator("id")
     @classmethod
-    def validate_id_shape(cls, value: str) -> str:
-        if not re.fullmatch(r"[a-z0-9_]+", value):
-            raise ValueError("node id must be snake_case ([a-z0-9_]+)")
+    def snake_case_id(cls, value: str) -> str:
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", value):
+            raise ValueError("truth id must be snake_case ([a-z][a-z0-9_]*)")
         return value
 
 
-class NodeGraph(BaseModel):
-    nodes: list[Node] = Field(min_length=1)
+class TruthSet(BaseModel):
+    truths: list[Truth] = Field(min_length=4, max_length=10)
 
     @model_validator(mode="after")
-    def validate_consistency(self) -> "NodeGraph":
-        ids = [node.id for node in self.nodes]
+    def validate_unique_ids(self) -> "TruthSet":
+        ids = [t.id for t in self.truths]
         if len(ids) != len(set(ids)):
-            raise ValueError("node ids must be unique")
-        id_set = set(ids)
-        for node in self.nodes:
-            for prereq in node.gating:
-                if prereq not in id_set:
-                    raise ValueError(f"node {node.id} gating references unknown node {prereq}")
-        victory_count = sum(1 for n in self.nodes if n.is_victory)
-        if victory_count > 1:
-            raise ValueError("at most one node may have is_victory=true")
+            raise ValueError("truth ids must be unique")
         return self
 
-    def by_act(self, act_number: int) -> list[Node]:
-        return [n for n in self.nodes if n.act_number == act_number]
 
-    def act_start_for(self, act_number: int) -> Node | None:
-        for node in self.nodes:
-            if node.act_number == act_number and node.is_act_start:
-                return node
-        return None
+# --- Complications (v2) ------------------------------------------------
+
+
+class Complication(BaseModel):
+    """A genre-specific, campaign-specific narrative complication. The
+    GM picks from `__pack_complications` (pack-level) and these
+    (campaign-level) when a scene calls for a setback or a pacing cue.
+    """
+
+    title: str = Field(min_length=1, max_length=80)
+    body: str = Field(min_length=10, max_length=320)
+
+    @field_validator("body")
+    @classmethod
+    def reject_vague_phrases(cls, value: str) -> str:
+        haystack = value.lower()
+        forbidden = (
+            "something happens",
+            "something bad happens",
+            "the gm decides",
+            "you fail",
+            "you lose",
+        )
+        for term in forbidden:
+            if term in haystack:
+                raise ValueError(f"complication body contains vague phrase {term!r}")
+        return value
+
+
+class ComplicationSet(BaseModel):
+    complications: list[Complication] = Field(min_length=6, max_length=15)
+
+
+# --- Branches ----------------------------------------------------------
 
 
 class Branch(BaseModel):
     name: str
     if_condition: str
     then_outcome: str
-    later_act_consequences: list[str] = Field(min_length=1)
+    later_consequences: list[str] = Field(min_length=1)
     references: list[str] = Field(default_factory=list)
 
 
@@ -336,73 +297,31 @@ class BranchPlan(BaseModel):
     branches: list[Branch] = Field(min_length=4, max_length=10)
 
 
-class InitialAuthorsNote(BaseModel):
-    current_act: str
-    current_beat: str
-    next_beat: str | None = None
-    active_threads: list[str] = Field(default_factory=list)
-    recent_beats: list[str] = Field(default_factory=list)
-    reminders: list[str] = Field(default_factory=list)
-
-    def render(self) -> str:
-        recent_beats = [f"- {beat}" for beat in self.recent_beats] if self.recent_beats else ["- (empty at start)"]
-        sections = [
-            f"Current Act: {self.current_act}",
-            f"Current beat: - {self.current_beat}",
-            f"Next beat: - {self.next_beat}" if self.next_beat else "Next beat: (none)",
-            "Discovered clues: (none)",
-            "Available clues: (none)",
-            "Active threads:",
-            *(f"- {thread}" for thread in self.active_threads),
-            "Recent beats:",
-            *recent_beats,
-            "Reminders:",
-            *(f"- {reminder}" for reminder in self.reminders),
-        ]
-        return "\n".join(sections)
+# --- Sample characters (v2 story-mode shape) ---------------------------
 
 
-class PCKnownNPCs(BaseModel):
-    """Result of the PC prior-knowledge vetting stage.
-
-    `known_names` are NPCs the PC genuinely knew before the campaign began
-    (family, longtime ties, etc.). `introduced_now_names` are NPCs merely
-    co-present in the opening scene who the PC meets for the first time there.
-    Together they should partition the candidates drawn from the act-1 start
-    node's `relevant_npcs`.
-    """
-
-    known_names: list[str] = Field(default_factory=list)
-    introduced_now_names: list[str] = Field(default_factory=list)
-    start_location_name: str | None = None
-    start_node_id: str | None = None
-
-
-class StoryModeProfile(BaseModel):
+class SampleCharacterRelationship(BaseModel):
     name: str
-    description: str
-    strengths: list[str] = Field(min_length=1, max_length=2)
-    weakness: str
-
-
-class PackModeProfile(BaseModel):
-    name: str
-    concept: str
-    attributes: dict[str, int] = Field(default_factory=dict)
-    abilities: list[str] = Field(default_factory=list)
-    equipment: list[str] = Field(default_factory=list)
-    notes: str = ""
+    tie: str
 
 
 class SampleCharacter(BaseModel):
-    archetype: str
-    hook_into_campaign: str
-    story: StoryModeProfile
-    pack: PackModeProfile
+    """A pre-generated player character matching the v2 character template."""
+
+    name: str = Field(min_length=1)
+    concept: str = Field(min_length=10, max_length=320)
+    advantages: list[str] = Field(min_length=2, max_length=4)
+    disadvantages: list[str] = Field(min_length=1, max_length=2)
+    belongings: list[str] = Field(default_factory=list, max_length=8)
+    relationships: list[SampleCharacterRelationship] = Field(default_factory=list, max_length=4)
+    hook_into_campaign: str = Field(max_length=320)
 
 
 class SampleCharacterSet(BaseModel):
-    characters: list[SampleCharacter] = Field(min_length=1, max_length=10)
+    characters: list[SampleCharacter] = Field(min_length=1, max_length=8)
+
+
+# --- Opening hook + initial AN ----------------------------------------
 
 
 class OpeningHookDocument(BaseModel):

@@ -2,6 +2,8 @@
 
 The contract every genre pack must satisfy. All tools (campaign generator, extension, pack generator) read packs according to this spec.
 
+This is the **schema v2** spec. Schema v2 is story-mode only — no attribute scores, no resource pools, no dice. Earlier versions of this system supported stat-mode packs with `attributes.yaml`, `resources.yaml`, and `abilities.yaml`; those files are retired and tools reject packs that contain them under the v2 schema.
+
 ---
 
 ## Directory structure
@@ -10,38 +12,32 @@ A pack is a directory with a fixed file layout:
 
 ```
 genres/<pack_name>/
-├── pack.yaml                    # metadata and manifest
-├── attributes.yaml              # the six attributes
-├── resources.yaml               # resource mechanics (corruption, heat, etc.)
-├── abilities.yaml               # ability categories and catalog
-├── character_template.json      # starting character sheet shape
-├── gm_prompt_overlay.md         # genre-specific GM prompt additions
-├── tone.md                      # tone directives and thematic pillars
-├── failure_moves.md             # genre-flavored GM moves
-├── example_hooks.md             # 2-3 example opening scenes
-├── generator_seed.yaml          # default seed for campaign generator
-├── naming.yaml                  # optional — naming-diversity hints (registers + districts)
-└── REVIEW_CHECKLIST.md          # generated with the pack; used for QA
+├── pack.yaml                       # metadata
+├── character_template.json         # starting character sheet shape
+├── gm_prompt_overlay.md            # genre-specific GM prompt additions
+├── tone.md                         # tone directives and thematic pillars
+├── complications.md                # genre-flavored narrative complications
+├── advantages_disadvantages.md     # vocabulary of strengths and weaknesses
+├── example_hooks.md                # 2-3 example opening scenes
+├── generator_seed.yaml             # default seed for campaign generator
+├── naming.yaml                     # optional — naming-diversity hints
+└── REVIEW_CHECKLIST.md             # generated with the pack; used for QA
 ```
 
-All files must be present for a pack to validate, except `naming.yaml`, which is optional and treated as empty when missing.
+All files must be present for a pack to validate, except `naming.yaml`, which is optional.
 
 ---
 
 ## Who reads what
 
-The pack is consumed by different systems, each reading only what it needs. Files left unread by a consumer are ignored — they're not wasted; they serve other consumers or humans.
-
 | File | Campaign generator | Pack generator | Extension (browser) | GM (at runtime) |
 |---|---|---|---|---|
 | `pack.yaml` | ✅ metadata | ✅ writes | ✅ name + version | — |
-| `attributes.yaml` | ✅ NPC & char creation | ✅ writes | ✅ dice + sheet UI | via overlay |
-| `resources.yaml` | ✅ NPC consequences | ✅ writes | ✅ sheet state UI, STATUS_UPDATE whitelist, threshold logic | via overlay |
-| `abilities.yaml` | ✅ NPC abilities | ✅ writes | ✅ ability catalog browser | via overlay |
 | `character_template.json` | ✅ char creation guidance | ✅ writes | ✅ initialize new sheet | — |
-| `gm_prompt_overlay.md` | ✅ tone calibration | ✅ writes | ❌ | ✅ embedded in lorebook |
+| `gm_prompt_overlay.md` | ✅ tone calibration | ✅ writes | ❌ | ✅ embedded in lorebook (`__pack_gm_overlay`) |
 | `tone.md` | ✅ hook style | ✅ writes | ❌ | ❌ |
-| `failure_moves.md` | — | ✅ writes | ❌ | ✅ embedded in lorebook |
+| `complications.md` | ✅ pacing/complication seed | ✅ writes | ❌ | ✅ embedded in lorebook (`__pack_complications`) |
+| `advantages_disadvantages.md` | ✅ sample-character vocab | ✅ writes | ✅ sheet UI autocomplete | ✅ embedded in lorebook (`__pack_reference`) |
 | `example_hooks.md` | ✅ hook calibration | ✅ writes | ❌ | ❌ |
 | `generator_seed.yaml` | ✅ defaults | ✅ writes | ❌ | ❌ |
 | `naming.yaml` | ✅ NPC/location naming diversity | ✅ writes | ❌ | ❌ |
@@ -49,12 +45,12 @@ The pack is consumed by different systems, each reading only what it needs. File
 
 Key points:
 
-- **The extension only reads 5 files** (`pack.yaml`, `attributes.yaml`, `resources.yaml`, `abilities.yaml`, `character_template.json`). Everything else is either for the Python tools, for humans, or reaches the GM via the campaign lorebook rather than through the extension.
-- **The GM never reads pack files directly.** Pack content reaches the GM through (a) the `gm_prompt_overlay.md` embedded by the campaign generator as a constant lorebook entry, and (b) the attribute/resource/ability names that appear naturally in the character sheet injection (done by the extension) and in lorebook entries.
+- **The extension reads only 3 files** (`pack.yaml`, `character_template.json`, `advantages_disadvantages.md`). Everything else is either for the Python tools, for humans, or reaches the GM via the campaign lorebook.
+- **The GM never reads pack files directly.** Pack content reaches the GM through three constant lorebook entries the campaign generator embeds:
+  - `__pack_gm_overlay` — full text of `gm_prompt_overlay.md`
+  - `__pack_complications` — full text of `complications.md`
+  - `__pack_reference` — full text of `advantages_disadvantages.md`
 - **The campaign generator is the only consumer of tone/hooks reference files** (`tone.md`, `example_hooks.md`). These calibrate its own generation; they don't run at play time.
-- **`failure_moves.md` reaches the GM** through the lorebook too — the campaign generator embeds its content as a constant lorebook entry alongside the GM overlay.
-
-This separation is why the extension doesn't need a bundling step: it reads the pack directory directly via the browser's `webkitdirectory` file picker and pulls only the 5 files it needs. See `04_EXTENSION_BRIEF.md` § Pack loading for the mechanism.
 
 ---
 
@@ -63,261 +59,68 @@ This separation is why the extension doesn't need a bundling step: it reads the 
 Pack metadata. Example:
 
 ```yaml
-schema_version: 1
+schema_version: 2
 pack_name: symbaroum_dark_fantasy
 display_name: "Symbaroum Dark Fantasy"
-version: 1.0.0
+version: 2.0.0
 description: >
   Grim dark fantasy in the shadow of an ancient corrupting forest.
-  Witches, inquisitors, and the price of forbidden knowledge.
 inspirations: [symbaroum, witcher, dark_souls]
 created: 2026-04-19
+updated: 2026-05-16
 author: dudi
 ```
 
 Required fields: `schema_version`, `pack_name`, `display_name`, `version`, `description`.
 
-`schema_version` is currently `1`. Tools reject packs with unknown schema versions.
+`schema_version` must be `2`. Tools reject packs with `schema_version: 1` and instruct the user to migrate (or regenerate).
 
 `pack_name` must be lowercase snake_case, used as the directory name and in CLI flags.
 
 ---
 
-## `attributes.yaml`
-
-Always exactly six attributes. The engine's dice math assumes six, and the UI renders six.
-
-```yaml
-attributes:
-  - key: might
-    display: Might
-    description: Physical force, endurance, melee strength.
-    examples: [smashing a locked door, wrestling a foe, enduring hardship]
-  - key: finesse
-    display: Finesse
-    description: Agility, stealth, precision, reflexes.
-    examples: [pickpocketing, dodging, striking a vital point]
-  - key: wits
-    display: Wits
-    description: Reasoning, perception, recall of lore.
-    examples: [solving a cipher, noticing a detail, recalling history]
-  - key: will
-    display: Will
-    description: Resolve, mystic focus, resistance to corruption and mind-effects.
-    examples: [resisting fear, channeling magic, staring down a demon]
-  - key: presence
-    display: Presence
-    description: Persuasion, deception, command, social force.
-    examples: [negotiation, intimidation, inspiring allies]
-  - key: shadow
-    display: Shadow
-    description: Witchsight, occult intuition, corruption-touched actions.
-    examples: [reading auras, sensing the unnatural, occult rituals]
-```
-
-Constraints:
-- Exactly 6 entries. Tools reject packs with fewer or more.
-- `key` must be lowercase snake_case; used in sheet JSON and dice commands.
-- `display` is the human-facing name.
-- `description` should be one sentence — used in the sheet UI tooltip and in the GM prompt overlay.
-- `examples` is 2-4 short phrases helping the GM recognize when to call for this attribute.
-
-The six keys MUST be unique. The six display names SHOULD be unique and memorable.
-
----
-
-## `resources.yaml`
-
-Resource mechanics that interact with the character sheet and GM moves.
-
-```yaml
-resources:
-  - key: corruption_temporary
-    display: Corruption (Temporary)
-    kind: pool_with_threshold
-    description: >
-      Accumulates from using Shadow-based abilities, drinking from tainted sources,
-      or making morally compromising choices. Resets to 0 on rest/ritual.
-      When it reaches corruption_threshold, 1 permanent corruption is inflicted
-      and temporary resets to 0.
-    starting_value: 0
-    decrement_triggers: [rest, cleansing_ritual]
-    increment_triggers:
-      - using a Shadow-tagged ability (1)
-      - drinking from a tainted source (1)
-      - morally compromising action (1-3 at GM discretion)
-
-  - key: corruption_permanent
-    display: Corruption (Permanent)
-    kind: counter
-    description: >
-      Lifetime corruption accumulated. At high values (5+) the character
-      physically changes; at the permanent threshold they become an
-      NPC abomination (end of campaign).
-    starting_value: 0
-    threshold: 5
-    threshold_effect: physical_transformation
-    endgame_value: 10
-    endgame_effect: npc_abomination
-
-  - key: corruption_threshold
-    display: Corruption Threshold
-    kind: static_value
-    description: >
-      When corruption_temporary reaches this, 1 permanent corruption inflicted
-      and temporary resets.
-    starting_value: 5
-
-  - key: hp_current
-    display: Hit Points
-    kind: pool
-    description: Physical injury pool. At 0, character is dying.
-    starting_value: 10
-    max_value_field: hp_max
-
-  - key: hp_max
-    display: Max HP
-    kind: static_value
-    starting_value: 10
-```
-
-Constraints:
-- At minimum, every pack declares `hp_current` and `hp_max`. These are engine-universal.
-- Beyond that, the pack declares whatever resources fit the genre. Common patterns: single-resource-threshold (corruption), dual-track (sanity/stress), countdown (oxygen), heat (wanted level).
-- `kind` must be one of: `pool`, `pool_with_threshold`, `counter`, `static_value`, `toggle`, `track`.
-- The extension reads this file to know what fields to render in the sheet, which fields accept state deltas, and how to display them.
-- STATUS_UPDATE blocks reference these keys directly.
-
----
-
-## `abilities.yaml`
-
-Ability categories and starter catalog.
-
-```yaml
-categories:
-  - key: mystical_powers
-    display: Mystical Powers
-    description: >
-      Active occult abilities. Using one requires a Will roll; failure
-      inflicts 1 temporary corruption.
-    activation: active
-    roll_attribute: will
-    consequence_on_failure: corruption_temporary +1
-    consequence_on_partial: corruption_temporary +1 OR effect reduced
-    has_levels: true
-    level_names: [novice, adept, master]
-
-  - key: abilities_general
-    display: General Abilities
-    description: Learned skills, martial training, professions.
-    activation: passive_or_triggered
-    has_levels: true
-    level_names: [novice, adept, master]
-
-  - key: rituals
-    display: Rituals
-    description: >
-      Slow magic requiring time, components, and often a safe location.
-      Not usable in combat.
-    activation: ritual
-    time_required: minutes_to_hours
-    has_levels: false
-
-  - key: traits
-    display: Traits
-    description: Permanent features of the character (racial, supernatural, etc.).
-    activation: passive
-    has_levels: false
-
-catalog:
-  - name: Witchsight
-    category: mystical_powers
-    prerequisite: shadow >= 1
-    description: >
-      Perceive the spiritual and corrupt nature of things and people.
-      Auras, recent magic use, taint, presence of the unnatural.
-    effect: >
-      On successful Will roll, the GM reveals one significant spiritual
-      truth about the target. On partial, reveals something but with
-      ambiguity. On failure, reveals nothing and inflicts 1 corruption.
-
-  - name: Shapeshifter
-    category: mystical_powers
-    prerequisite: shadow >= 2
-    description: Assume the form of an animal you've studied.
-    effect: >
-      Will roll to transform. Duration: scene. Corruption on failure.
-      Adept level: humanoid forms possible. Master: any animal.
-
-  - name: Staff Fighting
-    category: abilities_general
-    prerequisite: none
-    description: Trained use of quarterstaff as both weapon and walking stick.
-    effect: >
-      +1 to Might or Finesse rolls with a staff. Adept: parry bonus.
-      Master: disarm on full success.
-
-  # ... 15-25 more abilities spanning all categories
-```
-
-Constraints:
-- At least 3 categories, at most 8.
-- At least 15 abilities in the catalog, at least 2 per category.
-- `prerequisite` can reference attributes (`shadow >= 1`), other abilities (`Witchsight`), or `none`.
-- `consequence_on_failure` / `consequence_on_partial`: references resource keys from `resources.yaml`. Must validate.
-- `activation` must be one of: `active`, `passive`, `triggered`, `passive_or_triggered`, `ritual`.
-- The catalog is suggestive, not restrictive. Players and GMs can invent new abilities within a category; the catalog provides consistency and starting options.
-
----
-
 ## `character_template.json`
 
-The starting shape of a character sheet. The extension reads this to know how to render the sheet UI and what state fields to track.
+The starting shape of a story-mode character sheet. The extension reads this to initialize a new sheet and render the UI.
 
 ```json
 {
   "name": "",
   "concept": "",
-  "attributes": {
-    "might": 0,
-    "finesse": 0,
-    "wits": 0,
-    "will": 0,
-    "presence": 0,
-    "shadow": 0
-  },
-  "abilities": [
-    { "name": "", "category": "", "level": null, "notes": "" }
-  ],
-  "equipment": [],
-  "state": {
-    "hp_current": 10,
-    "hp_max": 10,
-    "corruption_temporary": 0,
-    "corruption_permanent": 0,
-    "corruption_threshold": 5,
-    "conditions": []
-  },
+  "advantages": [],
+  "disadvantages": [],
+  "belongings": [],
+  "relationships": [],
   "notes": ""
 }
 ```
 
-Constraints:
-- `attributes` object must have exactly the six keys from `attributes.yaml`.
-- `state` object must include every `pool`, `pool_with_threshold`, `counter`, and `static_value` resource from `resources.yaml`.
-- `abilities` is an array of objects; the shape is fixed (name, category, level, notes).
-- `conditions` is an array of strings (free-form condition names the GM narrates).
+Field meanings:
 
-Character creation uses this as the starting point; the player fills in values within the point-buy rules from `gm_prompt_overlay.md`.
+- `name`: free string.
+- `concept`: 1–2 sentence summary of who the character is and what drew them into the story.
+- `advantages`: array of short strings (typical: 2–3). Concrete strengths the GM can recognize and lean on. *"Trained witchsight"* lands; *"strong"* does not.
+- `disadvantages`: array of short strings (typical: 1–2). Concrete weaknesses, marks, debts, or vulnerabilities the world can exploit.
+- `belongings`: array of short strings (typical: 3–5). Notable items beyond travel basics — relics, named weapons, letters, charms.
+- `relationships`: array of objects `{ "name": "...", "tie": "..." }`. Named NPCs the character is tied to.
+- `notes`: free-form string for the player's own jotting (private from the GM).
+
+Constraints (validated):
+
+- All keys present, even if value is `""` or `[]`.
+- `advantages` and `disadvantages` are arrays of strings.
+- `relationships` entries (when present) have both `name` and `tie`.
+- No legacy keys (`attributes`, `abilities`, `state`, `equipment`). The validator rejects packs that include them — convert to `belongings` and the new fields, don't keep both.
+
+The pack may seed default belongings or canonical advantages/disadvantages in this file (a witch-hunter pack might pre-fill `belongings: ["silver-edged knife", "manual of rites"]`); the character creation flow in the extension takes the file as a starting point and lets the player edit any field.
 
 ---
 
 ## `gm_prompt_overlay.md`
 
-Genre-specific additions to the base GM prompt. Concatenated after the engine prompt at chat creation.
+Genre-specific additions to the base GM prompt. Reaches the GM as a constant lorebook entry (`__pack_gm_overlay`).
 
-Must include, in sections:
+Required sections (in this order):
 
 ### Setting and tone
 
@@ -325,85 +128,111 @@ One paragraph establishing the setting's flavor. Not a plot — plot comes from 
 
 ### Thematic pillars
 
-3-5 thematic pillars that the GM should weave through scenes.
+3–5 thematic pillars the GM should weave through scenes. One sentence each.
 
-### Attribute guidance
+### Resolving actions — narrative, no dice
 
-Reminders for the GM about when to call on which attribute. Can cite the examples from `attributes.yaml`.
+How the GM adjudicates without rolls in this genre. Must cover:
 
-### Resource mechanics
+- What it feels like when an advantage is in play and the situation is favorable (lean toward success-with-cost; what kinds of costs fit this genre).
+- What it feels like when a disadvantage is in play or the situation is hostile (lean toward failure or partial success; reference `__pack_complications`).
+- The default for neutral cases.
 
-How resources tick up and down. What corruption/sanity/heat/etc. feels like in play. When the GM should inflict them.
+Reference the genre's `advantages_disadvantages.md` vocabulary so the GM knows the kinds of phrases to recognize.
 
-### Ability adjudication
+### Translating mechanical pressures into fiction
 
-For each category in `abilities.yaml`, a short paragraph on how the GM handles activations, costs, and consequences.
+The genre's signature pressures (corruption, heat, sanity, ship damage, exposure, etc.) rendered as accumulating narrative weight rather than counters. For each pressure:
 
-### Genre-specific NPC conventions
+- The concrete sensory or social signs the GM can name in prose.
+- When to escalate from accumulating signs to a permanent change (a scar, a mark, a debt, a reputation shift).
 
-Archetypes that appear often (cultists, inquisitors, corrupt nobles, witch-hunters for fantasy; fixers, netrunners, corporate suits for cyberpunk). How they speak, what they want.
+The fact extractor picks these up from prose. The GM does not track numbers.
 
-### Content to include / exclude
+### NPC conventions
 
-Explicit lists of themes the pack embraces and themes it avoids. This is both safety-conscious (you can exclude content you don't want to encounter) and tone-protecting (you can exclude content that doesn't fit the pack's mood).
+3–6 archetypes the genre commonly features (inquisitors, witches, fixers, netrunners, corp suits). For each: how they speak, what they want, default disposition toward the protagonist.
+
+### Content to include / Content to avoid
+
+Two explicit lists. Genre-embracing themes and genre-incompatible or unwanted themes. Used by the campaign generator's content filters and by the GM at play time.
 
 ### Character creation
 
-Point-buy or array for attribute distribution. Number of starting abilities. Starting equipment guidance. Starting corruption/sanity/heat values.
+Concrete guidance on how a character in this genre is built using the `character_template.json` shape. How many advantages and disadvantages, what kinds of belongings fit, how many relationships to seed. Starting marks of the genre (already-corrupted starting character? already-wanted? already-bonded?).
 
-### Story mode play
+The overlay must not override engine-level rules in the base GM prompt (NPC format, OOC handling, length cap, "never invent campaign truths"). Those are fixed.
 
-GM guidance for running this genre without dice or stats — for characters in **story mode** (description + 1-2 strengths + one weakness, no attributes, no abilities, no resources).
+Aim for under 1500 words total.
 
-This section is read by the GM only when the active character is in story mode. The character sheet block injected by the extension explicitly tells the GM which mode is active and which section of this overlay to follow; the other sections continue to apply to stat-mode characters.
+---
 
-The section must cover:
+## `complications.md`
 
-- How to lean on the character's strengths and weakness when judging outcomes.
-- How to translate this genre's signature mechanical pressures (corruption, heat, exposure, ship damage, etc.) into **narrative consequences** rather than resource ticks — a new scar, a debt owed, attention drawn, a creeping wrongness. Reference this pack's resources by name so the GM knows which mechanical pressures get translated.
-- When to commit to clear failure or partial success even without rolls (don't soften every outcome).
-- How the genre's tone, content-to-include, and content-to-avoid still apply.
+Genre-flavored narrative complications. Reaches the GM as a constant lorebook entry (`__pack_complications`).
 
-This section is **optional** for backward compatibility — packs authored before story mode was added still validate. New packs and regenerated packs should include it.
+No roll bands, no numbers. Each complication is a concrete narrative consequence the GM can pick when an action goes badly or when a "lean in" pacing cue arrives. Aim for 10–15 genre-specific complications plus 5–8 universal ones (marked `[universal]`).
 
-The overlay must not override engine-level rules (resolution bands, STATUS_UPDATE format, OOC handling, etc.). Those are fixed.
+Example format:
+
+```markdown
+## <Genre> complications
+
+- **The shadows in the forest remember.** Something watches from the dark. ...
+- **The Church takes notice.** An inquisitor, a report, a visit from a priest. ...
+- ...
+
+## When the action succeeds but the world still pushes back
+
+- Success, but it takes much longer than hoped.
+- Success, but you leave a trail — someone can follow.
+- ...
+```
+
+Good complications:
+
+- Are *specific* to the genre (not "something bad happens").
+- Are *actionable* (describe a concrete change to the situation).
+- Ratchet tension rather than ending scenes.
+- Can be combined with the genre's accumulating pressures (e.g. a corruption sign appears alongside the complication).
+
+The "success but..." section is mandatory in v2 — clean wins should be rare across most genres, and the GM needs a vocabulary of soft costs.
+
+---
+
+## `advantages_disadvantages.md`
+
+The genre's vocabulary of strengths and weaknesses. Reaches the GM as a constant lorebook entry (`__pack_reference`), reaches the extension's character-sheet UI as autocomplete suggestions, reaches the campaign generator as raw material for sample characters.
+
+Two parts:
+
+### Advantages
+
+Organized by axis (bodily / knowledge / social / mystical or genre-specific axes). For each axis, 4–8 example phrases. Phrases are:
+
+- **Specific.** *"Trained witchsight"* not *"good at magic."*
+- **Invocable.** The player can point at one and say "this is in play right now."
+- **Genre-grounded.** No mechanical jargon. No cross-genre items.
+
+### Disadvantages
+
+Same shape. Aim for axes like "marked / wounded / bound / hunted."
+
+The list is illustrative, not prescriptive. Players invent their own; the campaign generator may invent NPC advantages within these conventions. The list's job is to establish the *shape* of valid entries.
 
 ---
 
 ## `tone.md`
 
-Optional standalone tone document. Can repeat the tone sections from `gm_prompt_overlay.md` with more detail — used as reference material for pack authoring and not necessarily injected into every prompt. Can also include reference mood images, soundtrack suggestions, writing samples.
+Optional standalone tone document. Mood notes, soundtrack, writing sample, visual references. Used as reference material for pack authoring and for the campaign generator's prose calibration — not injected into the GM's prompt.
 
----
-
-## `failure_moves.md`
-
-Genre-flavored failure moves. The engine-level failure move list is universal; this document provides specific phrasings and consequences appropriate to the genre.
-
-Example for Symbaroum:
-
-```markdown
-## On failure (2-6), the GM picks one:
-
-- The shadows in the forest remember you now. Something watches from the dark.
-- The corruption wells up — inflict 1 temporary corruption.
-- A witch-hunter's horn sounds in the distance. They've caught your trail.
-- The old magic recoils. An ally is caught in the backlash (injury, fear, condition).
-- A truth about the dead surfaces, unwelcome.
-- The thing you needed is no longer where it was, or is no longer what it was.
-- [universal] Reveal an unwelcome truth or danger.
-- [universal] Separate the character from something valued.
-- [universal] Force a hard choice.
-- [universal] Burn a resource (gear breaks, torch dies, spell slot consumed).
-```
-
-Mark `[universal]` entries that are genre-neutral fallbacks — these come from the engine and every pack inherits them.
+Can be empty. Don't pad.
 
 ---
 
 ## `example_hooks.md`
 
-2-3 example opening hooks showing what the tone feels like at scene level. These are NOT used at runtime; they're reference material for the campaign generator (to calibrate its own hooks) and for pack authors (to verify the pack captures the intended feel).
+2–3 example opening hooks showing what the tone feels like at scene level. 2–3 paragraphs each, ending at a moment of choice. NOT used at runtime; reference material for the campaign generator (to calibrate hook generation) and for pack authors (to verify the pack captures the intended feel).
 
 ---
 
@@ -417,74 +246,87 @@ setting_anchors: [deep_forest, ancient_ruins, forbidden_lore, witch_trials]
 themes_include: [betrayal, legacy, the_cost_of_knowledge]
 themes_exclude: [romance, child_endangerment]
 tone: [grim, mysterious, morally_ambiguous]
-num_acts: 4
-num_npcs: 10
-num_locations: 8
-num_sample_characters: 5
-antagonist_archetypes_preferred: [corrupt_inquisitor, ancient_sorcerer, cult_leader]
+num_npcs: 18
+num_locations: 12
+num_factions: 4
+num_truths: 7
+num_complications: 12
+antagonist_archetypes_preferred:
+  - corrupt_inquisitor
+  - ancient_sorcerer
+  - cult_leader
 ```
+
+Fields:
+
+- `num_truths`: how many atomic campaign truths the generator's truths stage should produce (typical: 5–10).
+- `num_complications`: how many campaign-specific complications the generator should layer on top of the pack's universal complications (typical: 8–15).
+- Removed in v2: `clue_chain_density`, `branch_points`, `num_acts`. The campaign no longer has acts, beats, or clue chains.
 
 ---
 
 ## `naming.yaml` (optional)
 
-Naming-diversity hints consumed by the campaign generator's NPC and location stages. Both lists are optional; the generator falls back to its own genre-agnostic defaults when a list is empty or the file is absent. Provide them when the genre has specific naming/locale conventions that the cross-genre defaults wouldn't honor (a hard-SF pack should not roll "Byzantine Greek with court titles" as its primary register).
+Naming-diversity hints consumed by the campaign generator's NPC and location stages. Both lists are optional; the generator falls back to genre-agnostic defaults when a list is empty or the file is absent.
 
 ```yaml
 naming_registers:
   - "post-Earth creole drift — recognizable Earth roots fused or vowel-shifted across generations (Yuko-Ade, Marisol-7, Jaq, Nnedi-Vance)"
-  - "corporate-bloc surnames — surname is the corp or the corp-issued employee block, given name is normal (Adaeze HelionCorp)"
   - "..."
 district_flavors:
   - "habitation-ring deck levels — gravity falls off the higher you live, and so does respectability"
-  - "ship-breaker yard around a derelict megastructure with families living inside the cooling hulks"
   - "..."
 ```
 
-Per run, the campaign generator picks one primary and one secondary `naming_registers` entry plus one `district_flavors` entry (sampled from the seed's `random_seed`) and injects them into the NPC and location prompts. A short list (5-6 entries) reduces variety; an overly long list (50+) dilutes the LLM's ability to follow any single register convincingly. Aim for 8-14 registers and 8-16 district flavors.
+Per run, the campaign generator picks one primary and one secondary `naming_registers` entry plus one `district_flavors` entry (sampled from the seed's `random_seed`) and injects them into the NPC and location prompts. Aim for 8–14 registers and 8–16 district flavors.
 
 Style:
+
 - Each entry is a one-sentence description specific enough that an LLM, given just that sentence, can sample plausible names or imagine the location archetype.
-- Cover the genre's social spectrum: rich/poor, insider/outsider, the establishment and the people it excludes.
-- For invented-culture registers in fantasy or SF, describe the *pattern* (compound construction, honorific particles, generational markers), not just vibes.
+- Cover the genre's social spectrum.
+- For invented-culture registers, describe the *pattern* (compound construction, honorific particles, generational markers), not just vibes.
 
 ---
 
 ## `REVIEW_CHECKLIST.md`
 
-Generated alongside the pack. A markdown checklist for reviewing a newly-generated pack:
-
-- [ ] Are the six attributes genuinely distinct? Do any two overlap?
-- [ ] Is the tone section specific enough to steer the GM, but not so prescriptive that it forbids improvisation?
-- [ ] Does the ability catalog have variety across categories, or is it lopsided?
-- [ ] Do resource mechanics hook into both character sheet and GM moves?
-- [ ] Does `gm_prompt_overlay.md` reference only attributes/resources/abilities that actually exist in the pack?
-- [ ] Do the example hooks land the tone, or do they feel generic?
-- [ ] Are the exclusion themes specific enough to matter?
-- [ ] (More items added during pack generation based on what the LLM flags as uncertain.)
+Generated alongside the pack. A markdown checklist with items specific to this pack that a reviewer should walk through. Typical sections: tone, adjudication without dice, truths and reveals, content safety, playtest items, pack-generator items.
 
 ---
 
 ## Validation
 
-Tools validate packs on load. Failing validation is a hard error, not a warning. Checks:
+Tools validate packs on load. Failing validation is a hard error. Checks:
 
 - All required files present
-- `schema_version` supported
-- `attributes.yaml` has exactly 6 entries with unique keys
-- `character_template.json` `attributes` keys match `attributes.yaml` keys exactly
-- `character_template.json` `state` includes every required resource from `resources.yaml`
-- `abilities.yaml` categories referenced in `gm_prompt_overlay.md` all exist
-- `abilities.yaml` catalog prerequisites reference real attributes or real ability names
-- `resources.yaml` resources referenced by `abilities.yaml` all exist
-- `generator_seed.yaml` `genre` field matches `pack.yaml` `pack_name`
+- `pack.yaml` `schema_version` is `2`
+- No legacy files present (`attributes.yaml`, `resources.yaml`, `abilities.yaml`, `failure_moves.md`)
+- `character_template.json` contains exactly the v2 keys; no legacy keys
+- `gm_prompt_overlay.md` references the `__pack_complications` and `__pack_reference` lorebook entries by name (the generator embeds them; the overlay should point the GM at them)
+- `gm_prompt_overlay.md` contains every required section header
+- `generator_seed.yaml` `genre` matches `pack.yaml` `pack_name`
+- `generator_seed.yaml` does not contain retired fields (`clue_chain_density`, `branch_points`, `num_acts`)
 
 The validator lives in the campaign generator's codebase (`campaign_generator/pack.py`) and is importable by the pack generator for post-generation validation.
 
 ---
 
+## Migrating a v1 pack to v2
+
+A v1 pack (stat-mode with attributes/resources/abilities) is not auto-migrated. The retirement is intentional: the v2 grammar is different enough that mechanical translation produces unplayable packs. Hand-migrate:
+
+1. Delete `attributes.yaml`, `resources.yaml`, `abilities.yaml`, `failure_moves.md`.
+2. Rewrite `character_template.json` to the v2 shape — translate the character's stats into 2–3 advantages, the character's weaknesses into 1–2 disadvantages, the character's notable gear into `belongings`, and any NPC ties into `relationships`.
+3. Rewrite `gm_prompt_overlay.md`: drop the *resource mechanics* and *ability adjudication* sections; replace with the new *resolving actions* and *translating mechanical pressures* sections. The pack's mechanical levers (corruption, heat, sanity) become accumulating narrative signs.
+4. Convert `failure_moves.md` to `complications.md`. Drop the "(2-6)" / "(7-9)" band labels — complications are now picked by GM judgement of fiction, not roll bands. Add the "success but..." section.
+5. Author `advantages_disadvantages.md` from scratch — there is no v1 equivalent.
+6. Update `generator_seed.yaml`: drop `clue_chain_density`, `branch_points`, `num_acts`; add `num_truths`, `num_complications`, `num_factions`.
+7. Bump `pack.yaml` `schema_version` to `2` and `version` to a major bump.
+
+---
+
 ## Forward compatibility
 
-`schema_version` will be bumped when breaking changes are introduced. Each version number corresponds to a specific shape of this spec. Tools ship with migrations for older versions where feasible; when not feasible, the tool reports exactly which fields are new and suggests additions.
+`schema_version` will be bumped when breaking changes are introduced. Each version corresponds to a specific shape of this spec. Tools ship with migrations where feasible; when not feasible, the tool reports exactly which fields changed and suggests next steps.
 
-The spec is deliberately verbose and rigid because the cost of a loose spec here is cascading drift — the GM prompt references a field the extension doesn't know about, the campaign generator assumes an attribute that the pack renamed, and everything looks fine until session 3. Strict validation up front prevents this.
+The spec is deliberately rigid because the cost of a loose spec is cascading drift — the GM prompt references a section the extension doesn't know about, the campaign generator assumes a field the pack renamed. Strict validation up front prevents this.

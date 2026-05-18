@@ -2,67 +2,66 @@
 
 How the whole system fits together. Start here.
 
+The system is currently **v3 story-mode only.** Earlier revisions described a stat-mode runtime with 2d6 resolution, beats, and node graphs; that design is retired. See each component's CHANGELOG for migration notes.
+
 ---
 
 ## The four-layer architecture
 
-All content in the system falls into one of four layers. Keeping these separate is what lets you switch genres, reuse infrastructure across campaigns, and avoid the drift problems that ruin long LLM-driven campaigns.
+Content falls into four layers. Keeping them separate is what lets you switch genres, reuse infrastructure across campaigns, and avoid the drift problems that ruin long LLM-driven campaigns.
 
 ### Engine layer (genre-agnostic)
 
 Never changes across genres or campaigns. Contents:
 
-- The resolution system: 2d6 + attribute, with three outcome bands (2-6 failure with consequences, 7-9 partial success, 10-12 full success)
-- Dice math: modifier range -1 to +3, attribute count fixed at 6
-- The extension's mechanics: dice rolling, canon detection, Author's Note updates, character sheet management, backup/restore
-- The base GM prompt: formatting rules, when to call for rolls, STATUS_UPDATE protocol, scene structure rules, OOC handling
-- The lorebook keyword-trigger model
-- The three-layer memory model (static world / current situation / compressed history)
+- The base GM prompt (`07_GM_BASE_PROMPT.md`): scene structure rules, NPC format, OOC handling, length cap, "never invent campaign truths."
+- The extension's runtime: per-turn fact extractor, threads ledger, Author's Note composer, pacing function, director's-note injector, inline UI.
+- The lorebook keyword-trigger model (SillyTavern's World Info).
+- The state model: `chatMetadata[solo_ttrpg_story_state]` with facts, threads, scene, truths-revealed, NPCs, director's notes, pressure cue, turn.
+
+There are no dice, no attribute scores, no resource pools, and no closure tags. Resolution is narrative — leaning on the character's advantages and disadvantages and the genre's accumulating signs.
 
 ### Genre layer (genre pack)
 
-Changes per genre. One pack = one genre. Contents:
+Changes per genre. One pack = one genre. v2 contents:
 
-- Attribute names and meanings (always exactly six)
-- Tone directives and thematic pillars
-- GM prompt overlay: genre-specific additions to the base prompt
-- Failure-move flavoring: how GM consequences are described
-- Resource mechanics: corruption (fantasy), sanity (cosmic horror), heat (cyberpunk), oxygen/fuel (SF), etc.
-- Ability categories and starter catalog: magic/witchsight (fantasy), hacking/cyberware (cyberpunk), psionics/piloting (SF)
-- Character sheet template shape (which state fields, which resource fields)
-- Default campaign generator seed (genre-appropriate starting point)
-- Example opening hooks showing the tone in action
+- `pack.yaml` — metadata.
+- `gm_prompt_overlay.md` — tone, archetypes, how to resolve actions, how to translate the genre's signature pressure into prose signs.
+- `complications.md` — genre-flavored narrative complications + a "success but…" list.
+- `advantages_disadvantages.md` — the vocabulary of strengths and weaknesses a character is built from.
+- `character_template.json` — the v2 story-mode sheet shape.
+- `tone.md`, `example_hooks.md`, `naming.yaml`, `generator_seed.yaml`, `REVIEW_CHECKLIST.md`.
 
 See `02_GENRE_PACK_SPEC.md` for the full contract.
 
 ### Campaign layer (per-adventure)
 
-Generated fresh per campaign within a genre. Contents:
+Generated fresh per campaign within a genre. v2 contents:
 
-- The specific premise, plot skeleton, acts
-- Factions and their tensions
-- Named NPCs with motivations and secrets
-- Locations with sensory details
-- A **node graph**: per act, a start node, several optional "points of interest", and a final node. Acts share transition nodes (one act's final = the next act's start). The last act's final node is the campaign victory.
-- A **clue graph**: each clue is a directed edge between two nodes in the same act, anchored at an NPC or location reachable from the source node. No clue→clue chaining.
-- Branch contingencies
-- Initial Author's Note state
-- Opening hook text (the one file you read before play)
+- A premise (title, conflict, tone, thematic pillars).
+- A plot skeleton with 2–4 acts (title + goal) and a 3–5-entry **thematic spine** of escalation themes. No beats.
+- 2–4 factions with goals, methods, internal tensions.
+- An NPC roster with story-mode advantages and optional discovery surfaces.
+- A location catalog with sensory detail and discovery surfaces.
+- An **atomic truth set** (5–10 truths) — the campaign's underlying answer key. The GM never sees the whole set; the extension picks one at a time as a director's note when player threads/facts brush against it.
+- Campaign-specific complications layered on top of the pack's universal complications.
+- Branch contingencies.
+- Sample characters (v2 story-mode shape).
+- The campaign lorebook JSON: constant entries `__pack_gm_overlay`, `__pack_complications`, `__pack_reference`, `__campaign_bible`, `__campaign_truths` (disabled — visible to the extension only), plus keyword-triggered NPC / location / faction entries with tier-2 secret companions.
 
-Generated by the campaign generator (see `03_CAMPAIGN_GENERATOR_BRIEF.md`) using a genre pack. Node-mode is the only supported scenario model; the legacy beat-mode runtime path is no longer wired.
+Generated by the campaign generator (see `03_CAMPAIGN_GENERATOR_BRIEF.md`).
 
 ### Session layer (runtime)
 
-Changes continuously during play. Contents:
+Changes continuously during play. Managed by SillyTavern and the custom extension. Contents:
 
-- Current chat log
-- Author's Note current state (recent beats, active threads, current act)
-- Character sheet current state (HP, resources, conditions, acquired equipment)
-- Summarize extension's running summary
-- Vector storage of past messages
-- Emergent canon entries added during play
+- Chat log.
+- `chatMetadata[solo_ttrpg_story_state]` — facts, threads, scene, truths-revealed, NPCs, director's notes, pressure cue, turn.
+- The Author's Note, regenerated deterministically from state on every turn.
+- The character sheet, injected into the prompt before the AN.
+- The activity log (bounded, 200 entries).
 
-Managed by SillyTavern and the custom extension (see `04_EXTENSION_BRIEF.md`).
+See `04_EXTENSION_BRIEF.md`.
 
 ---
 
@@ -71,17 +70,16 @@ Managed by SillyTavern and the custom extension (see `04_EXTENSION_BRIEF.md`).
 | Component | Type | Where it lives | When it's built |
 |---|---|---|---|
 | Genre pack | Directory of text/YAML files | Local filesystem, fed to generators | Once per genre |
-| Pack generator | Python tool | Local machine | Once, reusable |
-| Campaign generator | Python tool | Local machine | Once, reusable |
-| Image generator | Python tool | Local machine | Once, reusable; runs against any campaign dir |
+| Pack generator | Python tool (`pack_generator/`) | Local machine | Once, reusable |
+| Campaign generator | Python tool (`campaign_generator/`) | Local machine | Once, reusable |
+| Image generator | Python tool (`image_generator/`) | Local machine | Once, reusable; runs against any campaign dir |
 | Campaign lorebook JSON | File | Imported into SillyTavern | Once per campaign |
 | NPC portrait PNGs | Files in `<campaign>/npc_images/` | Attached manually in SillyTavern | Optional, per campaign |
 | Opening hook text | File | Read once, then set aside | Once per campaign |
-| Initial Author's Note | File | Pasted into SillyTavern | Once per campaign |
+| Initial Author's Note | File (turn-0 placeholder) | Pasted into SillyTavern | Once per campaign; overwritten by extension on turn 1 |
 | GM character card | SillyTavern object | Inside SillyTavern | Once, reused across genres (overlay arrives via lorebook) |
 | Lorebook entries | SillyTavern World Info | Inside SillyTavern | From campaign generator output |
-| Built-in extensions | SillyTavern features | Inside SillyTavern | Once, configured per campaign |
-| Custom extension | JavaScript package | SillyTavern extensions folder | Built once, used always |
+| Custom extension | JavaScript package (`solo-ttrpg-assistant/`) | SillyTavern extensions folder | Built once, used always |
 | Chat log | SillyTavern state | Inside SillyTavern | Continuous |
 
 ---
@@ -90,133 +88,69 @@ Managed by SillyTavern and the custom extension (see `04_EXTENSION_BRIEF.md`).
 
 ### Pack creation (once per genre)
 
-1. Write a short genre brief YAML describing the genre's pitch, tone, thematic pillars, attribute flavor, resource flavor, and ability category hints.
-2. Run `python -m pack_generator --brief my_genre_brief.yaml --output genres/my_genre/`. The generator produces a complete pack directory via a pipeline of LLM calls.
-3. Review the output using the pack's auto-generated `REVIEW_CHECKLIST.md`. Edit files as needed — especially the GM prompt overlay and ability catalog, which benefit most from human taste.
-4. The pack is now a first-class artifact on disk, ready to be used for any number of campaigns.
+1. Write a short genre brief YAML (v2 fields: `pressure_flavor`, `advantages_disadvantages_hint`, `complications_hint`).
+2. Run `python -m pack_generator --brief my_brief.yaml --output genres/my_genre/`. The generator runs the ten-stage pipeline and writes a complete pack directory.
+3. Review using the pack's `REVIEW_CHECKLIST.md`. Edit `gm_prompt_overlay.md`, `complications.md`, `advantages_disadvantages.md` to taste.
 
 ### Pack loading into SillyTavern (once per pack)
 
-1. Open SillyTavern. In the custom extension's settings panel, click "Load pack".
-2. The browser opens a directory picker. Select the pack directory (e.g., `genres/my_genre/`).
-3. The extension reads the 5 files it needs (`pack.yaml`, `attributes.yaml`, `resources.yaml`, `abilities.yaml`, `character_template.json`) directly from the directory. It ignores the rest — those are used by the Python generators and by humans, or reach the GM via the campaign lorebook.
-4. The pack persists in the extension's settings across SillyTavern sessions. You only load it once per pack.
-5. Multiple packs can be loaded and cached; one is active. Switch via the settings dropdown.
-
-No bundling, no conversion, no companion server. The pack on disk is the pack the extension uses.
+1. In the extension's settings panel, **Campaign & Pack → Load pack…** opens a directory picker.
+2. The extension reads `pack.yaml`, `character_template.json`, and `advantages_disadvantages.md`. The runtime-injected files (`gm_prompt_overlay.md`, `complications.md`) reach the GM through the campaign lorebook the campaign generator produces.
+3. The pack persists in extension settings across SillyTavern sessions.
 
 ### GM character card setup (once, reused across all genres and campaigns)
 
-The GM is a regular SillyTavern character card you create manually, once. You never generate it from any tool; you never recreate it per campaign.
-
-1. In SillyTavern, create a new character. Name it something neutral like "GM" or "Narrator".
-2. Paste the base GM prompt (from `07_GM_BASE_PROMPT.md`, the prompt block) into the character card's system prompt field.
-3. Leave other fields minimal (optional: a simple first message like "What kind of character are you playing?").
-4. Save.
-
-That's it. The same card is used for every campaign and every genre. The pack-specific tone and mechanics reach the GM through the campaign lorebook (as the `__pack_gm_overlay` and `__pack_failure_moves` constant entries), not through the card itself — so the card never needs editing when you switch genres.
-
-See `07_GM_BASE_PROMPT.md` § "Creating the GM character card" for detail.
+The GM is a regular SillyTavern character card. Paste the v3 base prompt from `07_GM_BASE_PROMPT.md` into its system prompt field. The same card works for every campaign — pack-specific tone arrives through the lorebook.
 
 ### Campaign creation (per campaign)
 
-1. Write a campaign seed YAML — specific themes, regions, antagonist archetypes, content to include/exclude. This is campaign-level choice, not genre-level. See `09_SEED_FORMAT.md` for the full seed format; use `python -m campaign_generator --init-seed my_seed.yaml --genre genres/my_genre/` to get a blank annotated template.
-2. Run `python -m campaign_generator --genre genres/my_genre/ --seed my_seed.yaml --output my_campaign/`. The generator reads the pack for attribute names, tone, and GM overlay, then produces:
-   - `opening_hook.txt` (the only file you read)
-   - `campaign_lorebook.json` (imported into SillyTavern — includes the pack's GM overlay and failure moves as constant entries, plus a `__pack_reference` metadata entry)
-   - `initial_authors_note.txt` (pasted into SillyTavern)
-   - `spoilers/full_campaign.md` (for after-the-fact reference)
-3. Create a new SillyTavern chat with the GM character card (the base GM prompt from `07_GM_BASE_PROMPT.md`; the pack's overlay reaches the GM via the lorebook, so the same character card works across genres). Import the campaign lorebook. Paste the initial Author's Note. Create your character using the pack's attribute and ability structure.
-4. On chat open, the extension reads `__pack_reference` from the lorebook and checks it matches the currently-loaded pack. If they match, proceed. If not, a warning prompts you to load the correct pack.
+1. Write a campaign seed YAML — see `09_SEED_FORMAT.md`. Or scaffold one: `python -m campaign_generator --init-seed my_seed.yaml --genre my_genre`.
+2. Run `python -m campaign_generator --genre genres/my_genre/ --seed my_seed.yaml --output ./campaigns/my_first/`. The generator runs the v2 pipeline (premise → plot → factions → npcs → locations → truths → complications → branches → samples → opening hook → lorebook).
+3. In SillyTavern: create a chat with the GM card. Import the campaign lorebook. Paste the initial AN. Create your character via the extension's Character card.
 
 ### Play loop (continuous)
 
-1. You play, GM narrates, rolls happen via Quick Reply or extension.
-2. GM emits `[STATUS_UPDATE]` blocks when state changes. Extension catches them, proposes sheet updates, you confirm.
-3. Extension detects new proper nouns in GM messages, proposes lorebook entries, you confirm.
-4. Extension periodically proposes Author's Note updates (recent beats, active threads), you confirm.
-5. Summarize extension compresses older chat at natural breakpoints.
-6. At act transitions, you explicitly advance the Current Act lorebook entry via the extension.
-7. At session end, you export a backup bundle.
+1. The player writes; the GM (LLM) responds within the base prompt's rules.
+2. After each GM message the extension's fact extractor reads the prose, proposes facts (with verbatim source quotes), and updates threads, scene context, and NPC state. New facts land as provisional chips beneath the message.
+3. The pacing function computes a pressure cue and may select one campaign truth as the next director's note.
+4. The Author's Note is rebuilt from state.
+5. The player either ignores the chips (they auto-accept on the next turn) or clicks ✗/✎ on any that misfire.
+6. At session end, the player exports a backup bundle via **Campaign & Pack → Export backup…**.
 
 ---
 
-## The resolution system
+## Resolution
 
-All uncertain actions resolve as 2d6 + attribute.
+There are no dice. The GM adjudicates every uncertain action by reading the character's stated advantages and disadvantages against the situation:
 
-- **10-12: Full success.** Intended outcome, possibly with a small bonus at very high rolls.
-- **7-9: Partial success.** Success with a cost, complication, or hard choice.
-- **2-6: Failure with consequences.** Failure and the situation gets worse — GM introduces a complication (not a dead end).
+- Advantage in play, situation favourable → success with a cost.
+- Disadvantage in play, or situation hostile → failure or partial success with a complication from `__pack_complications`.
+- Neutral → commit to whichever outcome makes the next scene more interesting.
 
-Attributes always number six. Values range from -1 to +3 at character creation. Typical spread: one +2, two +1, two +0, one -1.
-
-The six attributes are named and defined by the active genre pack. The engine does not assume what they're called. The GM's and extension's behavior is parameterized on whatever the pack declares.
-
-Rolls happen with real dice (SillyTavern's `/roll 2d6` or the extension's `/rollattr <attribute>`), not by LLM generation, to prevent outcome-biasing.
-
-The GM calls for a roll only when outcome is uncertain AND failure is interesting. The GM does not roll for trivial actions, canon-established outcomes, certain successes, or things that happen to the player without agency.
-
-On failure (2-6), the GM picks a move from the failure-move menu (genre-flavored by the pack) and introduces a complication that advances the fiction. On partial (7-9), the GM offers an explicit trade.
+The genre's accumulating pressure (corruption / heat / sanity / etc.) is described in prose signs, not numbers. The fact extractor picks these up from the prose without the GM having to track anything.
 
 ---
 
 ## Three memory layers
 
-1. **Static world** — lorebook entries (World Info). Injected on keyword match. Some entries are constant (always in context): the campaign bible, the current act.
-2. **Current situation** — Author's Note. Injected at fixed depth (2-4). Beat-mode AN holds Current beat / Next beat / Pending reveals / threads / recent beats / reminders. Node-mode AN holds Reachable nodes / Recently visited / On-screen NPCs / threads / recent scenes / reminders. The character sheet is injected separately by the custom extension when installed.
-3. **Compressed history** — Summarize extension's running summary plus Vector Storage semantic recall of past messages.
+1. **Static world** — lorebook entries (World Info). Injected on keyword match. Constant entries (`__pack_gm_overlay`, `__pack_complications`, `__pack_reference`, `__campaign_bible`) are always in context. `__campaign_truths` is disabled — the extension reads it by comment lookup, never via the GM's keyword scan.
+2. **Current situation** — Author's Note, regenerated from state every turn. Sections: Thematic spine / Live threads / Recent facts / Scene context / On-screen NPCs / Director's notes / Pressure cue / Tone reminders.
+3. **Compressed history** — the chat itself plus SillyTavern's Summarize extension. Facts and threads are persistent; the runtime never needs to summarise them.
 
-Together these give the GM the context it needs without burning the context window on irrelevant history.
-
----
-
-## What the player does during play
-
-Realistically, 85% playing and 15% maintenance:
-
-- **Play the character** — the main thing
-- **Confirm extension suggestions** — status updates, canon additions, Author's Note updates, all require your yes
-- **Advance acts explicitly** — via Quick Reply at the right narrative moment
-- **Edit messages** when GM drifts or breaks character — fast edits beat regenerations because they teach correctness for future messages
-- **Prune context occasionally** — hide old messages captured in summaries
-- **Tune lorebook keywords** — when entries don't fire (too specific) or fire wrongly (keyword collision)
-- **Use OOC** — `[OOC: what does my character know about this?]` is valid and the GM handles it cleanly
-- **Back up at session end** — via the extension's backup command
-
-The extension's job is to reduce maintenance load, not eliminate it. Silent automation on creative state is how campaigns quietly corrupt.
+Together these give the GM the context it needs without burning the window on irrelevant history.
 
 ---
 
 ## Reading order for this bundle
 
-1. `01_SYSTEM_OVERVIEW.md` — this file
-2. `02_GENRE_PACK_SPEC.md` — the pack contract (what every pack must contain)
-3. `03_CAMPAIGN_GENERATOR_BRIEF.md` — Claude Code brief for the campaign generator
-4. `04_EXTENSION_BRIEF.md` — Claude Code brief for the custom SillyTavern extension
-5. `05_PACK_GENERATOR_BRIEF.md` — Claude Code brief for the pack generator tool
-6. `06_PACK_AUTHORING_GUIDE.md` — reference for humans (or LLMs) writing packs by hand
-7. `07_GM_BASE_PROMPT.md` — the engine-level GM system prompt
-8. `08_EXAMPLE_PACK_SYMBAROUM.md` — a complete illustrative pack, the Symbaroum-flavored dark fantasy pack
-9. `09_SEED_FORMAT.md` — the campaign seed format reference (what you write to generate a campaign)
+1. `01_SYSTEM_OVERVIEW.md` — this file.
+2. `02_GENRE_PACK_SPEC.md` — the v2 pack contract.
+3. `03_CAMPAIGN_GENERATOR_BRIEF.md` — design notes for the campaign generator.
+4. `04_EXTENSION_BRIEF.md` — design notes for the SillyTavern extension.
+5. `05_PACK_GENERATOR_BRIEF.md` — design notes for the pack generator.
+6. `06_PACK_AUTHORING_GUIDE.md` — reference for humans (or LLMs) writing packs by hand.
+7. `07_GM_BASE_PROMPT.md` — the engine-level GM system prompt.
+8. `08_EXAMPLE_PACK_SYMBAROUM.md` — pointer to the on-disk Symbaroum pack.
+9. `09_SEED_FORMAT.md` — the campaign seed format reference.
 
-Read 01 and 02 first. Then, depending on what you're building next:
-- Building the extension? Read 04 and 07.
-- Building the campaign generator? Read 03, 02 (for pack schema), and 09 (for seed schema).
-- Building the pack generator? Read 05 and 06.
-- About to generate a campaign? Read 09 to know what to put in your seed.
-- Starting a campaign right now without any tooling? Read 07 and 08, use them as the basis for a hand-built first campaign.
-
----
-
-## Build order recommendation
-
-Don't build everything before playing. The honest priority:
-
-1. **Custom extension §4.1 (character sheet) and §4.2 (dice rolling)** — without these, rolling feels clunky and the sheet drifts. Minimum viable automation.
-2. **A hand-written first pack (Symbaroum)** — use `08_EXAMPLE_PACK_SYMBAROUM.md` as the starting point; edit to taste. You don't need the pack generator for your first genre.
-3. **The campaign generator** — once you've played a few scenes manually and know what you actually want authored vs. improvised.
-4. **Extension §4.3+ (canon detection, AN updates, backup, etc.)** — build these as specific pain points emerge in play.
-5. **The pack generator** — only when you want a second genre. The first pack is worth writing by hand so you understand what's in it.
-
-This order gets you playing in days, not weeks, and every piece of tooling is built against real friction rather than speculative need.
+Read 01 and 02 first. Then jump to whichever brief matches the component you're working on.

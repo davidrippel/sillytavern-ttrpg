@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -11,19 +9,16 @@ import yaml
 from common.pack import load_pack
 
 from .schemas import (
-    AbilityCatalogDraft,
-    AbilityCategoriesDraft,
-    AttributesDraft,
+    AdvantagesDisadvantagesDraft,
+    ComplicationsDraft,
     ExampleHooksDraft,
-    FailureMovesDraft,
     GeneratorSeedDraft,
     GMOverlay,
     NamingDraft,
-    ResourcesDraft,
     ReviewChecklistDraft,
     ToneAndPillars,
+    UNIVERSAL_COMPLICATIONS,
 )
-from .stages.failure_moves import UNIVERSAL_MOVES
 
 
 _BLOCK_SCALAR_THRESHOLD = 80
@@ -50,7 +45,7 @@ def _wrap_long(value: str) -> Any:
 def _unwrap_prose(value: str) -> str:
     """Defensively undo any column wrapping the LLM may have applied.
 
-    Newlines that separate paragraphs (i.e. preceded/followed by another
+    Newlines that separate paragraphs (preceded/followed by another
     newline) are preserved; single newlines inside a paragraph are
     converted to spaces.
     """
@@ -69,7 +64,6 @@ def _unwrap_prose(value: str) -> str:
             paragraph.append(line.strip())
     if paragraph:
         out.append(" ".join(paragraph).strip())
-    # Collapse runs of blank lines.
     cleaned: list[str] = []
     for line in out:
         if line == "" and cleaned and cleaned[-1] == "":
@@ -84,85 +78,6 @@ def _yaml_dump(payload: dict[str, Any]) -> str:
 
 def _yaml_dump_with_blocks(payload: dict[str, Any]) -> str:
     return yaml.dump(payload, sort_keys=False, allow_unicode=True, width=10_000)
-
-
-def render_attributes_yaml(attributes: AttributesDraft) -> str:
-    payload = {
-        "attributes": [
-            {
-                "key": a.key,
-                "display": a.display,
-                "description": _wrap_long(a.description),
-                "examples": list(a.examples),
-            }
-            for a in attributes.attributes
-        ]
-    }
-    return _yaml_dump_with_blocks(payload)
-
-
-def render_resources_yaml(resources: ResourcesDraft) -> str:
-    items: list[dict[str, Any]] = []
-    for r in resources.resources:
-        entry: dict[str, Any] = {"key": r.key, "display": r.display, "kind": r.kind}
-        if r.description is not None:
-            entry["description"] = _wrap_long(r.description)
-        if r.starting_value is not None:
-            entry["starting_value"] = r.starting_value
-        if r.max_value_field:
-            entry["max_value_field"] = r.max_value_field
-        if r.threshold_field:
-            entry["threshold_field"] = r.threshold_field
-        if r.threshold_consequence:
-            entry["threshold_consequence"] = r.threshold_consequence
-        if r.threshold is not None:
-            entry["threshold"] = r.threshold
-        if r.threshold_effect:
-            entry["threshold_effect"] = r.threshold_effect
-        if r.endgame_value is not None:
-            entry["endgame_value"] = r.endgame_value
-        if r.endgame_effect:
-            entry["endgame_effect"] = r.endgame_effect
-        # Preserve any additional fields the LLM included.
-        extras = r.model_dump(exclude_none=True)
-        for key, value in extras.items():
-            if key not in entry:
-                entry[key] = value
-        items.append(entry)
-    return _yaml_dump_with_blocks({"resources": items})
-
-
-def render_abilities_yaml(categories: AbilityCategoriesDraft, catalog: AbilityCatalogDraft) -> str:
-    cat_items: list[dict[str, Any]] = []
-    for c in categories.categories:
-        entry: dict[str, Any] = {
-            "key": c.key,
-            "display": c.display,
-            "description": _wrap_long(c.description),
-            "activation": c.activation,
-        }
-        if c.roll_attribute:
-            entry["roll_attribute"] = c.roll_attribute
-        if c.consequence_on_failure:
-            entry["consequence_on_failure"] = c.consequence_on_failure
-        if c.consequence_on_partial:
-            entry["consequence_on_partial"] = c.consequence_on_partial
-        entry["has_levels"] = c.has_levels
-        if c.has_levels and c.level_names:
-            entry["level_names"] = list(c.level_names)
-        cat_items.append(entry)
-    catalog_items: list[dict[str, Any]] = []
-    for a in catalog.catalog:
-        catalog_items.append(
-            {
-                "name": a.name,
-                "category": a.category,
-                "prerequisite": a.prerequisite or "none",
-                "description": _wrap_long(a.description),
-                "effect": _wrap_long(a.effect),
-            }
-        )
-    return _yaml_dump_with_blocks({"categories": cat_items, "catalog": catalog_items})
 
 
 def render_pack_yaml(metadata: dict[str, Any]) -> str:
@@ -193,14 +108,12 @@ def render_gm_overlay_md(overlay: GMOverlay) -> str:
     sections = [
         ("Setting and tone", overlay.setting_and_tone),
         ("Thematic pillars", overlay.thematic_pillars),
-        ("Attribute guidance", overlay.attribute_guidance),
-        ("Resource mechanics", overlay.resource_mechanics),
-        ("Ability adjudication", overlay.ability_adjudication),
-        ("Genre-specific NPC conventions", overlay.npc_conventions),
+        ("Resolving actions — narrative, no dice", overlay.resolving_actions),
+        ("Translating mechanical pressures into fiction", overlay.translating_pressures),
+        ("NPC conventions", overlay.npc_conventions),
         ("Content to include", overlay.content_to_include),
         ("Content to avoid", overlay.content_to_avoid),
         ("Character creation", overlay.character_creation),
-        ("Story mode play", overlay.story_mode_play),
     ]
     parts: list[str] = []
     for title, body in sections:
@@ -211,24 +124,71 @@ def render_gm_overlay_md(overlay: GMOverlay) -> str:
     return "\n\n".join(parts) + "\n"
 
 
-def render_failure_moves_md(pack_display_name: str, moves: FailureMovesDraft) -> str:
-    lines: list[str] = [f"## {pack_display_name} failure moves (2-6)", ""]
+def render_complications_md(pack_display_name: str, draft: ComplicationsDraft) -> str:
+    lines: list[str] = [f"## {pack_display_name} complications", ""]
     lines.append(
-        "On a failure, the GM chooses one or more from this list. Universal moves from the engine are marked `[universal]`."
+        "When an action goes badly — disadvantage in play, the situation hostile, or a moment of bad luck "
+        "demanded by the fiction — pick one or more from this list. Universal moves from the engine are "
+        "marked `[universal]`. These are narrative consequences, not table rolls."
     )
     lines.append("")
-    for move in moves.moves:
-        body = _unwrap_prose(move.body)
-        lines.append(f"- **{move.title}** {body}")
-    for universal in UNIVERSAL_MOVES:
+    for entry in draft.complications:
+        body = _unwrap_prose(entry.body)
+        lines.append(f"- **{entry.title}** {body}")
+    for universal in UNIVERSAL_COMPLICATIONS:
         lines.append(f"- `[universal]` {universal}")
     lines.append("")
-    lines.append("## Partial success (7-9) trades")
+    lines.append("## When the action succeeds but the world still pushes back")
     lines.append("")
-    lines.append("On a partial, offer the player a choice or impose a clear cost:")
+    lines.append(
+        "A clean win is rare. When an action succeeds, choose a cost that lets the success stand "
+        "but bills the protagonist for it:"
+    )
     lines.append("")
-    for trade in moves.partial_success_trades:
-        lines.append(f"- {_unwrap_prose(trade)}")
+    for cost in draft.success_costs:
+        lines.append(f"- {_unwrap_prose(cost.text)}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_advantages_disadvantages_md(
+    pack_display_name: str, draft: AdvantagesDisadvantagesDraft
+) -> str:
+    lines: list[str] = [
+        f"## Advantages and disadvantages — {pack_display_name} vocabulary",
+        "",
+        (
+            "This document is reference material for the GM (embedded into the lorebook as "
+            "`__pack_reference`), the extension's character-sheet UI (autocomplete), and the "
+            "campaign generator (sample characters). A story-mode character has 2–3 "
+            "advantages and 1–2 disadvantages. Each is a short phrase the GM can recognize "
+            "and lean on. Specific beats generic."
+        ),
+        "",
+        "### Advantages",
+        "",
+    ]
+    for axis in draft.advantage_axes:
+        lines.append(f"**{axis.title}**")
+        lines.append("")
+        for entry in axis.entries:
+            lines.append(f"- {entry}")
+        lines.append("")
+    lines.append("### Disadvantages")
+    lines.append("")
+    for axis in draft.disadvantage_axes:
+        lines.append(f"**{axis.title}**")
+        lines.append("")
+        for entry in axis.entries:
+            lines.append(f"- {entry}")
+        lines.append("")
+    lines.append("### Style")
+    lines.append("")
+    lines.append(
+        "Each entry should name a specific thing the GM can picture (a place, training, mark, "
+        "or debt), be invocable by the player (\"this is in play\"), cut both ways when "
+        "appropriate, and stay grounded in the genre. Players and the campaign generator may "
+        "invent new entries that fit the same shape."
+    )
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -275,15 +235,12 @@ def write_pack_files(
     *,
     output_dir: Path,
     pack_metadata: dict[str, Any],
-    attributes: AttributesDraft,
-    resources: ResourcesDraft,
-    categories: AbilityCategoriesDraft,
-    catalog: AbilityCatalogDraft,
     character_template: dict[str, Any],
     overlay: GMOverlay,
     tone: ToneAndPillars,
     inspirations_text: str | None,
-    failure_moves: FailureMovesDraft,
+    complications: ComplicationsDraft,
+    advantages_disadvantages: AdvantagesDisadvantagesDraft,
     example_hooks: ExampleHooksDraft,
     generator_seed: GeneratorSeedDraft,
     checklist: ReviewChecklistDraft,
@@ -292,16 +249,21 @@ def write_pack_files(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     (output_dir / "pack.yaml").write_text(render_pack_yaml(pack_metadata), encoding="utf-8")
-    (output_dir / "attributes.yaml").write_text(render_attributes_yaml(attributes), encoding="utf-8")
-    (output_dir / "resources.yaml").write_text(render_resources_yaml(resources), encoding="utf-8")
-    (output_dir / "abilities.yaml").write_text(render_abilities_yaml(categories, catalog), encoding="utf-8")
     (output_dir / "character_template.json").write_text(
         render_character_template_json(character_template), encoding="utf-8"
     )
-    (output_dir / "gm_prompt_overlay.md").write_text(render_gm_overlay_md(overlay), encoding="utf-8")
+    (output_dir / "gm_prompt_overlay.md").write_text(
+        render_gm_overlay_md(overlay), encoding="utf-8"
+    )
     (output_dir / "tone.md").write_text(render_tone_md(tone, inspirations_text), encoding="utf-8")
-    (output_dir / "failure_moves.md").write_text(
-        render_failure_moves_md(pack_metadata["display_name"], failure_moves), encoding="utf-8"
+    (output_dir / "complications.md").write_text(
+        render_complications_md(pack_metadata["display_name"], complications), encoding="utf-8"
+    )
+    (output_dir / "advantages_disadvantages.md").write_text(
+        render_advantages_disadvantages_md(
+            pack_metadata["display_name"], advantages_disadvantages
+        ),
+        encoding="utf-8",
     )
     (output_dir / "example_hooks.md").write_text(
         render_example_hooks_md(example_hooks), encoding="utf-8"

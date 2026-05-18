@@ -1,8 +1,0 @@
-{
-  "kind": "event",
-  "description": "Ivara Kelm offers {{user}} the surveyor's lantern as a token of trust \u2014 or a leash. Reading her by candlelight is the test before the descent.",
-  "relevant_npcs": [
-    "Ivara Kelm"
-  ],
-  "relevant_location": "Sunken Watchtower"
-}

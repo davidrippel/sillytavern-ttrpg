@@ -17,12 +17,20 @@ class SeedValidationError(ValueError):
 class StrictnessConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    clue_graph_connectivity: str | None = None
+    truth_adjacency: str | None = None
     npc_voice_diversity: str | None = None
     canon_consistency: str | None = None
 
 
 class CampaignSeed(BaseModel):
+    """Campaign-generator seed (v2 / story-mode).
+
+    The fields ``num_acts``, ``nodes_per_act``, ``clue_chain_density``,
+    and ``branch_points`` from v1 are retired. v2 introduces ``num_truths``
+    and ``num_complications`` and adds ``num_factions`` to the count
+    block.
+    """
+
     model_config = ConfigDict(extra="allow")
 
     genre: str
@@ -37,13 +45,12 @@ class CampaignSeed(BaseModel):
     tone_modifiers: list[str] | None = None
     tone: list[str] | None = None
     image_style_hint: str | None = None
-    num_acts: int | None = None
     num_npcs: int | None = None
     num_locations: int | None = None
+    num_factions: int | None = None
+    num_truths: int | None = None
+    num_complications: int | None = None
     num_sample_characters: int | None = None
-    nodes_per_act: int | None = Field(default=None, ge=3, le=10)
-    clue_chain_density: str | None = None
-    branch_points: int | None = None
     random_seed: int | None = None
     model: str | None = None
     temperature: float | None = None
@@ -66,6 +73,11 @@ class LoadedSeed(BaseModel):
 
 
 KNOWN_SEED_FIELDS = set(CampaignSeed.model_fields)
+
+# Retired v1 fields. If a seed file (or pack defaults) still carries
+# them, we ignore them with a warning rather than failing — the user
+# may be carrying forward a half-migrated pack while they iterate.
+RETIRED_SEED_FIELDS = {"num_acts", "nodes_per_act", "clue_chain_density", "branch_points"}
 
 
 def _read_seed_file(path: Path) -> dict[str, Any]:
@@ -98,16 +110,27 @@ def load_seed(path: str | Path, pack: GenrePack) -> LoadedSeed:
     raw = _read_seed_file(seed_path)
     warnings: list[str] = []
 
-    unknown = sorted(set(raw) - KNOWN_SEED_FIELDS)
+    unknown = sorted(set(raw) - KNOWN_SEED_FIELDS - RETIRED_SEED_FIELDS)
     if unknown:
-        warnings.extend(f"Unknown seed field ignored by schema-aware tooling: {field}" for field in unknown)
+        warnings.extend(f"Unknown seed field ignored: {field}" for field in unknown)
+
+    retired_present = sorted(set(raw) & RETIRED_SEED_FIELDS)
+    if retired_present:
+        warnings.append(
+            f"Retired v1 seed fields ignored: {retired_present}. v2 uses "
+            "num_truths / num_complications / num_factions instead."
+        )
 
     if raw.get("genre") != pack.metadata.pack_name:
         raise SeedValidationError(
             f"seed genre mismatch: expected {pack.metadata.pack_name}, got {raw.get('genre')!r}"
         )
 
-    merged = _merge_seed_defaults(pack.generator_seed_defaults, raw)
+    # Strip retired fields before merging so they don't end up in the
+    # pack defaults' carry-forward.
+    sanitized = {k: v for k, v in raw.items() if k not in RETIRED_SEED_FIELDS}
+    pack_defaults = {k: v for k, v in pack.generator_seed_defaults.items() if k not in RETIRED_SEED_FIELDS}
+    merged = _merge_seed_defaults(pack_defaults, sanitized)
     resolved = CampaignSeed.model_validate(merged)
 
     pack_archetypes = set(pack.generator_seed_defaults.get("antagonist_archetypes_preferred", []))
@@ -119,14 +142,16 @@ def load_seed(path: str | Path, pack: GenrePack) -> LoadedSeed:
             f"{unknown_archetypes}. Pack options: {sorted(pack_archetypes)}"
         )
 
-    if resolved.num_acts is not None and not 3 <= resolved.num_acts <= 6:
-        warnings.append("num_acts is outside the recommended 3-6 range")
-    if resolved.branch_points is not None and not 4 <= resolved.branch_points <= 10:
-        warnings.append("branch_points is outside the recommended 4-10 range")
-    if resolved.num_npcs is not None and not 6 <= resolved.num_npcs <= 15:
-        warnings.append("num_npcs is outside the recommended 6-15 range")
-    if resolved.num_locations is not None and not 5 <= resolved.num_locations <= 12:
-        warnings.append("num_locations is outside the recommended 5-12 range")
+    if resolved.num_npcs is not None and not 6 <= resolved.num_npcs <= 30:
+        warnings.append("num_npcs is outside the recommended 6-30 range")
+    if resolved.num_locations is not None and not 5 <= resolved.num_locations <= 20:
+        warnings.append("num_locations is outside the recommended 5-20 range")
+    if resolved.num_factions is not None and not 2 <= resolved.num_factions <= 6:
+        warnings.append("num_factions is outside the recommended 2-6 range")
+    if resolved.num_truths is not None and not 4 <= resolved.num_truths <= 10:
+        warnings.append("num_truths is outside the recommended 4-10 range")
+    if resolved.num_complications is not None and not 6 <= resolved.num_complications <= 15:
+        warnings.append("num_complications is outside the recommended 6-15 range")
     if resolved.num_sample_characters is not None and not 1 <= resolved.num_sample_characters <= 10:
         warnings.append("num_sample_characters is outside the recommended 1-10 range")
 

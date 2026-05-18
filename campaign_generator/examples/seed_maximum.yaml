@@ -55,17 +55,17 @@ image_style_hint: >
   natural anatomy, cinematic lighting, grounded wardrobe detail,
   no illustration, comic, painting, or sketch look.
 
-num_acts: 4
-num_npcs: 11
-num_locations: 9
-num_sample_characters: 6
-clue_chain_density: heavy
-branch_points: 8
+num_npcs: 18
+num_locations: 12
+num_factions: 4
+num_truths: 7
+num_complications: 12
+num_sample_characters: 5
 random_seed: 44119
 model: anthropic/claude-sonnet-4.5
 temperature: 0.7
 
 strictness:
-  clue_graph_connectivity: strict
+  truth_adjacency: strict
   npc_voice_diversity: strict
   canon_consistency: strict

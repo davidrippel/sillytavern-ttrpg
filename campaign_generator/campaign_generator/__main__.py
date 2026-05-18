@@ -7,10 +7,11 @@ import typer
 from rich.console import Console
 
 from common.env import load_project_dotenv
-from .paths import resolve_genre_input, resolve_output_path
 from common.pack import load_pack
-from .pipeline import run_pipeline
 from common.settings import get_default_model
+
+from .paths import resolve_genre_input, resolve_output_path
+from .pipeline import run_pipeline
 from .seed_template import write_seed_template
 
 load_project_dotenv()
@@ -35,18 +36,10 @@ def main(
     random_seed: int | None = typer.Option(None, "--random-seed"),
     init_seed: Path | None = typer.Option(None, "--init-seed"),
     with_images: bool = typer.Option(False, "--with-images", help="Render NPC portraits after generation."),
-    nodes_mode: bool = typer.Option(
-        False, "--nodes-mode",
-        help="Force node-mode (Alexandrian node-based scenario design). "
-             "This is the default; the flag is for explicitness. Mutually exclusive with --beats-mode.",
-    ),
-    beats_mode: bool = typer.Option(
-        False, "--beats-mode",
-        help="Force the legacy beat-mode (linear acts/beats). Mutually exclusive with --nodes-mode.",
-    ),
     resume: bool = typer.Option(
-        False, "--resume",
-        help="Reuse the existing --output directory and its cached stages instead of creating a fresh sibling (_1, _2, ...).",
+        False,
+        "--resume",
+        help="Reuse the existing --output directory and its cached stages instead of creating a fresh sibling.",
     ),
 ) -> None:
     if init_seed is not None:
@@ -59,16 +52,6 @@ def main(
 
     if genre is None or seed is None:
         raise typer.BadParameter("--genre and --seed are required for generation")
-
-    if nodes_mode and beats_mode:
-        raise typer.BadParameter("--nodes-mode and --beats-mode are mutually exclusive")
-    node_mode_override: bool | None
-    if nodes_mode:
-        node_mode_override = True
-    elif beats_mode:
-        node_mode_override = False
-    else:
-        node_mode_override = None  # pipeline falls through to env var, then default (node-mode)
 
     resolved_genre = resolve_genre_input(genre)
     pack = load_pack(resolved_genre)
@@ -88,7 +71,6 @@ def main(
         random_seed=random_seed,
         stages=stages,
         progress_callback=_progress,
-        node_mode=node_mode_override,
         resume=resume,
     )
     console.print(f"Campaign written to {result.output_dir}")
@@ -98,7 +80,7 @@ def main(
             from image_generator import render_campaign
 
             render_campaign(result.output_dir, progress_callback=_progress)
-        except Exception as exc:  # noqa: BLE001 - image gen failure must not fail campaign gen
+        except Exception as exc:  # noqa: BLE001
             console.print(f"[yellow]Image generation failed: {exc}[/yellow]")
 
 

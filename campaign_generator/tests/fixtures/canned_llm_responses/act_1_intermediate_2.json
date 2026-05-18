@@ -1,8 +1,0 @@
-{
-  "kind": "npc_encounter",
-  "description": "Maelin Voss holds court behind the Waystation bar, offering rumors in trade. He'll talk if {{user}} settles a debt \u2014 or applies pressure.",
-  "relevant_npcs": [
-    "Maelin Voss"
-  ],
-  "relevant_location": "Saint's Rest Waystation"
-}

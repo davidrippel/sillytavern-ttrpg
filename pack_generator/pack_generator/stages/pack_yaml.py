@@ -48,13 +48,15 @@ def build_metadata(brief: GenreBrief, description: PackDescription) -> dict[str,
             cleaned = token.strip().lower().replace(" ", "_").rstrip(".")
             if cleaned:
                 inspirations.append(cleaned)
+    today = date.today().isoformat()
     return {
-        "schema_version": brief.schema_version,
+        "schema_version": brief.schema_version,  # already validated to be 2
         "pack_name": brief.pack_name,
         "display_name": brief.display_name,
-        "version": "1.0.0",
+        "version": "2.0.0",
         "description": description.description,
         "inspirations": inspirations,
-        "created": date.today().isoformat(),
+        "created": today,
+        "updated": today,
         "author": None,
     }

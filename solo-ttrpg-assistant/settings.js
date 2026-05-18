@@ -1,1341 +1,554 @@
+// settings.js — v3 flat settings panel driver.
+//
+// One panel, flat scroll, no nested submenus. Sections are collapsible
+// <details> cards: Campaign, Character, Story, Director, Debug. The
+// panel reads and writes the same `getSettings()` document as before;
+// it just exposes the v3 surface (no stats, no abilities, no dice
+// settings).
+//
+// Per-turn affordances (accept/reject fact, retire thread, open new
+// thread) live in the inline UI under each message — NOT in this
+// panel. The panel is for setup, review, and rare actions.
+
 import { exportBackupBundle, importBackupBundle } from './modules/backup.js';
-import { getStoryStatusForUi } from './modules/authors_note.js';
 import {
-    moveBeatForwardManually,
-    resetCampaignState,
-    revertLastBeatAdvance,
-    revertLastStateChange,
-    canRevertLastAdvance,
-    applyTagsToState,
-} from './modules/closure_tags.js';
-import { isCampaignNodeMode, loadAllNodes, reachableNodes } from './modules/nodes.js';
-import { loadAllClues } from './modules/clue_chains.js';
-import { readStoryState, ensureStoryStateShape } from './modules/util.js';
-import {
-    convertCharacterMode,
     createCharacter,
-    createStoryCharacter,
     deleteCharacter,
     duplicateCharacter,
     getActiveCharacter,
-    getActiveCharacterId,
     listCharacters,
     renameCharacter,
     setActiveCharacter,
-    subscribeCharacterMeta,
     subscribeCharacters,
 } from './modules/characters.js';
-import { executeAbilityRoll, executeAttributeRoll, executeManualRoll } from './modules/dice.js';
-import { getLogs, subscribeLog } from './modules/logger.js';
-import { getActivePack, getLoadedPacks, parsePackFromFiles, runCompatibilityCheck, setActivePack, storeLoadedPack, subscribePack } from './modules/pack.js';
-import { getPersonaLinkInfo, promptPersonaLink, syncPersonaLink } from './modules/persona_link.js';
-import { mountSheet, renderSheet, subscribeSheetState } from './modules/sheet.js';
-import { clearBusy, escapeHtml, formatSignedNumber, getContext, getSettings, isExtensionEnabled, saveSettings, setBusy } from './modules/util.js';
+import { mountSheet } from './modules/sheet.js';
+import { getActivePack, getLoadedPacks, parsePackFromFiles, setActivePack, storeLoadedPack, subscribePack } from './modules/pack.js';
+import { getPersonaLinkInfo, promptPersonaLink } from './modules/persona_link.js';
+import { getLogs, subscribeLog, log } from './modules/logger.js';
+import { renderAuthorsNoteFromState } from './modules/authors_note.js';
+import { rewindToTurn, appendProvisionalFacts, acceptFact } from './modules/facts.js';
+import { openThread, retireThread, listAllActiveThreads } from './modules/threads.js';
+import { refreshAllFactChips, renderThreadsTray } from './modules/inline_ui.js';
 import { getExtensionPath } from './modules/constants.js';
-
-let settingsRoot = null;
-let packInput = null;
-let backupInput = null;
-
-function getCharacterTypeLabel(character) {
-    return (character?.mode ?? 'pack') === 'story' ? 'Story-Based' : 'Stats-Based';
-}
-
-function getCharacterTypeIcon(character) {
-    return (character?.mode ?? 'pack') === 'story' ? '📖' : '📊';
-}
-
-function getAbilityLabel(ability) {
-    if (typeof ability === 'string') {
-        return ability;
-    }
-    if (!ability || typeof ability !== 'object') {
-        return '';
-    }
-    return ability.level ? `${ability.name ?? ''} (${ability.level})` : `${ability.name ?? ''}`;
-}
-
-function getResourceDisplay(character, resource) {
-    const value = character.state?.[resource.key];
-
-    if (resource.kind === 'pool' || resource.kind === 'pool_with_threshold') {
-        const maxKey = resource.max_value_field;
-        const maxValue = maxKey ? character.state?.[maxKey] : resource.threshold_field ? character.state?.[resource.threshold_field] : null;
-        return `${value ?? 0}/${maxValue ?? '?'}`;
-    }
-
-    if (resource.kind === 'toggle') {
-        return value ? 'On' : 'Off';
-    }
-
-    if (resource.kind === 'track' && Array.isArray(value)) {
-        return value.join(', ');
-    }
-
-    return String(value ?? '');
-}
-
-function ensureEnabledControls() {
-    if (!settingsRoot) {
-        return;
-    }
-
-    applyEnabledUiState(isExtensionEnabled());
-}
-
-function applyEnabledUiState(enabled) {
-    if (!settingsRoot) {
-        return;
-    }
-
-    const $root = $(settingsRoot);
-    const $toggle = $root.find('#solo-enabled-toggle');
-
-    $toggle
-        .text(enabled ? 'Active' : 'Paused')
-        .toggleClass('solo-enabled', enabled)
-        .toggleClass('solo-disabled', !enabled)
-        .attr('aria-pressed', enabled ? 'true' : 'false');
-
-    $root.find('.solo-requires-enabled').prop('disabled', !enabled);
-}
-
-function getPackPickerMode() {
-    if (typeof window.showDirectoryPicker === 'function') {
-        return 'directory';
-    }
-
-    if (typeof window.showOpenFilePicker === 'function') {
-        return 'file-handles';
-    }
-
-    return 'file-input';
-}
-
-function configureDirectoryPicker(input) {
-    if (!input) {
-        return;
-    }
-
-    input.setAttribute('webkitdirectory', '');
-    input.setAttribute('directory', '');
-    input.setAttribute('mozdirectory', '');
-    input.setAttribute('accept', '.yaml,.yml,.json');
-    input.multiple = true;
-    input.webkitdirectory = true;
-    input.accept = '.yaml,.yml,.json';
-}
-
-async function readFilesFromDirectoryHandle(handle, relativePath = '') {
-    const files = [];
-
-    for await (const [name, entry] of handle.entries()) {
-        const nextPath = relativePath ? `${relativePath}/${name}` : name;
-
-        if (entry.kind === 'file') {
-            const file = await entry.getFile();
-            files.push(new File([file], file.name, {
-                type: file.type,
-                lastModified: file.lastModified,
-            }));
-            continue;
-        }
-
-        if (entry.kind === 'directory') {
-            files.push(...await readFilesFromDirectoryHandle(entry, nextPath));
-        }
-    }
-
-    return files;
-}
-
-async function openPackPicker() {
-    const mode = getPackPickerMode();
-
-    if (mode === 'directory') {
-        const handle = await window.showDirectoryPicker({ id: 'solo-ttrpg-pack' });
-        return readFilesFromDirectoryHandle(handle);
-    }
-
-    if (mode === 'file-handles') {
-        const handles = await window.showOpenFilePicker({
-            id: 'solo-ttrpg-pack-files',
-            multiple: true,
-            types: [
-                {
-                    description: 'Pack files',
-                    accept: {
-                        'application/json': ['.json'],
-                        'application/x-yaml': ['.yaml', '.yml'],
-                        'text/yaml': ['.yaml', '.yml'],
-                        'text/plain': ['.yaml', '.yml'],
-                    },
-                },
-            ],
-        });
-
-        const files = await Promise.all(handles.map((handle) => handle.getFile()));
-        return files.map((file) => new File([file], file.name, {
-            type: file.type,
-            lastModified: file.lastModified,
-        }));
-    }
-
-    return new Promise((resolve) => {
-        const onChange = (event) => {
-            packInput.removeEventListener('change', onChange);
-            resolve([...(event.target.files ?? [])]);
-        };
-
-        packInput.addEventListener('change', onChange, { once: true });
-        packInput.click();
-    });
-}
-
-function buildCharacterOptionLabel(character) {
-    const base = character.name?.trim() || 'Unnamed character';
-    const icon = getCharacterTypeIcon(character);
-    const type = getCharacterTypeLabel(character);
-    const personaInfo = getPersonaLinkInfo(character);
-    const personaSuffix = personaInfo.linkedName ? ` - ${personaInfo.linkedName}` : '';
-    return `${icon} ${base} - ${type}${personaSuffix}`;
-}
-
-function renderPackSummary() {
-    if (!settingsRoot) {
-        return;
-    }
-
-    const settings = getSettings();
-    const pack = getActivePack();
-    const $root = $(settingsRoot);
-    const $status = $root.find('#solo-pack-status');
-    const $description = $root.find('#solo-pack-description');
-    const $select = $root.find('#solo-pack-select');
-    const $playStatus = $root.find('#solo-play-pack-status');
-    const $playDescription = $root.find('#solo-play-pack-description');
-
-    const packOptions = Object.values(getLoadedPacks())
-        .sort((a, b) => a.displayName.localeCompare(b.displayName))
-        .map((entry) => `<option value="${escapeHtml(entry.name)}"${settings.activePackName === entry.name ? ' selected' : ''}>${escapeHtml(entry.displayName)} (${escapeHtml(entry.version)})</option>`)
-        .join('');
-
-    $select.html(packOptions || '<option value="">No packs loaded</option>');
-
-    if (!pack) {
-        $status.text('No pack loaded');
-        $description.text('Load a pack to unlock the structured sheet, attribute rolls, and status field validation.');
-        $playStatus.text('No pack loaded');
-        $playDescription.text('Load a pack to enable structured rolls and resource tracking.');
-        return;
-    }
-
-    const label = `${pack.displayName} ${pack.version}`;
-    $status.text(label);
-    $description.text(pack.description || 'Pack loaded.');
-    $playStatus.text(label);
-    $playDescription.text(pack.description || 'Pack loaded.');
-}
-
-function renderLogs() {
-    if (!settingsRoot) {
-        return;
-    }
-
-    const html = getLogs().map((entry) => `
-        <div class="solo-log-entry">
-            <div class="solo-row spread">
-                <strong>${escapeHtml(entry.message)}</strong>
-                <span class="solo-muted">${escapeHtml(new Date(entry.timestamp).toLocaleString())}</span>
-            </div>
-            ${entry.details ? `<div class="solo-muted solo-code">${escapeHtml(typeof entry.details === 'string' ? entry.details : JSON.stringify(entry.details, null, 2))}</div>` : ''}
-        </div>
-    `).join('');
-
-    $(settingsRoot).find('#solo-log-root').html(html || '<div class="solo-muted">No activity yet.</div>');
-}
-
-function renderCharacterPicker() {
-    if (!settingsRoot) {
-        return;
-    }
-
-    const $root = $(settingsRoot);
-    const characters = listCharacters();
-    const activeId = getActiveCharacterId();
-    const $selects = $root.find('#solo-character-select, #solo-play-character-select');
-
-    if (characters.length === 0) {
-        $selects.html('<option value="">No characters</option>');
-        return;
-    }
-
-    const options = characters
-        .map((character) => {
-            const selected = character.id === activeId ? ' selected' : '';
-            return `<option value="${escapeHtml(character.id)}"${selected}>${escapeHtml(buildCharacterOptionLabel(character))}</option>`;
-        })
-        .join('');
-    $selects.html(options);
-}
-
-function renderCharacterStatus() {
-    if (!settingsRoot) {
-        return;
-    }
-
-    const character = getActiveCharacter();
-    const typeLabel = getCharacterTypeLabel(character);
-    const typeIcon = getCharacterTypeIcon(character);
-    const isStory = (character?.mode ?? 'pack') === 'story';
-
-    const $root = $(settingsRoot);
-    const $badge = $root.find('#solo-character-type-badge');
-    $badge.text(`${typeIcon} ${typeLabel}`);
-    $badge.toggleClass('solo-badge--story', !!character && isStory);
-    $badge.toggleClass('solo-badge--stats', !!character && !isStory);
-    $root.find('#solo-play-character-type').text(typeLabel);
-    $root.find('#solo-character-convert').prop('disabled', !character);
-}
-
-function renderPlayConditions(character) {
-    const $root = $(settingsRoot).find('#solo-play-conditions');
-    $root.empty();
-
-    if (!character) {
-        return;
-    }
-
-    if ((character.mode ?? 'pack') === 'story') {
-        const strengths = (character.strengths ?? []).filter(Boolean);
-        if (strengths.length > 0) {
-            $root.append(`<div class="solo-stack"><strong>Strengths</strong><div class="solo-pill-list">${strengths.map((value) => `<span class="solo-pill">${escapeHtml(value)}</span>`).join('')}</div></div>`);
-        }
-        if (character.weakness) {
-            $root.append(`<div class="solo-stack"><strong>Weakness</strong><div class="solo-pill-list"><span class="solo-pill">${escapeHtml(character.weakness)}</span></div></div>`);
-        }
-        return;
-    }
-
-    const conditions = Array.isArray(character.state?.conditions) ? character.state.conditions.filter(Boolean) : [];
-    if (conditions.length === 0) {
-        return;
-    }
-
-    $root.append(`<div class="solo-stack"><strong>Conditions</strong><div class="solo-pill-list">${conditions.map((value) => `<span class="solo-pill">${escapeHtml(value)}</span>`).join('')}</div></div>`);
-}
-
-function renderPlayResources(character, pack) {
-    const $root = $(settingsRoot).find('#solo-play-resources');
-    $root.empty();
-
-    if (!character) {
-        $root.html('<div class="solo-muted">No active character.</div>');
-        return;
-    }
-
-    if ((character.mode ?? 'pack') === 'story') {
-        $root.append(`<div class="solo-summary-card"><strong>${escapeHtml(character.name || 'Story-Based Character')}</strong><span class="solo-muted">${escapeHtml(character.description || 'Outcomes resolve narratively. No dice or resource pools are active.')}</span></div>`);
-        return;
-    }
-
-    if (!pack) {
-        const entries = Object.entries(character.state ?? {});
-        if (entries.length === 0) {
-            $root.html('<div class="solo-muted">No state fields yet. Load a pack or edit the sheet to add fields.</div>');
-            return;
-        }
-
-        for (const [key, value] of entries) {
-            const rendered = Array.isArray(value) ? value.join(', ') : String(value ?? '');
-            $root.append(`<div class="solo-summary-card"><strong>${escapeHtml(key)}</strong><span>${escapeHtml(rendered)}</span></div>`);
-        }
-        return;
-    }
-
-    for (const resource of pack.resources) {
-        const value = getResourceDisplay(character, resource);
-        const $card = $(`<div class="solo-summary-card"><strong>${escapeHtml(resource.display)}</strong><span>${escapeHtml(value)}</span></div>`);
-
-        if (resource.kind === 'pool' || resource.kind === 'pool_with_threshold') {
-            const maxKey = resource.max_value_field ?? resource.threshold_field;
-            const maxValue = Number(character.state?.[maxKey] ?? 0) || 0;
-            const currentValue = Number(character.state?.[resource.key] ?? 0) || 0;
-            const ratio = maxValue > 0 ? Math.min(100, Math.max(0, (currentValue / maxValue) * 100)) : 0;
-            $card.append(`<div class="solo-progress"><span style="width:${ratio}%"></span></div>`);
-        }
-
-        $root.append($card);
-    }
-}
-
-function renderPlayRolls(character, pack) {
-    const $rolls = $(settingsRoot).find('#solo-play-rolls');
-    const $abilitySelect = $(settingsRoot).find('#solo-play-ability-select');
-    const $abilityButton = $(settingsRoot).find('#solo-play-ability-roll');
-    const $manualButton = $(settingsRoot).find('#solo-play-manual-roll');
-    const $storyNote = $(settingsRoot).find('#solo-play-story-note');
-
-    $rolls.empty();
-    $storyNote.text('');
-
-    if (!character) {
-        $rolls.html('<div class="solo-muted">No active character.</div>');
-        $abilitySelect.html('<option value="">No abilities</option>').prop('disabled', true);
-        $abilityButton.prop('disabled', true);
-        $manualButton.prop('disabled', true);
-        return;
-    }
-
-    if ((character.mode ?? 'pack') === 'story') {
-        $rolls.html('<div class="solo-muted">Story-based characters resolve outcomes narratively.</div>');
-        $abilitySelect.html('<option value="">No abilities</option>').prop('disabled', true);
-        $abilityButton.prop('disabled', true);
-        $manualButton.prop('disabled', true);
-        $storyNote.text('Story-based characters do not use attribute or ability rolls.');
-        return;
-    }
-
-    $manualButton.prop('disabled', !isExtensionEnabled());
-
-    if (!pack) {
-        $rolls.html('<div class="solo-muted">Load a pack to enable attribute rolls.</div>');
-        $abilitySelect.html('<option value="">No abilities</option>').prop('disabled', true);
-        $abilityButton.prop('disabled', true);
-        $storyNote.text('Manual rolls are still available without a pack.');
-        return;
-    }
-
-    for (const attribute of pack.attributes) {
-        const modifier = Number(character.attributes?.[attribute.key] ?? 0);
-        const $button = $(`<button class="menu_button solo-requires-enabled" type="button">${escapeHtml(attribute.display)} ${escapeHtml(formatSignedNumber(modifier))}</button>`);
-        $button.on('click', () => executeAttributeRoll(attribute.key).catch((error) => toastr.error(error.message)));
-        $rolls.append($button);
-    }
-
-    const abilities = (character.abilities ?? [])
-        .map((ability) => ({ value: typeof ability === 'string' ? ability : String(ability?.name ?? ''), label: getAbilityLabel(ability) }))
-        .filter((ability) => ability.value);
-
-    if (abilities.length === 0) {
-        $abilitySelect.html('<option value="">No abilities on sheet</option>').prop('disabled', true);
-        $abilityButton.prop('disabled', true);
-        return;
-    }
-
-    $abilitySelect.html(abilities.map((ability) => `<option value="${escapeHtml(ability.value)}">${escapeHtml(ability.label)}</option>`).join(''));
-    $abilitySelect.prop('disabled', !isExtensionEnabled());
-    $abilityButton.prop('disabled', !isExtensionEnabled());
-}
-
-function renderPersonaSummary() {
-    if (!settingsRoot) {
-        return;
-    }
-
-    const character = getActiveCharacter();
-    const info = getPersonaLinkInfo(character);
-    $(settingsRoot).find('#solo-play-persona-state').text(info.label);
-    $(settingsRoot).find('#solo-play-persona-meta').text(info.detail);
-}
-
-function renderPlayDashboard() {
-    if (!settingsRoot) {
-        return;
-    }
-
-    const character = getActiveCharacter();
-    const pack = getActivePack();
-    renderPersonaSummary();
-    renderCharacterStatus();
-    renderPlayResources(character, pack);
-    renderPlayConditions(character);
-    renderPlayRolls(character, pack);
-    ensureEnabledControls();
-}
-
-async function handlePackInput(event) {
-    if (!isExtensionEnabled()) {
-        event.target.value = '';
-        return;
-    }
-
-    const files = [...(event.target.files ?? [])];
-    if (files.length === 0) {
-        return;
-    }
-
-    const $button = $(settingsRoot).find('#solo-pack-load');
-    setBusy($button, 'Loading...');
-
-    try {
-        const pack = await parsePackFromFiles(files);
-        await storeLoadedPack(pack);
-        renderPackSummary();
-        renderPlayDashboard();
-        await runCompatibilityCheck({ interactive: true });
-        toastr.success(`Loaded pack ${pack.displayName}.`);
-    } catch (error) {
-        toastr.error(error.message);
-    } finally {
-        clearBusy($button);
-        event.target.value = '';
-    }
-}
-
-async function handlePackLoadClick() {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const $button = $(settingsRoot).find('#solo-pack-load');
-    setBusy($button, 'Loading...');
-
-    try {
-        const pickerMode = getPackPickerMode();
-        if (pickerMode !== 'directory') {
-            toastr.info('This browser is not exposing a folder picker here. Select the 5 required pack files: pack.yaml, attributes.yaml, resources.yaml, abilities.yaml, and character_template.json.');
-        }
-
-        const files = await openPackPicker();
-        if (!files || files.length === 0) {
-            return;
-        }
-
-        const pack = await parsePackFromFiles(files);
-        await storeLoadedPack(pack);
-        renderPackSummary();
-        renderPlayDashboard();
-        await runCompatibilityCheck({ interactive: true });
-        toastr.success(`Loaded pack ${pack.displayName}.`);
-    } catch (error) {
-        if (error?.name !== 'AbortError') {
-            toastr.error(error.message);
-        }
-    } finally {
-        clearBusy($button);
-        if (packInput) {
-            packInput.value = '';
-        }
-    }
-}
-
-async function handleCharacterSwitch(event) {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const id = event.target.value;
-    if (!id) {
-        return;
-    }
-
-    try {
-        await setActiveCharacter(id);
-    } catch (error) {
-        toastr.error(error.message);
-    }
-}
-
-async function handleCharacterNew() {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const context = getContext();
-    const wrapper = document.createElement('div');
-    wrapper.className = 'solo-ttrpg-assistant solo-stack';
-
-    const intro = document.createElement('p');
-    intro.textContent = 'Choose a character type. You can convert later, but conversion is lossy.';
-    wrapper.append(intro);
-
-    const label = document.createElement('label');
-    label.className = 'solo-stack';
-    const labelText = document.createElement('span');
-    labelText.textContent = 'Type';
-    label.append(labelText);
-
-    const select = document.createElement('select');
-    select.className = 'text_pole wide100p';
-    const statsOpt = document.createElement('option');
-    statsOpt.value = 'pack';
-    statsOpt.textContent = '📊 Stats-Based — attributes, abilities, equipment (uses active pack)';
-    statsOpt.selected = true;
-    select.append(statsOpt);
-    const storyOpt = document.createElement('option');
-    storyOpt.value = 'story';
-    storyOpt.textContent = '📖 Story-Based — description, strengths, weakness (no pack required)';
-    select.append(storyOpt);
-    label.append(select);
-    wrapper.append(label);
-
-    let chosenType = 'pack';
-    select.addEventListener('change', () => {
-        chosenType = select.value === 'story' ? 'story' : 'pack';
-    });
-
-    const popup = new context.Popup(wrapper, context.POPUP_TYPE.CONFIRM, '', {
-        okButton: 'Create',
-        cancelButton: 'Cancel',
-    });
-    const result = await popup.show();
-    if (result !== context.POPUP_RESULT.AFFIRMATIVE) {
-        return;
-    }
-
-    if (chosenType === 'story') {
-        createStoryCharacter({ name: '' });
-    } else {
-        const settings = getSettings();
-        createCharacter({ name: '', packName: settings.activePackName ?? null });
-    }
-}
-
-async function handleCharacterConvert() {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const active = getActiveCharacter();
-    if (!active) {
-        toastr.info('Select a character first.');
-        return;
-    }
-
-    const currentMode = (active.mode ?? 'pack') === 'story' ? 'story' : 'pack';
-    const nextMode = currentMode === 'story' ? 'pack' : 'story';
-    const nextLabel = nextMode === 'story' ? 'Story-Based' : 'Stats-Based';
-    const lossDescription = nextMode === 'story'
-        ? 'attributes, abilities, equipment, and conditions'
-        : 'strengths and weakness';
-
-    const context = getContext();
-    const confirmed = await context.Popup.show.confirm(
-        `Convert "${active.name || 'Unnamed character'}" to ${nextLabel}?`,
-        `This will discard ${lossDescription}. Description and notes are preserved.\n\nThis cannot be undone.`,
-    );
-    if (confirmed !== context.POPUP_RESULT.AFFIRMATIVE) {
-        return;
-    }
-
-    try {
-        convertCharacterMode(active.id, nextMode);
-        renderPlayDashboard();
-        toastr.success(`Character converted to ${nextLabel}.`);
-    } catch (error) {
-        toastr.error(error.message);
-    }
-}
-
-async function handleCharacterRename() {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const active = getActiveCharacter();
-    if (!active) {
-        return;
-    }
-
-    const nextName = await getContext().Popup.show.input('Rename Character', 'Enter a new name:', active.name ?? '');
-    if (nextName === null) {
-        return;
-    }
-
-    renameCharacter(active.id, nextName.trim());
-}
-
-function buildSelectionStep(characters, prevSelected) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'solo-ttrpg-assistant solo-stack';
-
-    const heading = document.createElement('h4');
-    heading.textContent = 'Select characters to import';
-    wrapper.append(heading);
-
-    const hint = document.createElement('p');
-    hint.textContent = `${characters.length} sample character${characters.length === 1 ? '' : 's'} found. Choose which to import.`;
-    wrapper.append(hint);
-
-    const list = document.createElement('div');
-    list.className = 'solo-stack';
-    list.style.maxHeight = '60vh';
-    list.style.overflowY = 'auto';
-    list.style.paddingRight = '8px';
-
-    const checkboxes = characters.map((sample, idx) => {
-        const archetype = sample?.archetype ?? 'Sample character';
-        const row = document.createElement('div');
-        row.className = 'solo-stack';
-        row.style.padding = '6px 0';
-        row.style.borderBottom = '1px solid var(--SmartThemeBorderColor, rgba(255,255,255,0.1))';
-        row.style.cursor = 'pointer';
-
-        const top = document.createElement('div');
-        top.style.display = 'flex';
-        top.style.alignItems = 'center';
-        top.style.gap = '8px';
-
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = prevSelected ? prevSelected.has(idx) : true;
-        cb.dataset.idx = String(idx);
-
-        const title = document.createElement('strong');
-        title.textContent = archetype;
-        title.style.cursor = 'pointer';
-
-        top.append(cb, title);
-        row.append(top);
-
-        title.addEventListener('click', (e) => {
-            e.preventDefault();
-            cb.checked = !cb.checked;
-        });
-
-        if (sample?.hook_into_campaign) {
-            const hook = document.createElement('div');
-            hook.textContent = sample.hook_into_campaign;
-            hook.style.opacity = '0.8';
-            hook.style.marginLeft = '24px';
-            hook.style.fontSize = '0.9em';
-            row.append(hook);
-        }
-
-        list.append(row);
-        return cb;
-    });
-
-    wrapper.append(list);
-
-    return {
-        wrapper,
-        getSelected: () => new Set(checkboxes.filter((cb) => cb.checked).map((cb) => Number(cb.dataset.idx))),
-    };
-}
-
-function buildModeStep(characters, selected, prevModes) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'solo-ttrpg-assistant solo-stack';
-
-    const heading = document.createElement('h4');
-    heading.textContent = 'Choose import mode';
-    wrapper.append(heading);
-
-    const hint = document.createElement('p');
-    hint.textContent = 'Pick how each character should be imported.';
-    wrapper.append(hint);
-
-    const list = document.createElement('div');
-    list.className = 'solo-stack';
-    list.style.maxHeight = '60vh';
-    list.style.overflowY = 'auto';
-    list.style.paddingRight = '8px';
-
-    const modeByIdx = new Map();
-
-    for (const idx of [...selected].sort((a, b) => a - b)) {
-        const sample = characters[idx];
-        const archetype = sample?.archetype ?? 'Sample character';
-        const hasStory = !!sample?.story;
-        const hasStats = !!sample?.pack;
-
-        const row = document.createElement('div');
-        row.className = 'solo-stack';
-        row.style.padding = '6px 0';
-        row.style.borderBottom = '1px solid var(--SmartThemeBorderColor, rgba(255,255,255,0.1))';
-
-        const title = document.createElement('strong');
-        title.textContent = archetype;
-        row.append(title);
-
-        if (sample?.hook_into_campaign) {
-            const hook = document.createElement('div');
-            hook.textContent = sample.hook_into_campaign;
-            hook.style.opacity = '0.8';
-            hook.style.fontSize = '0.9em';
-            row.append(hook);
-        }
-
-        const select = document.createElement('select');
-        select.className = 'text_pole wide100p';
-        if (hasStats) {
-            const opt = document.createElement('option');
-            opt.value = 'stats';
-            opt.textContent = '📊 Stats-Based character';
-            select.append(opt);
-        }
-        if (hasStory) {
-            const opt = document.createElement('option');
-            opt.value = 'story';
-            opt.textContent = '📖 Story-Based character';
-            select.append(opt);
-        }
-        const prev = prevModes?.get(idx);
-        if (prev && [...select.options].some((o) => o.value === prev)) {
-            select.value = prev;
-        }
-        modeByIdx.set(idx, select.value);
-        select.addEventListener('change', () => modeByIdx.set(idx, select.value));
-
-        row.append(select);
-        list.append(row);
-    }
-
-    wrapper.append(list);
-
-    return {
-        wrapper,
-        getModes: () => new Map(modeByIdx),
-    };
-}
-
-function importSampleCharacter(sample, mode, activePackName) {
-    const archetype = sample?.archetype ?? 'Sample character';
-    if (mode === 'story' && sample?.story) {
-        createStoryCharacter({
-            name: sample.story.name ?? archetype,
-            description: sample.story.description ?? '',
-            strengths: sample.story.strengths ?? [],
-            weakness: sample.story.weakness ?? '',
-        });
-        return true;
-    }
-    if ((mode === 'stats' || mode === 'pack') && sample?.pack) {
-        const created = createCharacter({
-            name: sample.pack.name ?? archetype,
-            packName: activePackName,
-        });
-        created.concept = sample.pack.concept ?? created.concept ?? '';
-        if (sample.pack.attributes && typeof sample.pack.attributes === 'object') {
-            created.attributes = { ...(created.attributes ?? {}), ...sample.pack.attributes };
-        }
-        if (Array.isArray(sample.pack.abilities)) {
-            created.abilities = sample.pack.abilities.slice();
-        }
-        if (Array.isArray(sample.pack.equipment)) {
-            created.equipment = sample.pack.equipment.slice();
-        }
-        if (sample.pack.notes) {
-            created.notes = sample.pack.notes;
-        }
-        return true;
-    }
-    return false;
-}
-
-async function handleCharacterImportSamples(event) {
-    if (!isExtensionEnabled()) {
-        event.target.value = '';
-        return;
-    }
-
-    const [file] = event.target.files ?? [];
-    if (!file) {
-        return;
-    }
-
-    try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        const characters = Array.isArray(data?.characters) ? data.characters : [];
-        if (characters.length === 0) {
-            toastr.warning('No characters found in this file.');
-            return;
-        }
-
-        const context = getContext();
-        const settings = getSettings();
-        const activePackName = settings.activePackName ?? data.pack_name ?? null;
-
-        let selected = null;
-        let modes = null;
-
-        // Step 1: select which characters
-        while (true) {
-            const step1 = buildSelectionStep(characters, selected);
-            const popup1 = new context.Popup(step1.wrapper, context.POPUP_TYPE.CONFIRM, '', {
-                okButton: 'Next',
-                cancelButton: 'Cancel',
-            });
-            const r1 = await popup1.show();
-            if (r1 !== context.POPUP_RESULT.AFFIRMATIVE) {
-                return;
-            }
-            selected = step1.getSelected();
-            if (selected.size === 0) {
-                toastr.info('Select at least one character to continue.');
-                continue;
-            }
-
-            // Skip step 2 if no character has both shapes available
-            const needsModeChoice = [...selected].some((idx) => {
-                const s = characters[idx];
-                return !!s?.story && !!s?.pack;
-            });
-
-            if (!needsModeChoice) {
-                modes = new Map();
-                for (const idx of selected) {
-                    const s = characters[idx];
-                    modes.set(idx, s?.pack ? 'stats' : 'story');
-                }
-                break;
-            }
-
-            // Step 2: choose mode per selected character
-            const step2 = buildModeStep(characters, selected, modes);
-            const popup2 = new context.Popup(step2.wrapper, context.POPUP_TYPE.CONFIRM, '', {
-                okButton: 'Import',
-                cancelButton: 'Back',
-            });
-            const r2 = await popup2.show();
-            if (r2 === context.POPUP_RESULT.AFFIRMATIVE) {
-                modes = step2.getModes();
-                break;
-            }
-            // Back: loop to step 1, preserve selection + modes
-            modes = step2.getModes();
-        }
-
-        let imported = 0;
-        for (const idx of [...selected].sort((a, b) => a - b)) {
-            const sample = characters[idx];
-            const mode = modes.get(idx);
-            if (importSampleCharacter(sample, mode, activePackName)) {
-                imported += 1;
-            }
-        }
-        if (imported > 0) {
-            saveSettings();
-        }
-
-        toastr.success(`Imported ${imported} character${imported === 1 ? '' : 's'}.`);
-    } catch (error) {
-        toastr.error(`Failed to import samples: ${error.message}`);
-    } finally {
-        event.target.value = '';
-    }
-}
-
-function handleCharacterDuplicate() {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const id = getActiveCharacterId();
-    if (!id) {
-        toastr.info('Create a character first.');
-        return;
-    }
-
-    duplicateCharacter(id);
-}
-
-async function handleCharacterDelete() {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const active = getActiveCharacter();
-    if (!active) {
-        return;
-    }
-
-    const context = getContext();
-    const confirmed = await context.Popup.show.confirm('Delete Character', `Delete "${active.name || 'Unnamed character'}"? This cannot be undone.`);
-    if (confirmed !== context.POPUP_RESULT.AFFIRMATIVE) {
-        return;
-    }
-
-    try {
-        deleteCharacter(active.id);
-    } catch (error) {
-        toastr.error(error.message);
-    }
-}
-
-async function handlePackSwitch(event) {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const value = event.target.value;
-    if (!value) {
-        return;
-    }
-
-    try {
-        await setActivePack(value);
-        renderPackSummary();
-        renderPlayDashboard();
-        await runCompatibilityCheck({ interactive: true });
-    } catch (error) {
-        toastr.error(error.message);
-    }
-}
-
-async function handleBackupImport(event) {
-    if (!isExtensionEnabled()) {
-        event.target.value = '';
-        return;
-    }
-
-    const [file] = event.target.files ?? [];
-    if (!file) {
-        return;
-    }
-
-    try {
-        await importBackupBundle(file);
-        toastr.success('Backup imported.');
-        renderPackSummary();
-        renderPlayDashboard();
-    } catch (error) {
-        toastr.error(error.message);
-    } finally {
-        event.target.value = '';
-    }
-}
-
-function handleEnabledToggle(event) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const nextEnabled = !isExtensionEnabled();
-    const settings = getSettings();
-    settings.enabled = nextEnabled;
-    applyEnabledUiState(nextEnabled);
-    saveSettings();
-    renderSheet();
-    renderPlayDashboard();
-}
-
-async function handlePlayManualRoll() {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const value = await getContext().Popup.show.input('Manual Roll', 'Enter a modifier for a 2d6 roll.', '0');
-    if (value === null) {
-        return;
-    }
-
-    const modifier = Number(value);
-    if (!Number.isFinite(modifier)) {
-        toastr.error('Modifier must be a number.');
-        return;
-    }
-
-    try {
-        await executeManualRoll(modifier);
-    } catch (error) {
-        toastr.error(error.message);
-    }
-}
-
-async function handlePlayAbilityRoll() {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const abilityName = $(settingsRoot).find('#solo-play-ability-select').val();
-    if (!abilityName) {
-        return;
-    }
-
-    try {
-        await executeAbilityRoll(String(abilityName));
-    } catch (error) {
-        toastr.error(error.message);
-    }
-}
-
-async function handlePersonaChange() {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const character = getActiveCharacter();
-    if (!character) {
-        return;
-    }
-
-    try {
-        await promptPersonaLink(character);
-    } catch (error) {
-        toastr.error(error.message);
-    }
-}
-
-async function handlePersonaSync() {
-    if (!isExtensionEnabled()) {
-        return;
-    }
-
-    const character = getActiveCharacter();
-    if (!character) {
-        return;
-    }
-
-    try {
-        await syncPersonaLink(character);
-        renderPersonaSummary();
-    } catch (error) {
-        toastr.error(error.message);
-    }
-}
+import {
+    ensureStoryStateShape,
+    escapeHtml,
+    freshStoryState,
+    getContext,
+    getSettings,
+    isExtensionEnabled,
+    newCharacterId,
+    readStoryState,
+    saveSettings,
+    writeStoryState,
+} from './modules/util.js';
+
+let panelRoot = null;
+let packFilesInput = null;
+let backupFilesInput = null;
+let sampleFilesInput = null;
 
 export async function mountSettingsPanel() {
     const context = getContext();
     const html = await context.renderExtensionTemplateAsync(getExtensionPath(), 'ui/settings_panel');
     $('#extensions_settings2 .solo-ttrpg-assistant').remove();
     $('#extensions_settings2').append(html);
+    panelRoot = $('#extensions_settings2 #solo-ttrpg-panel').last();
+    if (panelRoot.length === 0) return;
 
-    settingsRoot = $('#extensions_settings2 .solo-ttrpg-assistant').last().get(0);
-    packInput = $(settingsRoot).find('#solo-pack-input').get(0);
-    backupInput = $(settingsRoot).find('#solo-backup-input').get(0);
-    configureDirectoryPicker(packInput);
+    packFilesInput = panelRoot.find('#solo-pack-files').get(0);
+    backupFilesInput = panelRoot.find('#solo-backup-file').get(0);
+    sampleFilesInput = panelRoot.find('#solo-sample-file').get(0);
+    configureDirectoryPicker(packFilesInput);
 
-    $(settingsRoot).on('click', '#solo-enabled-toggle', handleEnabledToggle);
-    $(settingsRoot).find('#solo-pack-load').on('click', () => handlePackLoadClick());
-    $(settingsRoot).find('#solo-pack-reload').on('click', () => handlePackLoadClick());
-    $(settingsRoot).find('#solo-pack-select').on('change', handlePackSwitch);
-    $(packInput).on('change', handlePackInput);
+    wireToggles();
+    wireCampaignCard();
+    wireCharacterCard();
+    wireStoryCard();
+    wireDirectorCard();
+    wireDebugCard();
 
-    const samplesInput = $(settingsRoot).find('#solo-character-samples-input').get(0);
+    mountSheet(panelRoot.find('#solo-sheet-root'));
+    refreshAll();
 
-    $(settingsRoot).find('#solo-character-select, #solo-play-character-select').on('change', handleCharacterSwitch);
-    $(settingsRoot).find('#solo-character-new').on('click', () => handleCharacterNew().catch((error) => toastr.error(error.message)));
-    $(settingsRoot).find('#solo-character-convert').on('click', () => handleCharacterConvert().catch((error) => toastr.error(error.message)));
-    $(settingsRoot).find('#solo-character-rename').on('click', () => handleCharacterRename().catch((error) => toastr.error(error.message)));
-    $(settingsRoot).find('#solo-character-duplicate').on('click', handleCharacterDuplicate);
-    $(settingsRoot).find('#solo-character-delete').on('click', () => handleCharacterDelete().catch((error) => toastr.error(error.message)));
-    $(settingsRoot).find('#solo-character-import-samples').on('click', () => samplesInput?.click());
-    $(samplesInput).on('change', handleCharacterImportSamples);
+    subscribePack(refreshAll);
+    subscribeCharacters(refreshAll);
+    subscribeLog(refreshLogPane);
 
-    $(settingsRoot).find('#solo-play-persona-change').on('click', () => handlePersonaChange().catch((error) => toastr.error(error.message)));
-    $(settingsRoot).find('#solo-play-persona-sync').on('click', () => handlePersonaSync().catch((error) => toastr.error(error.message)));
-    $(settingsRoot).find('#solo-play-manual-roll').on('click', () => handlePlayManualRoll().catch((error) => toastr.error(error.message)));
-    $(settingsRoot).find('#solo-play-ability-roll').on('click', () => handlePlayAbilityRoll().catch((error) => toastr.error(error.message)));
-
-    $(settingsRoot).find('#solo-backup-export').on('click', () => exportBackupBundle().catch((error) => toastr.error(error.message)));
-    $(settingsRoot).find('#solo-backup-import').on('click', () => backupInput.click());
-    $(backupInput).on('change', handleBackupImport);
-
-    async function handleMovePlotForward() {
-        try {
-            if (await isCampaignNodeMode()) {
-                await openNodePickerPopup();
-                await refreshStoryStatusRow();
-                return;
-            }
-            await moveBeatForwardManually();
-            toastr.info('Plot nudged forward.', 'Solo TTRPG Assistant', { timeOut: 2000 });
-            await refreshStoryStatusRow();
-        } catch (error) {
-            toastr.error(error.message);
-        }
+    // Story state changes happen frequently (every turn); re-render the
+    // story card on a light cadence by listening to chat events.
+    const ctxEvents = context.eventTypes ?? {};
+    const refreshEvents = [
+        ctxEvents.MESSAGE_RECEIVED,
+        ctxEvents.MESSAGE_SENT,
+        ctxEvents.CHAT_CHANGED,
+    ].filter(Boolean);
+    for (const evt of refreshEvents) {
+        context.eventSource.on(evt, () => refreshStoryCard());
     }
-    $(settingsRoot).find('#solo-move-plot-forward, #solo-play-move-plot-forward').on('click', handleMovePlotForward);
+}
 
-    async function handleMovePlotBack() {
-        try {
-            const inNodeMode = await isCampaignNodeMode();
-            const ok = inNodeMode ? await revertLastStateChange() : await revertLastBeatAdvance();
-            if (ok) {
-                toastr.info(inNodeMode ? 'Last state change undone.' : 'Plot stepped back.', 'Solo TTRPG Assistant', { timeOut: 2000 });
-                await refreshStoryStatusRow();
-            } else {
-                toastr.warning('Nothing to revert.', 'Solo TTRPG Assistant', { timeOut: 2000 });
-            }
-        } catch (error) {
-            toastr.error(error.message);
-        }
+function configureDirectoryPicker(input) {
+    if (!input) return;
+    input.setAttribute('webkitdirectory', '');
+    input.setAttribute('directory', '');
+    input.setAttribute('multiple', '');
+}
+
+function refreshAll() {
+    refreshHeader();
+    refreshCampaignCard();
+    refreshCharacterCard();
+    refreshStoryCard();
+    refreshDirectorCard();
+    refreshLogPane();
+}
+
+// ---- Header / enabled --------------------------------------------------
+
+function wireToggles() {
+    panelRoot.find('#solo-enabled').on('change', (e) => {
+        getSettings().enabled = Boolean(e.target.checked);
+        saveSettings();
+        toastr.info(getSettings().enabled ? 'Solo TTRPG enabled.' : 'Solo TTRPG disabled.');
+    });
+}
+
+function refreshHeader() {
+    panelRoot.find('#solo-enabled').prop('checked', isExtensionEnabled());
+    const pack = getActivePack();
+    panelRoot.find('#solo-active-pack-label').text(pack ? `Pack: ${pack.displayName} v${pack.version}` : 'No pack loaded');
+}
+
+// ---- Campaign card -----------------------------------------------------
+
+function wireCampaignCard() {
+    panelRoot.find('#solo-pack-load').on('click', () => packFilesInput?.click());
+    $(packFilesInput).on('change', handlePackLoad);
+    panelRoot.find('#solo-pack-select').on('change', handlePackSwitch);
+    panelRoot.find('#solo-backup-export').on('click', () => exportBackupBundle().catch((e) => toastr.error(e.message)));
+    panelRoot.find('#solo-backup-import').on('click', () => backupFilesInput?.click());
+    $(backupFilesInput).on('change', handleBackupImport);
+}
+
+async function handlePackLoad(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    try {
+        const pack = await parsePackFromFiles(Array.from(files));
+        await storeLoadedPack(pack);
+        toastr.success(`Loaded ${pack.displayName} v${pack.version}`);
+    } catch (error) {
+        toastr.error(error.message);
+        log(`Pack load failed: ${error.message}`, 'warn');
+    } finally {
+        event.target.value = '';
     }
-    $(settingsRoot).find('#solo-move-plot-back, #solo-play-move-plot-back').on('click', handleMovePlotBack);
+}
 
-    async function openNodePickerPopup() {
-        const [nodes, clues] = await Promise.all([loadAllNodes(), loadAllClues()]);
-        const state = ensureStoryStateShape(readStoryState());
-        const reachable = reachableNodes(nodes, clues, state, { maxResults: 50, includeLatent: true });
+async function handlePackSwitch(event) {
+    const name = event.target.value;
+    if (!name) return;
+    try {
+        await setActivePack(name);
+    } catch (error) {
+        toastr.error(error.message);
+    }
+}
 
-        const wrapper = document.createElement('div');
-        wrapper.style.minWidth = '280px';
+async function handleBackupImport(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+        await importBackupBundle(file);
+        toastr.success('Backup imported.');
+    } catch (error) {
+        toastr.error(error.message);
+    } finally {
+        event.target.value = '';
+    }
+}
 
-        const heading = document.createElement('div');
-        heading.textContent = 'Mark a node visited (correction tool — use only when the GM forgot to emit <<node:ID:visited>>)';
-        heading.style.marginBottom = '8px';
-        heading.style.fontSize = '0.9em';
-        heading.style.opacity = '0.85';
-        wrapper.append(heading);
+function refreshCampaignCard() {
+    const $sel = panelRoot.find('#solo-pack-select').empty();
+    const packs = getLoadedPacks();
+    const activeName = getSettings().activePackName;
+    const names = Object.keys(packs);
+    if (names.length === 0) {
+        $sel.append($('<option value="">— No packs loaded —</option>'));
+    } else {
+        for (const name of names) {
+            const pack = packs[name];
+            $sel.append(
+                $('<option></option>').attr('value', name).text(`${pack.displayName} v${pack.version}`),
+            );
+        }
+        if (activeName) $sel.val(activeName);
+    }
 
-        if (reachable.length === 0) {
-            const empty = document.createElement('div');
-            empty.textContent = 'No reachable nodes. Discover a clue first or check that the campaign has Node entries.';
-            empty.style.padding = '8px 0';
-            wrapper.append(empty);
-            const popup = new context.Popup(wrapper, context.POPUP_TYPE.TEXT, '', { okButton: 'Close' });
-            await popup.show();
+    const pack = getActivePack();
+    panelRoot.find('#solo-pack-info').text(pack ? pack.description : 'Pick a pack directory to load.');
+}
+
+// ---- Character card ----------------------------------------------------
+
+function wireCharacterCard() {
+    panelRoot.find('#solo-character-select').on('change', async (e) => {
+        await setActiveCharacter(e.target.value);
+    });
+    panelRoot.find('#solo-character-new').on('click', () => {
+        createCharacter({ name: '' });
+        toastr.info('Created new character.');
+    });
+    panelRoot.find('#solo-character-duplicate').on('click', () => {
+        const active = getActiveCharacter();
+        if (!active) {
+            toastr.warning('No active character to duplicate.');
             return;
         }
-
-        const select = document.createElement('select');
-        select.className = 'text_pole wide100p';
-        for (const n of reachable) {
-            const opt = document.createElement('option');
-            opt.value = n.id;
-            const desc = n.description ? ` — ${n.description.slice(0, 80)}` : '';
-            const flag = n.visited ? ' (already visited)' : '';
-            opt.textContent = `${n.id} [${n.kind}]${flag}${desc}`;
-            select.append(opt);
-        }
-        wrapper.append(select);
-
-        const popup = new context.Popup(wrapper, context.POPUP_TYPE.CONFIRM, '', {
-            okButton: 'Mark visited',
-            cancelButton: 'Cancel',
-        });
-        const result = await popup.show();
-        if (result !== context.POPUP_RESULT.AFFIRMATIVE) return;
-
-        const chosen = select.value;
-        if (!chosen) return;
-        await applyTagsToState([{ kind: 'node', key: chosen, value: 'visited', raw: '' }]);
-        toastr.info(`Marked node "${chosen}" visited.`, 'Solo TTRPG Assistant', { timeOut: 2000 });
-    }
-
-    async function handleResetCampaign() {
         try {
-            const popup = new context.Popup(
-                'Reset story progress to Act 1, beat 1.1?\n\n' +
-                'This clears the discovered clues list and the current/next beat tracking, then re-renders the Author\'s Note from the campaign lorebook. ' +
-                'Your chat messages are not affected — only the story-state metadata.',
-                context.POPUP_TYPE.CONFIRM,
-                'Reset campaign',
-                { okButton: 'Reset', cancelButton: 'Cancel' },
+            duplicateCharacter(active.id);
+        } catch (error) {
+            toastr.error(error.message);
+        }
+    });
+    panelRoot.find('#solo-character-delete').on('click', async () => {
+        const active = getActiveCharacter();
+        if (!active) return;
+        if (!globalThis.confirm(`Delete character "${active.name || 'unnamed'}"? This cannot be undone.`)) return;
+        deleteCharacter(active.id);
+    });
+    panelRoot.find('#solo-character-rename-go').on('click', () => {
+        const active = getActiveCharacter();
+        if (!active) return;
+        const next = String(panelRoot.find('#solo-character-rename').val() ?? '').trim();
+        if (!next) return;
+        renameCharacter(active.id, next);
+        panelRoot.find('#solo-character-rename').val('');
+    });
+    panelRoot.find('#solo-persona-link').on('click', async () => {
+        const active = getActiveCharacter();
+        if (!active) return;
+        try {
+            await promptPersonaLink(active);
+        } catch (error) {
+            toastr.error(error.message);
+        }
+    });
+    panelRoot.find('#solo-sample-import').on('click', () => sampleFilesInput?.click());
+    $(sampleFilesInput).on('change', handleSampleCharactersImport);
+}
+
+async function handleSampleCharactersImport(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+        const text = await file.text();
+        const payload = JSON.parse(text);
+        const characters = extractSampleCharacters(payload);
+        if (characters.length === 0) {
+            toastr.warning('No characters found in that file. Expected a sample_characters.json from the campaign generator.');
+            return;
+        }
+        const picked = await promptSampleCharacterChoice(characters);
+        if (!picked) return;
+        const created = createCharacterFromSample(picked);
+        toastr.success(`Imported "${created.name || 'unnamed'}" from campaign pregens.`);
+    } catch (error) {
+        toastr.error(`Sample-characters import failed: ${error.message}`);
+        log(`Sample-characters import failed: ${error.message}`, 'warn');
+    } finally {
+        event.target.value = '';
+    }
+}
+
+/**
+ * The campaign generator writes sample_characters.json as either the bare
+ * SampleCharacterSet payload (`{characters: [...]}`) or as the stage cache
+ * file with the same shape under a top-level key. Be permissive about
+ * both.
+ */
+function extractSampleCharacters(payload) {
+    if (!payload || typeof payload !== 'object') return [];
+    if (Array.isArray(payload)) return payload.filter((c) => c && c.name);
+    if (Array.isArray(payload.characters)) return payload.characters.filter((c) => c && c.name);
+    if (payload.data && Array.isArray(payload.data.characters)) {
+        return payload.data.characters.filter((c) => c && c.name);
+    }
+    return [];
+}
+
+async function promptSampleCharacterChoice(characters) {
+    const context = getContext();
+    const choices = characters.map((c, idx) => ({ value: String(idx), label: c.name || `(unnamed #${idx + 1})` }));
+
+    // SillyTavern's Popup API supports a simple select-popup. Fall back to
+    // a plain prompt if it isn't available (very old client builds).
+    try {
+        if (context.Popup?.show?.input) {
+            const labels = choices.map((c) => `${c.value}: ${c.label}`).join('\n');
+            const raw = await context.Popup.show.input(
+                'Import pregenerated character',
+                `Type the number of the character to import:\n\n${labels}`,
+                '0',
             );
-            const result = await popup.show();
-            if (result !== context.POPUP_RESULT.AFFIRMATIVE) return;
+            if (raw === null || raw === undefined || raw === '') return null;
+            const idx = Number(raw);
+            return Number.isFinite(idx) && idx >= 0 && idx < characters.length ? characters[idx] : null;
+        }
+    } catch {
+        // Fall through to native prompt.
+    }
+    const labels = choices.map((c) => `${c.value}: ${c.label}`).join('\n');
+    const raw = globalThis.prompt(`Pick a character (0–${characters.length - 1}):\n\n${labels}`, '0');
+    if (raw === null) return null;
+    const idx = Number(raw);
+    return Number.isFinite(idx) && idx >= 0 && idx < characters.length ? characters[idx] : null;
+}
 
-            const ok = await resetCampaignState();
-            if (ok) {
-                toastr.success('Campaign reset. Author\'s Note re-rendered.', 'Solo TTRPG Assistant', { timeOut: 2500 });
-                await refreshStoryStatusRow();
-            } else {
-                toastr.warning('Could not reset — make sure the campaign lorebook is bound to this chat or the GM character.', 'Solo TTRPG Assistant');
-            }
-        } catch (error) {
-            toastr.error(error.message);
+function createCharacterFromSample(sample) {
+    const settings = getSettings();
+    const concept = String(sample.concept ?? '').trim();
+    const hook = String(sample.hook_into_campaign ?? sample.hook ?? '').trim();
+    const combinedNotes = hook ? `Hook into the campaign: ${hook}` : '';
+
+    const record = {
+        id: newCharacterId(),
+        name: String(sample.name ?? '').trim(),
+        concept,
+        advantages: arrayOfStrings(sample.advantages),
+        disadvantages: arrayOfStrings(sample.disadvantages),
+        belongings: arrayOfStrings(sample.belongings),
+        relationships: arrayOfRelationships(sample.relationships),
+        notes: combinedNotes,
+        packName: settings.activePackName ?? null,
+        personaKey: null,
+    };
+    settings.characters[record.id] = record;
+    settings.activeCharacterId = record.id;
+    saveSettings();
+    log(`Imported sample character "${record.name || '(unnamed)'}".`);
+    refreshAll();
+    return record;
+}
+
+function arrayOfStrings(value) {
+    if (!Array.isArray(value)) return [];
+    return value.map((entry) => String(entry ?? '').trim()).filter(Boolean);
+}
+
+function arrayOfRelationships(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map((entry) => ({
+            name: String(entry?.name ?? '').trim(),
+            tie: String(entry?.tie ?? entry?.description ?? '').trim(),
+        }))
+        .filter((entry) => entry.name);
+}
+
+function refreshCharacterCard() {
+    const $sel = panelRoot.find('#solo-character-select').empty();
+    const characters = listCharacters();
+    const active = getActiveCharacter();
+    if (characters.length === 0) {
+        $sel.append($('<option value="">— No characters yet —</option>'));
+    } else {
+        for (const c of characters) {
+            $sel.append(
+                $('<option></option>').attr('value', c.id).text(c.name || '(unnamed)'),
+            );
+        }
+        if (active) $sel.val(active.id);
+    }
+    const info = active ? getPersonaLinkInfo(active) : null;
+    panelRoot.find('#solo-persona-status').text(info ? info.summary : '(no persona linked)');
+}
+
+// ---- Story card --------------------------------------------------------
+
+function wireStoryCard() {
+    panelRoot.find('#solo-rewind').on('click', async () => {
+        const state = ensureStoryStateShape(readStoryState() ?? {});
+        const raw = globalThis.prompt(`Rewind to which turn? (current: ${state.turn})`, String(Math.max(0, state.turn - 1)));
+        if (raw === null) return;
+        const target = Number(raw);
+        if (!Number.isFinite(target) || target < 0) {
+            toastr.warning('Enter a non-negative integer.');
+            return;
+        }
+        await rewindToTurn(target);
+        await renderAuthorsNoteFromState();
+        refreshAllFactChips();
+        renderThreadsTray();
+        refreshStoryCard();
+        toastr.info(`Rewound to turn ${target}.`);
+    });
+
+    panelRoot.find('#solo-reset-campaign').on('click', async () => {
+        const confirmed = globalThis.confirm(
+            'Reset campaign state for this chat?\n\n'
+            + 'This wipes:\n'
+            + '  • all facts and threads\n'
+            + '  • the truths-revealed log\n'
+            + '  • scene context and on-screen NPCs\n'
+            + '  • the active director\'s note and pressure cue\n'
+            + '  • the turn counter (back to 0)\n\n'
+            + 'It does NOT touch the chat itself, the character sheet, or the lorebook. Continue?'
+        );
+        if (!confirmed) return;
+        await writeStoryState(freshStoryState());
+        await renderAuthorsNoteFromState();
+        refreshAllFactChips();
+        renderThreadsTray();
+        refreshStoryCard();
+        refreshDirectorCard();
+        log('Campaign state reset to turn 0.', 'info');
+        toastr.info('Campaign state reset.');
+    });
+
+    panelRoot.find('#solo-thread-add').on('click', async () => {
+        const q = globalThis.prompt('New thread (open dramatic question):', '');
+        if (!q) return;
+        const state = ensureStoryStateShape(readStoryState() ?? {});
+        await openThread({ question: q, turn: state.turn });
+        renderThreadsTray();
+        refreshStoryCard();
+    });
+}
+
+function refreshStoryCard() {
+    if (!panelRoot) return;
+    const state = ensureStoryStateShape(readStoryState() ?? {});
+    panelRoot.find('#solo-turn-label').text(`Turn: ${state.turn}`);
+
+    // Threads
+    const $threads = panelRoot.find('#solo-threads-list').empty();
+    const threads = listAllActiveThreads(state);
+    if (threads.length === 0) {
+        $threads.append($('<li></li>').addClass('solo-empty').text('No threads yet.'));
+    } else {
+        for (const t of threads) {
+            const $li = $('<li></li>').addClass('solo-list-row');
+            $li.append($('<span></span>').text(`[${t.status}] ${t.question}`));
+            $li.append(
+                $('<button type="button" class="solo-list-remove" title="Retire">×</button>')
+                    .on('click', async () => {
+                        await retireThread(t.id);
+                        refreshStoryCard();
+                        renderThreadsTray();
+                    }),
+            );
+            $threads.append($li);
         }
     }
-    $(settingsRoot).find('#solo-reset-campaign, #solo-play-reset-campaign').on('click', handleResetCampaign);
 
-    const $analyzerEnabled = $(settingsRoot).find('#solo-analyzer-enabled');
-    $analyzerEnabled.prop('checked', getSettings().analyzer?.enabled !== false);
-    $analyzerEnabled.on('change', function () {
-        const settings = getSettings();
-        settings.analyzer ??= { enabled: true };
-        settings.analyzer.enabled = !!this.checked;
+    // Facts
+    const $facts = panelRoot.find('#solo-facts-list').empty();
+    const accepted = state.facts.filter((f) => f.status === 'accepted').slice(-12);
+    if (accepted.length === 0) {
+        $facts.append($('<li></li>').addClass('solo-empty').text('No accepted facts yet.'));
+    } else {
+        for (const f of accepted) {
+            $facts.append($('<li></li>').text(`[t${f.turn}] ${f.text}`));
+        }
+    }
+
+    // Truths
+    const $truths = panelRoot.find('#solo-truths-list').empty();
+    const truths = state.truthsRevealed ?? [];
+    if (truths.length === 0) {
+        $truths.append($('<li></li>').addClass('solo-empty').text('No campaign truths revealed yet.'));
+    } else {
+        for (const t of truths) {
+            $truths.append($('<li></li>').text(`[t${t.turn}] ${t.truthId} — ${t.how ?? ''}`));
+        }
+    }
+
+    // Scene
+    const scene = state.scene ?? {};
+    const sceneParts = [];
+    if (scene.location) sceneParts.push(`Location: ${scene.location}.`);
+    if (scene.tension) sceneParts.push(`Tension: ${scene.tension}.`);
+    if (Array.isArray(scene.presentNpcIds) && scene.presentNpcIds.length > 0) {
+        sceneParts.push(`Present: ${scene.presentNpcIds.join(', ')}.`);
+    }
+    panelRoot.find('#solo-scene').text(sceneParts.join(' ') || '(scene not set yet)');
+}
+
+// ---- Director card -----------------------------------------------------
+
+function wireDirectorCard() {
+    panelRoot.find('#solo-extractor-enabled').on('change', (e) => {
+        getSettings().factExtractor.enabled = Boolean(e.target.checked);
         saveSettings();
-        toastr.info(settings.analyzer.enabled ? 'Scene analyzer enabled.' : 'Scene analyzer disabled.', 'Solo TTRPG Assistant', { timeOut: 2000 });
     });
-
-    async function handleAnalyzerRun() {
-        const $btn = $(settingsRoot).find('#solo-analyzer-run');
-        try {
-            if (!(await isCampaignNodeMode())) {
-                toastr.warning('Scene analyzer only runs in node-mode campaigns.', 'Solo TTRPG Assistant', { timeOut: 2500 });
-                return;
-            }
-            const chat = context.chat;
-            if (!Array.isArray(chat) || chat.length === 0) {
-                toastr.warning('No messages in chat yet.', 'Solo TTRPG Assistant', { timeOut: 2000 });
-                return;
-            }
-            let assistantMsg = null;
-            let userMsg = null;
-            for (let i = chat.length - 1; i >= 0; i--) {
-                const m = chat[i];
-                if (!m) continue;
-                if (!assistantMsg && !m.is_user) { assistantMsg = m; continue; }
-                if (assistantMsg && m.is_user) { userMsg = m; break; }
-            }
-            if (!assistantMsg) {
-                toastr.warning('No assistant message found to analyze.', 'Solo TTRPG Assistant', { timeOut: 2000 });
-                return;
-            }
-            setBusy($btn, 'Analyzing…');
-            const { runAnalyzerAndApply } = await import('./modules/scene_analyzer.js');
-            const result = await runAnalyzerAndApply({
-                messageText: String(assistantMsg.mes ?? ''),
-                userTurnText: String(userMsg?.mes ?? ''),
-            });
-            const summary = [
-                result.clueIds.length ? `clues=[${result.clueIds.join(', ')}]` : null,
-                result.nodeVisitedId ? `visited=${result.nodeVisitedId}` : null,
-                result.nodeCompletedId ? `completed=${result.nodeCompletedId}` : null,
-            ].filter(Boolean).join(' · ') || 'no changes';
-            toastr.info(`Analyzer: ${summary}`, 'Solo TTRPG Assistant', { timeOut: 4000 });
-            await refreshStoryStatusRow();
-        } catch (error) {
-            toastr.error(error.message);
-        } finally {
-            clearBusy($btn);
-        }
-    }
-    $(settingsRoot).find('#solo-analyzer-run').on('click', handleAnalyzerRun);
-
-    async function refreshStoryStatusRow() {
-        let text = '';
-        if (await isCampaignNodeMode()) {
-            const state = ensureStoryStateShape(readStoryState());
-            const visited = state.visitedNodes?.length ?? 0;
-            const completed = state.completedNodes?.length ?? 0;
-            const npcCount = Object.keys(state.npcs ?? {}).length;
-            text = `Nodes visited ${visited} / completed ${completed} · NPCs tracked ${npcCount}`;
-        } else {
-            const status = await getStoryStatusForUi();
-            text = status ? `Act ${status.actNumber} — beat ${status.currentBeatLabel}` : '';
-        }
-        $(settingsRoot).find('#solo-story-status, #solo-play-story-status').text(text);
-        const canRevert = canRevertLastAdvance();
-        $(settingsRoot).find('#solo-move-plot-back, #solo-play-move-plot-back').prop('disabled', !canRevert);
-    }
-    refreshStoryStatusRow().catch(() => {});
-    context?.eventSource?.on?.(context.eventTypes.MESSAGE_RECEIVED, () => {
-        // Some builds pass a chat index; just refresh the status row regardless of the payload.
-        setTimeout(() => refreshStoryStatusRow().catch(() => {}), 500);
+    panelRoot.find('#solo-ui-chips').on('change', (e) => {
+        getSettings().ui.inlineFactChips = Boolean(e.target.checked);
+        saveSettings();
+        refreshAllFactChips();
     });
-    context?.eventSource?.on?.(context.eventTypes.CHAT_CHANGED, () => refreshStoryStatusRow().catch(() => {}));
-
-    mountSheet(
-        $(settingsRoot).find('#solo-sheet-root').get(0),
-        $(settingsRoot).find('#solo-sheet-mode').get(0),
-    );
-
-    subscribeLog(renderLogs);
-    subscribePack(() => {
-        renderPackSummary();
-        renderPlayDashboard();
+    panelRoot.find('#solo-ui-tray').on('change', (e) => {
+        getSettings().ui.threadsTray = Boolean(e.target.checked);
+        saveSettings();
+        renderThreadsTray();
     });
-    subscribeCharacters(() => {
-        renderCharacterPicker();
-        renderCharacterStatus();
-        renderPlayDashboard();
+    panelRoot.find('#solo-manual-fact-add').on('click', async () => {
+        const text = String(panelRoot.find('#solo-manual-fact').val() ?? '').trim();
+        if (!text) return;
+        const state = ensureStoryStateShape(readStoryState() ?? {});
+        const created = await appendProvisionalFacts(state.turn, [{ text, sourceQuote: text, entities: [] }]);
+        for (const f of created) await acceptFact(f.id);
+        panelRoot.find('#solo-manual-fact').val('');
+        await renderAuthorsNoteFromState();
+        refreshStoryCard();
+        toastr.info('Fact added.');
     });
-    subscribeCharacterMeta(() => {
-        renderCharacterPicker();
-        renderCharacterStatus();
-        renderPlayDashboard();
+    panelRoot.find('#solo-an-rebuild').on('click', async () => {
+        await renderAuthorsNoteFromState();
+        toastr.info('Author\'s Note rebuilt.');
     });
-    subscribeSheetState(() => renderPlayDashboard());
+}
 
-    renderPackSummary();
-    renderCharacterPicker();
-    renderCharacterStatus();
-    renderPlayDashboard();
-    renderLogs();
-    ensureEnabledControls();
+function refreshDirectorCard() {
+    if (!panelRoot) return;
+    const settings = getSettings();
+    panelRoot.find('#solo-extractor-enabled').prop('checked', settings.factExtractor?.enabled !== false);
+    panelRoot.find('#solo-ui-chips').prop('checked', settings.ui?.inlineFactChips !== false);
+    panelRoot.find('#solo-ui-tray').prop('checked', settings.ui?.threadsTray !== false);
+
+    const state = ensureStoryStateShape(readStoryState() ?? {});
+    const note = state.directorsNotes?.active;
+    panelRoot.find('#solo-active-note').text(note ? `${note.text}${note.hint ? ` — hint: ${note.hint}` : ''}` : '(none)');
+
+    const cue = state.pressureCue;
+    panelRoot.find('#solo-pressure-cue').text(cue?.kind ? `${cue.kind}${cue.reason ? ` — ${cue.reason}` : ''}` : '(none)');
+}
+
+// ---- Debug card --------------------------------------------------------
+
+function wireDebugCard() {
+    panelRoot.find('#solo-log-clear').on('click', () => {
+        getSettings().logs = [];
+        saveSettings();
+        refreshLogPane();
+    });
+    panelRoot.find('#solo-state-dump').on('click', () => {
+        const state = readStoryState();
+        log('State dump.', 'info', state);
+        refreshLogPane();
+    });
+}
+
+function refreshLogPane() {
+    if (!panelRoot) return;
+    const logs = getLogs() ?? [];
+    const lines = logs.slice(-200).map((entry) => {
+        const ts = entry?.timestamp ?? '';
+        const level = entry?.level ?? 'info';
+        const msg = entry?.message ?? '';
+        const det = entry?.details ? `\n    ${typeof entry.details === 'string' ? entry.details : JSON.stringify(entry.details)}` : '';
+        return `[${ts}] ${level.toUpperCase()} ${msg}${det}`;
+    });
+    panelRoot.find('#solo-log').text(lines.join('\n'));
 }

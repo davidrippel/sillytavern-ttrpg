@@ -1,436 +1,242 @@
 # Solo TTRPG Assistant — SillyTavern Extension Brief
 
-Build a SillyTavern extension that automates player-side maintenance for a solo narrative TTRPG campaign. Pack-aware: reads genre pack metadata at runtime so attributes, resources, and abilities match whichever pack the player is using.
+A SillyTavern extension that runs the player-side state for a solo narrative campaign. **v3 (story-mode only).** The v1 stat/beat/node design described in earlier revisions of this brief is retired; see [`solo-ttrpg-assistant/CHANGELOG.md`](../solo-ttrpg-assistant/CHANGELOG.md) for the migration.
 
-Hand this file to Claude Code along with `01_SYSTEM_OVERVIEW.md`, `02_GENRE_PACK_SPEC.md`, and `07_GM_BASE_PROMPT.md` for context.
+Hand this file to Claude Code along with [`01_SYSTEM_OVERVIEW.md`](01_SYSTEM_OVERVIEW.md), [`02_GENRE_PACK_SPEC.md`](02_GENRE_PACK_SPEC.md), and [`07_GM_BASE_PROMPT.md`](07_GM_BASE_PROMPT.md) for context.
 
 ---
 
 ## Goal
 
-Automate the repetitive maintenance tasks in a solo campaign while keeping the player in control of every change. Every automated action is a suggestion; the player confirms.
+The extension keeps the story coherent across long chats by tracking what the GM's prose has *established in fiction*. It maintains:
 
-Core modules:
+- A ledger of **facts** (atomic statements, each carrying a verbatim source quote).
+- A list of **threads** — open dramatic questions the player is pursuing.
+- A small **scene context** (location, on-screen NPCs, tension).
+- A record of which campaign **truths** the player has uncovered.
+- A **pacing function** that nudges the GM (lean in / let it breathe / introduce a complication) and unlocks at most one campaign truth at a time as a "director's note".
 
-- Character sheet (pack-aware, structured, always in context)
-- Dice rolling integrated with the 2d6+attribute resolution system
-- Author's Note management (recent beats / scenes, active threads, act transitions; mode-aware — beat-mode and node-mode use different section lists)
-- Canon detection (new NPCs, locations, items surfaced in GM messages)
-- Backup and restore bundles
-- Session log export
-- Lorebook hygiene
-- Global enable/disable switch
+Every state mutation is recoverable: the fact ledger is append-only, turn-tagged, and rewindable. The extension proposes; the user adjusts inline with one-click affordances.
 
 ---
 
 ## Tech stack
 
-- JavaScript (ES modules), following the current SillyTavern extension template
-- Uses SillyTavern's extension API, event system, and slash commands
-- Minimal external dependencies — bundle only what's strictly necessary. Required: a YAML parser (`js-yaml` is the standard choice; bundle it, don't CDN-load) for reading pack YAML files. Required: a ZIP library (`jszip` is standard) for the backup/restore bundle. Everything else should use the platform (`File.text()`, `JSON.parse`, `fetch`, etc.)
-- UI panels use SillyTavern's existing styling (import their CSS vars)
-- Persistent storage via `extension_settings[extensionName]`
-
-Web search during development: current SillyTavern extension docs, current event names (they change between versions), current World Info API surface, current Author's Note API.
+- JavaScript (ES modules), following the current SillyTavern extension template.
+- SillyTavern's extension API, event system, and lorebook (`World Info`) API.
+- Minimal external deps: a bundled YAML parser (`js-yaml` or equivalent) for `pack.yaml` / `generator_seed.yaml`; a bundled ZIP library (`jszip` or equivalent) for the backup/restore bundle.
+- UI uses SillyTavern's CSS variables; the extension's own styles live in `style.css`.
+- Persistent storage via `extension_settings[extensionName]` for settings and `chatMetadata` for per-chat story state.
 
 ---
 
-## Pack loading — critical
+## Pack loading
 
-The extension reads the active genre pack at runtime to parameterize its behavior. Attributes, resources, and abilities are never hardcoded. The loading mechanism is concrete and works entirely within the browser, with no companion server, no bundling step, and no filesystem access beyond what the user explicitly provides.
+The extension reads the active genre pack at runtime. Only **schema v2** (story-mode) packs are accepted. Loading is via a directory-picker `<input type="file" webkitdirectory multiple>`.
 
-### Loading mechanism: directory picker
+The extension reads three files from disk:
 
-The extension's settings panel includes a "Load pack" button backed by an HTML `<input type="file" webkitdirectory multiple>`. When the user clicks it, the browser opens a directory picker; the user selects the pack's directory (e.g., `genres/symbaroum_dark_fantasy/`). The browser hands the extension a `FileList` containing every file in that directory. The extension:
+- `pack.yaml` — metadata (display name, version, description). The compatibility check warns if the campaign's `__pack_reference` lorebook entry names a different pack.
+- `character_template.json` — starting shape of the player character sheet.
+- `advantages_disadvantages.md` — autocomplete suggestions for the sheet UI.
 
-1. Iterates the `FileList` looking for the 5 files it cares about (by exact filename)
-2. Reads each file's text content (`File.text()`)
-3. Parses YAML files with a bundled YAML library (`js-yaml` or equivalent) and JSON files with `JSON.parse`
-4. Validates the parsed content against the schema in `02_GENRE_PACK_SPEC.md`
-5. Stores the parsed structured data in `extension_settings[extensionName].activePack`
-6. Displays a confirmation in the settings panel showing the loaded pack's `display_name`, `version`, and `description`
+Three additional files reach the GM through the campaign lorebook (the campaign generator embeds them as constant entries) and the extension does not parse them at runtime:
 
-Files the extension does not read are simply ignored (they serve other consumers — the Python tools and the GM via the lorebook).
+- `__pack_gm_overlay` ← `gm_prompt_overlay.md`
+- `__pack_complications` ← `complications.md`
+- `__pack_reference` ← `advantages_disadvantages.md`
 
-The 5 files the extension reads:
-- `pack.yaml` → name, version, display_name (for the compatibility check, described below)
-- `attributes.yaml` → the six attribute keys and display names (drives dice commands, sheet UI labels)
-- `resources.yaml` → resource keys and kinds (drives sheet state UI, STATUS_UPDATE field whitelist, threshold logic)
-- `abilities.yaml` → ability catalog and category definitions (drives the "add ability from catalog" UI)
-- `character_template.json` → starting sheet shape (used when initializing a new character)
+The remaining pack files (`tone.md`, `example_hooks.md`, `generator_seed.yaml`, `naming.yaml`, `REVIEW_CHECKLIST.md`) are consumed by the campaign generator, not the extension.
 
-If any of these 5 files is missing or fails to parse, loading fails with a specific error message naming the file. The extension refuses to partially load a pack.
-
-### Persistence
-
-The parsed pack is stored in `extension_settings[extensionName].activePack` as structured JSON. This persists across SillyTavern sessions — the user loads a pack once and it sticks. No need to re-pick the directory every session.
-
-### Multiple packs
-
-The extension supports multiple loaded packs under `extension_settings[extensionName].packs`, keyed by `pack_name`. One is marked as `activePackName`. Loading a new pack via the directory picker stores it under its own name without clobbering others.
-
-A dropdown in the settings panel lets the user switch which pack is active. Switching packs triggers a pack-compatibility check against the currently-open campaign (see below).
-
-### Campaign compatibility check
-
-Every campaign lorebook produced by the campaign generator includes a constant entry named `__pack_reference` containing the pack name and version the campaign was built against. This entry is marked `constant: false` with no trigger keywords — it never enters the GM's context; it exists purely as metadata for the extension to read via SillyTavern's World Info API.
-
-On chat open (`CHAT_CHANGED` event) and on manual pack switch, the extension:
-
-1. Reads `__pack_reference` from the current chat's active lorebook, if present
-2. Compares against the currently-active pack's name and version
-3. If they match: proceed silently
-4. If name mismatches: display a non-blocking warning — "This campaign was built for pack `<expected>`, but you have `<active>` loaded. Dice rolls and the character sheet may not work correctly. Load the correct pack?" — with buttons to open the directory picker or dismiss
-5. If name matches but version mismatches: display a softer warning — "This campaign was built for `<expected>@<old_version>`, you have `<active>@<new_version>`. Schema should be compatible but content may have shifted." — dismissible
-
-If no `__pack_reference` entry exists (older campaigns, hand-built lorebooks), proceed silently. The extension makes no assumptions.
-
-### Degraded mode (no pack loaded)
-
-If no pack is loaded, the extension operates in a minimal "unknown pack" mode:
-- Dice commands require manual modifier entry (`/pbtaroll <mod>`)
-- The sheet UI renders a generic shape (name, concept, notes, and a free-form key/value table for user-defined attributes and state)
-- The STATUS_UPDATE parser accepts any field name (no whitelist)
-- The ability catalog UI is hidden
-
-This mode exists so the extension doesn't hard-fail on fresh installs before the user loads a pack. It's not meant for sustained use.
-
-### Reload
-
-A "Reload pack" button in the settings panel re-opens the directory picker for the currently-active pack's name. Useful when the user has edited pack files on disk (e.g., tuned the GM overlay, added an ability) and wants the extension to pick up changes.
-
-Note: changes to `gm_prompt_overlay.md` or `failure_moves.md` do NOT propagate to existing campaigns via a reload, because those files reach the GM through lorebook entries embedded by the campaign generator at campaign-creation time. To propagate overlay changes to an existing campaign, the user must regenerate the campaign OR manually edit the `__pack_gm_overlay` lorebook entry. The extension surfaces this in the reload confirmation: "Pack reloaded. Note: GM overlay changes apply to new campaigns only."
-
-### Global enable / disable
-
-The settings panel includes a top-level switch that pauses the extension without deleting any stored state. This is for users who only sometimes play the solo campaign and do not want the extension active during unrelated SillyTavern use.
-
-When disabled:
-
-- Character sheet prompt injection is off
-- Event-driven behavior is off (`CHAT_CHANGED`, `MESSAGE_RECEIVED`, persona auto-switch handling)
-- Sidebar action buttons are disabled
-- Slash commands should no-op with a clear "extension is disabled" message
-- Stored packs, characters, logs, and settings remain intact
-- Re-enabling resumes normal behavior immediately using the last active pack and character
+The pack loader explicitly rejects v1 files (`attributes.yaml`, `resources.yaml`, `abilities.yaml`, `failure_moves.md`) with a migration error pointing at [`02_GENRE_PACK_SPEC.md`](02_GENRE_PACK_SPEC.md).
 
 ---
 
-## Features (priority order for implementation)
+## State model
 
-### Tier 1 — Build first (minimum viable)
-
-#### 1.1 Character sheet module
-
-Maintain a collection of structured character sheets in `extension_settings[extensionName].characters` (map keyed by generated id) with `extension_settings[extensionName].activeCharacterId` naming the currently-edited/injected character. A single character is the normal case; the collection model is what enables multiple characters across campaigns and the persona link described below.
-
-Per-character record extends the pack-defined shape with three extension-owned fields:
-
-- `id` — generated via `crypto.randomUUID()` at creation
-- `packName` — the pack this character was built against. Switching to a character whose `packName` differs from `activePackName` switches the active pack (with the existing compatibility check).
-- `personaKey` — optional SillyTavern persona avatar filename (the key in `power_user.personas`). `null` when unlinked.
-
-Other fields (`name`, `concept`, `attributes`, `abilities`, `equipment`, `state`, `notes`) come from the active pack's `character_template.json`. The extension does not assume specific field names beyond those.
-
-**Migration:** legacy saves that stored a single character under `extension_settings[extensionName].character` are wrapped into the collection on first load — an id is generated, `packName` is stamped from `activePackName`, the record is marked active, and the old key is removed. No user intervention.
-
-**UI panel** (sidebar):
-- **Character picker row** above the sheet: `<select>` of all characters + buttons New / Duplicate / Rename / Delete. Deleting the last character is refused.
-- Renders all sections of the sheet based on pack schema
-- **Linked Persona row** in the Core section: dropdown populated from `power_user.personas` with a "— None —" option and a "Sync Now" button. If a character's `personaKey` no longer resolves (persona deleted in ST), the select shows "— None (missing: &lt;key&gt;) —" and leaves the stored key intact so the user can re-link or clear it.
-- Attribute section: six rows, one per attribute from `attributes.yaml`, showing display name + current value + edit controls
-- State section: one row per resource from `resources.yaml`, formatted according to `kind` (pool bar for `pool`, counter for `counter`, threshold indicator for `pool_with_threshold`)
-- Abilities section: list with add/remove/edit; "Add from catalog" button pulls from pack's `abilities.yaml`
-- Equipment: simple list with add/remove
-- Notes: free text
-- Auto-save on every change
-
-**Persona linkage (two-way auto-switch):**
-
-- **Character → persona:** `setActiveCharacter(id)` calls ST's `/persona` slash command (via `context.executeSlashCommandsWithOptions`) if the target character's `personaKey` differs from `globalThis.user_avatar`. A re-entrancy flag (`suppressPersonaSync`) prevents the resulting ST event from bouncing back.
-- **Persona → character:** the extension subscribes to ST's persona-change events (best-effort: checks `PERSONA_CHANGED`/`PERSONA_UPDATED` if exposed, else `SETTINGS_UPDATED` with a `user_avatar` diff). When `user_avatar` changes to a persona linked by any character, that character becomes active (and its pack is activated if different).
-- **Unlinked persona:** switching to a persona that no character points at does **not** change the active character. A non-blocking toast informs the user and suggests opening the sheet to link the current character or create a new one. No auto-create, no auto-clear.
-- **Persona renamed in ST:** transparent — linkage is by avatar filename (the stable key), not display name.
-- **Persona deleted in ST:** the character's stored `personaKey` is preserved; the sheet surfaces the missing linkage so the user can decide what to do.
-
-**Prompt injection:**
-At generation time, inject a compact formatted version of the sheet into the prompt. Configurable position (default: just before Author's Note). Format: plain text with clear section headers.
+`chatMetadata[solo_ttrpg_story_state]` (v3, `schemaVersion: 3`):
 
 ```
-=== CHARACTER SHEET ===
-Name: Varek
-Concept: Changeling Witch
-Attributes: Might -1 | Finesse +1 | Wits +2 | Will +1 | Presence 0 | Shadow +2
-Abilities: Witchsight (novice), Shapeshifter (adept), Staff Fighting (novice)
-State: HP 10/10 | Corruption (Temp) 0/5 | Corruption (Perm) 1
-Conditions: none
-Equipment: staff, dark cloak, raven familiar (Morn)
+{
+  schemaVersion: 3,
+  facts: [{ id, turn, text, entities[], sourceQuote, status }],
+  threads: [{ id, question, status, openedTurn, lastAdvancedTurn, notes }],
+  truthsRevealed: [{ truthId, turn, how }],
+  scene: { location, presentNpcIds[], tension, lastUpdatedTurn },
+  npcs: { [id]: { lastSeenTurn, attitude, status } },
+  directorsNotes: { active: {truthId,text,hint,setTurn} | null, history[] },
+  pressureCue: { kind, reason, setTurn },
+  turn
+}
 ```
 
-Only include fields the pack defines. Formatting template is pack-agnostic (just iterate the sheet schema).
+Fact lifecycle: `provisional` → (auto-commit after 1 turn) `accepted`, or → (user) `rejected`. Rejected facts stay in the ledger for audit but never reach the AN.
 
-#### 1.2 Dice rolling
+Thread lifecycle: `live` → `escalating` → `resolved`, or → `retired` (user action).
 
-Slash commands:
-
-- `/rollattr <attribute_key>` — rolls 2d6, adds attribute value from sheet, injects formatted result as OOC message
-- `/pbtaroll <modifier>` — ad-hoc 2d6+mod
-- `/rollability <ability_name>` — looks up ability in sheet, uses its category's `roll_attribute` from pack, applies any modifier, injects result AND flags that the ability was activated (so canon/resource modules can react)
-
-Output format injected into chat:
-
-```
-[ROLL: Wits check — 2d6 (4+5=9) + 2 = **11 — full success**]
-```
-
-Result band interpretation:
-- 10+: full success
-- 7-9: partial success
-- 2-6: failure with consequences
-
-The extension does not adjudicate consequences — it just injects the roll. The GM narrates.
-
-**Quick Reply integration**: the extension registers one Quick Reply button per attribute, dynamically named from the pack. If the pack is reloaded with different attribute names, the Quick Replies update.
-
-#### 1.3 Backup and restore bundle
-
-Slash commands:
-
-- `/backup-export` — produces a ZIP bundle, triggers browser download
-- `/backup-import` — opens a file picker, validates the bundle, restores state (destructive — requires confirmation)
-
-**Bundle structure** (inside the ZIP):
-
-```
-manifest.json                   # version info, timestamp, campaign name, checksums
-chat.jsonl                      # full chat log in SillyTavern's native format
-lorebook.json                   # complete active lorebook
-authors_note.txt                # current AN
-character_sheet.json            # active character (readable single-sheet export; kept for legacy compat)
-characters.json                 # { characters: {id: record}, activeCharacterId } — full multi-character state
-extension_settings.json         # full extension configuration
-summary.txt                     # current Summarize extension output
-vector_store_export.json        # vector storage export if feasible; else empty with flag
-pack_reference.json             # pack_name and version used
-README.txt                      # auto-generated explanation
-```
-
-Filename convention: `campaign_<slug>_<YYYYMMDD_HHMMSS>.zip` where `<slug>` is derived from the chat name.
-
-Settings option: auto-export on act transition (detected via closure tags), on session end (how? detect inactivity timer), or never.
-
-**Import flow:**
-1. User runs `/backup-import`, picks a file
-2. Extension validates manifest: SillyTavern version compatibility, extension version compatibility, checksums
-3. If version mismatches: warn clearly, require explicit override confirmation
-4. Destructive confirmation modal: "This will replace current chat, lorebook, AN, and sheet. Proceed?"
-5. Atomically replace state. If any step fails, roll back.
-6. Character restore prefers `characters.json` when present. Legacy bundles (only `character_sheet.json`) go through the same migration path as first-load upgrade: the single character is wrapped into the collection and marked active.
-
-**Vector storage caveat:** SillyTavern's vector storage may not expose clean export/import. Fallback: if export fails, store a `rebuild_from_chat: true` flag in the bundle; on import, re-embed from chat after restore. Slower but correct. Document this behavior.
+When the extension first sees a `chatMetadata` document with `schemaVersion` < 3 it moves the document aside under `solo_ttrpg_story_state_archive` and writes a fresh v3 document. The old state is preserved but not re-used; v1/v2 chats start over from turn 0 in v3.
 
 ---
 
-### Tier 2 — Build after first playtest
+## Per-turn pipeline
 
-#### 2.1 STATUS_UPDATE parser
+On every `MESSAGE_RECEIVED` for a non-user message:
 
-After each GM message (`MESSAGE_RECEIVED` event), scan for:
+1. **Auto-commit.** Provisional facts older than `factExtractor.autoCommitAfterTurns` (default 1) transition to `accepted`.
+2. **Bump turn.** `state.turn += 1`.
+3. **Fact extractor.** One LLM call (`generateRaw`) with the latest assistant prose, the previous player message (for context), recent accepted facts, live threads, scene context, and the campaign's authored truths (top 12). Returns:
 
 ```
-[STATUS_UPDATE]
-hp_current: 10 -> 7
-conditions: +bleeding
-corruption_temporary: 0 -> 1
-inventory: -torch, +silver dagger
-[/STATUS_UPDATE]
+{
+  new_facts: [{ text, source_quote, entities }],
+  thread_updates: [{ thread_id, status, why }],
+  new_threads: [{ question, why }],
+  truths_touched: [{ truth_id, how }],
+  scene_delta: { location?, present_npc_ids?, tension? } | null,
+  npc_state: [{ id, attitude, status }],
+  notes: "..."
+}
 ```
 
-Parse the block into a diff against the current sheet. Field names must match pack-defined resource keys (use the pack's whitelist). Unknown fields are flagged, not silently dropped.
+Each `source_quote` must appear verbatim in the prose (after smart-punct + whitespace normalisation). Facts that fail the check are dropped and logged.
 
-Show a non-blocking modal: "GM proposes these changes: [list]. Accept / Edit / Ignore?"
-
-On accept: apply deltas atomically. If a threshold is crossed (e.g., `corruption_temporary` reaches `corruption_threshold`), apply the pack-declared consequence (`threshold_effect`) and notify the player.
-
-#### 2.2 Author's Note management
-
-The AN has structured sections. The extension parses and writes each independently. The **section list and closure-tag vocabulary depend on the campaign mode**, which the extension auto-detects: presence of any `Node: <id>` lorebook entry → node-mode; otherwise beat-mode. Both modes share the same parser; only the section list and dispatch table differ.
-
-**Beat-mode sections:**
-- Current Act (header only)
-- Current beat (the single beat the GM is currently driving toward)
-- Next beat (the immediate next beat — spoiler-bounded 2-beat window)
-- Discovered clues (clue IDs the GM has surfaced via tags)
-- Available clues — *deprecated under the node-edge clue model*. Beat-mode runtimes render this as `(none)`; the new model needs a current-node anchor that beat-mode does not track. See node-mode below.
-- Pending reveals (skipped beats queued for re-introduction)
-- Active threads
-- Recent beats
-- Reminders
-
-**Node-mode sections** (the only supported mode — node-based design with each clue as a directed edge between two nodes):
-- Current Act (header only — premise and stakes only, no scene sequence)
-- Current node (the node the player is effectively "at": last visited, or the act-1 start node when nothing has been visited yet). Renders as `- ID — description`.
-- Reachable nodes (targets of clues the player has **already discovered**). Each entry renders as `- ID — description`. The current node is excluded from this list (it has its own section). The "current node" resolution uses the same fallback as Available clues: last visited, else the act-1 start node. The list is a *menu* the player picks from by acting, not a queue. Targets of the current node's *undiscovered* outbound clues are hidden, but their count is appended as `- (N undiscovered paths from here — surface clue opportunities, do not name targets)` so the LLM knows latent paths exist without learning where they lead.
-- Recently visited (last 3 visited node IDs)
-- On-screen NPCs (NPCs whose `last_seen_turn` is within 8 turns of the current chat length, with attitude and last action)
-- Discovered clues
-- Available clues — **simple filter**: undiscovered clues whose `found_at_node` matches the current node. No graph walk, no chain logic, no ranking. Each entry renders as `- ID — hint`. On turn 1 (no visits yet) the act-1 start node is treated as the current node.
-
-  Listing each clue's `ID` here doubles as the firing trigger for its lorebook entry: clue entries are keyed on the clue's own ID (e.g. `clue_07`), so SillyTavern's keyword scanner picks up exactly the IDs written into the AN. No enable/disable toggling required — the AN content *is* the curation.
-- Active threads
-- Recent scenes
-- Reminders
-
-**Operations:**
-
-- **GM closure tags** — on every assistant message, the extension parses tags, strips them from display, and advances `solo_ttrpg_story_state` in `chatMetadata`. The Author's Note is regenerated from state + lorebook on every change. No user click required. Tags from the wrong-mode vocabulary are logged and ignored (e.g. `<<beat:>>` in node-mode is a no-op, not an error). The full vocabulary by mode:
-  - Beat-mode: `<<beat:LABEL:resolved>>`, `<<act:N:complete>>`, `<<clue:found:ID>>`.
-  - Node-mode: `<<npc:ID:state:KEY=VALUE,KEY=VALUE>>` is the only GM-emitted tag. Node and clue tags emitted by the GM are silently dropped — the scene analyzer (below) is authoritative for both.
-- **Scene analyzer** (node-mode) — after each assistant message, a separate `generateRaw` call classifies the prose against the Reachable nodes and Available clues from current state. It returns JSON: `{ clues_found: [{id, evidence}], node_visited, node_completed, notes }`. The extension validates that each clue's `evidence` substring appears in the prose (fingerprint test), drops unknown ids, caps clues per turn, then feeds the surviving decisions through the same `applyClueFound` / `applyNodeVisited` / `applyNodeComplete` functions as legacy tags. Toggle: `analyzer.enabled` (default `true`). Manual re-run: "Run analysis on last message" button in **Automation → Scene analyzer**.
-- **Beat advancement** (beat-mode) — on `<<beat:LABEL:resolved>>` the extension marks the labeled beat (and any earlier unresolved beats) as resolved and promotes Next beat to Current beat. Resolving the last beat of an act auto-advances to act N+1 by rewriting the `Current Act` lorebook entry from the next-act entry already shipped in the campaign lorebook.
-- **Node visiting & NPC state** (node-mode) — analyzer-decided `node_visited` appends to `state.visitedNodes` (capped, deduped); `node_completed` appends to `state.completedNodes` and removes the node from Reachable. GM-emitted `<<npc:ID:state:KEY=VALUE,...>>` merges into `state.npcs[ID]` and bumps `last_seen_turn`. Each state change pushes a single `_lastStateChange` undo record.
-- **Silent summary refresh** — Recent beats / scenes / Active threads / Reminders are regenerated silently every N assistant messages (configurable, default 3). No popup, no diff. The user can inspect the result via SillyTavern's native Author's Note editor.
-- **"Move plot forward" button** — repurposes by mode:
-  - Beat-mode: manual immersion-safe nudge. Marks the Current beat resolved exactly as a `<<beat:current:resolved>>` tag would. No spoiler text, no popup. Used when fiction stalls.
-  - Node-mode: opens a popup listing currently Reachable nodes; selecting one marks the node visited (same code path the scene analyzer uses). This is a *correction* tool for when the analyzer missed a transition — not a progression tool. In node-mode, player progression comes from clue discovery and NPC agendas, not button clicks.
-- **"Move plot back" button** — also mode-aware:
-  - Beat-mode: undoes the last beat advance / act advance / drained pending reveal.
-  - Node-mode: pops the most recent `_lastStateChange` (visit / complete / clue / npc state) and inverts it.
-
-#### 2.3 Canon detection
-
-After each GM message:
-
-1. Extract proper nouns via regex (capitalized words not at sentence start, filtered against a stopword list)
-2. Compare against current lorebook entry keywords
-3. For candidates that appear 2+ times in the message or in high-salience contexts (dialogue attribution, possessive, title), flag them
-4. For flagged candidates, call LLM: "Given this message, is [entity] a new named NPC / location / faction / item worth adding to the campaign bible? If yes, draft a lorebook entry in the pack's GM-facing style."
-5. Show non-blocking modal with drafted entry. User accepts, edits, or ignores.
-6. On accept: write to active lorebook via World Info API.
-
-Same LLM provider as SillyTavern's main chat; no separate credentials.
-
-Cooldown: after a user ignores a proposed entry, the extension should not re-propose the same entity for N messages (prevent nagging).
+4. **Apply diff.** New facts become provisional. Threads open / advance. Scene and NPC state update. Truths the prose touched are recorded if they match the active director's note.
+5. **Pacing.** Compute pressure cue (`lean-in` / `let-it-breathe` / `complication` / null). Pick at most one campaign truth as the next director's note, based on adjacency to live threads and recent facts.
+6. **Secrets.** Walk every disabled-by-default lorebook entry tagged `secret`; if enough accepted facts or threads name its keywords, enable it.
+7. **AN rebuild.** Re-render the Author's Note from state.
+8. **Inline UI.** Render fact chips under the new message; refresh the threads tray.
 
 ---
 
-### Tier 3 — Build as pain emerges
+## Author's Note
 
-#### 3.1 Scene transition helper
+Sections (in order, empty sections are omitted):
 
-Replaced by closure-tag flow above. The "Move plot forward" button is the only remaining manual scene helper.
+```
+Thematic spine
+Live threads
+Recent facts
+Scene context
+On-screen NPCs
+Director's notes
+Pressure cue
+Tone reminders
+```
 
-#### 3.2 Lorebook hygiene
+The AN never lists beat labels, node IDs, clue IDs, or "available clues / reachable nodes". The v2 navigational vocabulary is retired.
 
-Periodic or on-demand maintenance dashboard:
-
-- Entries not fired in last N messages (stale)
-- Keyword collisions (two entries firing on same word)
-- Oversize entries (token count over threshold)
-- Orphan entries (not connected to current act or active threads)
-
-Surface as a dashboard; never auto-fix.
-
-#### 3.3 Session log export
-
-`/session-export` — produces a markdown file with:
-- Session summary
-- Full chat log (formatted)
-- List of lorebook entries added this session
-- Final character sheet state
-
-Downloads to user's machine. Different from backup bundle: this is human-readable, for review/sharing, not for restore.
-
-#### 3.4 Pack switcher UI
-
-Settings panel: dropdown showing available packs in the configured pack directory. Switching pack requires confirmation (clears sheet if schema-incompatible). Used for starting a new campaign in a different genre.
+A final `Response length cap` line is appended to remind the GM of the base prompt's 1–2-paragraph default.
 
 ---
 
-## Design principles
+## Inline UI
 
-1. **Suggest, don't automate.** Every state change requires confirmation. Silent automation on creative state is how campaigns corrupt unnoticed.
-2. **Pack-driven.** Attributes, resources, abilities come from the pack. No hardcoded names.
-3. **Graceful degradation.** If LLM call fails, feature no-ops quietly.
-4. **Configurable.** All thresholds and cadences in the settings panel.
-5. **Transparent.** Log view shows what the extension did, when, and why.
-6. **Reversible.** Every write has an undo.
+Two pieces of UI live in the chat, not in the settings panel:
+
+- **Fact chips.** Per-message strip rendered as `.solo-fact-chip` elements beneath the GM's `.mes_block`. Each chip shows one provisional fact with three buttons: ✓ accept, ✎ edit, ✗ reject. Untouched chips auto-accept on the next turn.
+- **Threads tray.** A single `#solo-threads-tray` element prepended to the chat container. Each live thread is a chip; click to rename, × to retire, `+ thread` to open a new one.
+
+Both are toggleable in the Director card.
 
 ---
 
-## Project layout
+## Settings panel
+
+One flat panel; no nested submenus. Mounted into `#extensions_settings2`. Five collapsible `<details>` cards:
+
+- **Campaign & Pack** — pack picker, load-pack directory input, backup export/import.
+- **Character** — character CRUD, persona link, the in-panel sheet.
+- **Story** — turn counter, live threads list, recent accepted facts, truths revealed, scene context, rewind-to-turn.
+- **Director** — extractor toggle, inline-UI toggles, manual-fact entry, active director's note + pressure cue display, AN rebuild button.
+- **Debug** — activity log and a state-dump button.
+
+Nothing in the panel references attributes, abilities, resources, dice, or STATUS_UPDATE — those concepts are gone.
+
+---
+
+## Modules
 
 ```
 solo-ttrpg-assistant/
 ├── manifest.json
-├── README.md
-├── CHANGELOG.md
-├── TESTING.md
-├── index.js                    # entry, event wiring, slash command registration
-├── settings.js                 # settings panel
+├── style.css
+├── index.js               — entry point + per-turn pipeline + persona events
+├── settings.js            — flat settings panel driver
 ├── modules/
-│   ├── pack.js                 # pack loading and schema access
-│   ├── characters.js           # multi-character store + persona sync
-│   ├── sheet.js                # character sheet state + UI
-│   ├── dice.js                 # roll commands + Quick Reply registration
-│   ├── backup.js               # export/import bundle
-│   ├── status_update.js        # STATUS_UPDATE parser
-│   ├── authors_note.js         # AN section management
-│   ├── canon_detection.js      # proper noun extraction + lorebook proposals
-│   ├── act_transition.js       # act advancement
-│   ├── lorebook_hygiene.js     # dashboard
-│   ├── session_export.js       # markdown export
-│   └── logger.js               # unified activity log
-├── ui/
-│   ├── sheet_panel.html
-│   ├── sheet_panel.css
-│   ├── confirm_modal.html
-│   ├── diff_view.html
-│   ├── settings_panel.html
-│   └── log_view.html
-└── lib/
-    ├── yaml.js                 # for reading pack YAML files
-    ├── zip.js                  # for backup bundle
-    └── diff.js                 # for diff views
+│   ├── constants.js       — module name, AN sections, settings shape
+│   ├── util.js            — settings/state I/O, character/fact/thread IDs, helpers
+│   ├── facts.js           — fact ledger CRUD + lifecycle + rewind
+│   ├── facts_extractor.js — per-turn LLM extractor (replaces scene_analyzer.js)
+│   ├── threads.js         — thread CRUD
+│   ├── pacing.js          — pressure cue + director's-note selection
+│   ├── lorebook_v2.js     — read-only lorebook helpers (truths, NPC names)
+│   ├── secrets.js         — tier-2 lorebook unlock logic
+│   ├── authors_note.js    — AN composition from state (no LLM summaries)
+│   ├── inline_ui.js       — fact chips + threads tray (DOM injection)
+│   ├── sheet.js           — v3 character-sheet UI + prompt-side rendering
+│   ├── characters.js      — character CRUD (no mode field)
+│   ├── pack.js            — v2 pack loader + lorebook helpers
+│   ├── persona_link.js    — persona-to-character binding
+│   ├── backup.js          — ZIP export/import
+│   └── logger.js          — bounded activity log
+└── ui/
+    └── settings_panel.html
 ```
 
----
-
-## Testing
-
-Manual test checklist in `TESTING.md`:
-
-- Load extension in a dev SillyTavern instance
-- **Pack loading:** click "Load pack" in settings, pick the example Symbaroum directory from `08_EXAMPLE_PACK_SYMBAROUM.md` rendered as a real directory. Verify pack loads, confirmation shows correct display_name and version.
-- **Pack persistence:** reload SillyTavern, verify the pack is still loaded without re-picking
-- **Degraded mode:** on a fresh install with no pack loaded, verify the extension doesn't crash and the sheet renders in minimal mode
-- **Multiple packs:** load a second pack directory, verify both appear in the pack dropdown, verify switching between them updates dice command names and sheet UI
-- **Compatibility check:** open a chat whose `__pack_reference` names a different pack than is currently active, verify the warning modal appears
-- **Malformed pack:** remove a required file from a pack directory, attempt load, verify specific error message naming the missing file; verify no partial load occurred
-- **Reload:** edit a pack file on disk, click "Reload pack", verify changes propagate to the extension's in-memory state
-- **Multi-character:** create, duplicate, rename, delete characters; switch between them and verify the sheet, pack, and (if linked) persona all follow. Confirm deleting the last character is refused.
-- **Legacy migration:** load a save that pre-dates multi-character (single `settings.character`) and verify it appears in the picker as the sole, active entry with `packName` stamped.
-- **Persona link (character → persona):** link two characters to two different ST personas; switching characters flips `user_avatar` and the ST persona UI updates.
-- **Persona link (persona → character):** change personas from ST's persona manager and verify the linked character activates; switching to an unlinked persona shows the hint toast but leaves the active character unchanged.
-- **Persona missing:** delete a linked persona in ST and confirm the sheet shows "— None (missing: &lt;key&gt;) —" without mutating character data.
-- Create a character, exercise all sheet fields
-- Roll every attribute via Quick Reply and slash command
-- Run `/backup-export`, verify ZIP contents include `__pack_reference` in the lorebook
-- `/backup-import` into a fresh chat, verify state matches and compatibility check fires if pack is not loaded
-- Send a GM message with a STATUS_UPDATE block, verify parse + modal; verify the field whitelist from `resources.yaml` is enforced
-- Send a GM message with a new NPC, verify canon detection proposal
-- Send GM messages containing closure tags, verify state advances and tags are stripped from display. Beat-mode: `<<beat:LABEL:resolved>>`. Node-mode: `<<npc:ID:state:K=V>>` advances NPC state; any GM-emitted `<<node:...>>` / `<<clue:...>>` are silently dropped. Confirm the scene analyzer fires after each assistant turn (settings → Log) and that its decisions update Discovered clues / Current node correctly.
-- In beat-mode, click "Move plot forward", verify Current beat advances to Next beat and AN re-renders. In node-mode, verify the same button opens a Reachable-nodes picker and selecting one updates `visitedNodes`.
-- Stress-test with 200+ message chat, check performance
+Modules deleted at the v2→v3 cut: `closure_tags.js`, `scene_analyzer.js`, `nodes.js`, `clue_chains.js`, `plot_skeleton.js`, `status_update.js`, `dice.js`.
 
 ---
 
-## Verification before declaring done
+## Settings document
 
-- [ ] Tier 1 features (sheet, dice, backup) fully functional and tested
-- [ ] Loads and respects the example Symbaroum pack
-- [ ] Backup/restore round-trip preserves chat, lorebook, AN, sheet verbatim
-- [ ] Pack switching works without corrupting state (prompts user when schemas differ)
-- [ ] No silent state changes — every write traceable in the log view
-- [ ] Graceful degradation when LLM calls fail
-- [ ] Documentation includes screenshots and a quick-start guide
+`extension_settings[solo_ttrpg_assistant]`:
+
+```
+{
+  enabled: true,
+  packs: { [name]: <parsedPack> },
+  activePackName: string | null,
+  activePack: <parsedPack> | null,
+  characters: { [id]: <characterRecord> },
+  activeCharacterId: string | null,
+  logs: [{ timestamp, level, message, details? }],
+  sheetInjection: { enabled, fallbackDepth },
+  backup: { autoExportMode },
+  authorsNote: { recentFactsInAN, autoSummaryEvery },
+  factExtractor: { enabled, autoCommitAfterTurns },
+  ui: { inlineFactChips, threadsTray }
+}
+```
+
+Retired keys (silently stripped on load): `statusUpdate`, `canonDetection`, `analyzer`.
+
+---
+
+## What gets sent to the GM
+
+Per turn, the GM sees (assembled by SillyTavern from card + lorebook + AN + chat):
+
+- **System prompt** (the v3 base prompt from [`07_GM_BASE_PROMPT.md`](07_GM_BASE_PROMPT.md)).
+- **Constant lorebook entries**: `__pack_gm_overlay`, `__pack_complications`, `__pack_reference`, plus the campaign bible.
+- **Keyword-triggered lorebook entries** that fire on the current context (NPCs, locations, factions, secrets that have been unlocked).
+- The injected **character sheet** block (from `sheet.js → formatCharacterSheetForPrompt`).
+- The **Author's Note** (the v3 sections above + a length-cap reminder).
+
+What the GM never sees: campaign truths that the pacing system has not selected, secret lorebook entries that have not been unlocked, or any list-of-IDs scaffolding.
+
+---
+
+## Testing checklist
+
+See [`solo-ttrpg-assistant/TESTING.md`](../solo-ttrpg-assistant/TESTING.md) for the full manual test pass. Categories:
+
+- Setup + negative pack-load (v1 rejected with clear message).
+- Character sheet round-trip (persists across reload).
+- Per-turn pipeline (fact chips render; threads tray populates; AN reflects state).
+- Provisional UX (accept / edit / reject behaviours).
+- Quote validation (paraphrased facts are dropped).
+- Rewind (facts after cutoff vanish; AN rebuilds).
+- Pacing + director's notes (when a `__campaign_truths` entry is present).
+- Backup export/import.
+- Legacy-chat migration (v1/v2 state archived, v3 fresh).
+- Disable / enable.

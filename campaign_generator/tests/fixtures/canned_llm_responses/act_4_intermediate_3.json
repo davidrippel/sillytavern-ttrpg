@@ -1,8 +1,0 @@
-{
-  "kind": "event",
-  "description": "Ivara Kelm shows {{user}} the third path through the chapel \u2014 the one Elira drew but never walked. Taking it costs something the others won't survive.",
-  "relevant_npcs": [
-    "Ivara Kelm"
-  ],
-  "relevant_location": "Root-Glass Chapel"
-}

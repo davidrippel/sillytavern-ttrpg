@@ -3,23 +3,10 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-SNAKE_CASE = re.compile(r"^[a-z][a-z0-9_]*$")
-CONSEQUENCE_FORMAT = re.compile(r"^([a-z][a-z0-9_]*)\s*:\s*([+-]?\d+)\s*$")
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-def _ensure_snake_case(value: str, field: str) -> str:
-    if not SNAKE_CASE.match(value):
-        raise ValueError(f"{field} must be lowercase snake_case (got {value!r})")
-    return value
-
-
-def _parse_consequence(value: str) -> tuple[str, int] | None:
-    match = CONSEQUENCE_FORMAT.match(value.strip())
-    if not match:
-        return None
-    return match.group(1), int(match.group(2))
+# --- Tone and pillars ----------------------------------------------------
 
 
 class Pillar(BaseModel):
@@ -42,265 +29,25 @@ class ToneAndPillars(BaseModel):
         return self
 
 
-class AttributeDraft(BaseModel):
-    key: str
-    display: str
-    description: str
-    examples: list[str]
-
-    @field_validator("key")
-    @classmethod
-    def _key_snake(cls, value: str) -> str:
-        return _ensure_snake_case(value, "attribute key")
-
-    @field_validator("examples")
-    @classmethod
-    def _examples_count(cls, value: list[str]) -> list[str]:
-        if not (2 <= len(value) <= 4):
-            raise ValueError(f"each attribute must have 2-4 examples (got {len(value)})")
-        return value
-
-
-class AttributesDraft(BaseModel):
-    attributes: list[AttributeDraft]
-
-    @model_validator(mode="after")
-    def _validate(self) -> "AttributesDraft":
-        if len(self.attributes) != 6:
-            raise ValueError(f"must produce exactly 6 attributes (got {len(self.attributes)})")
-        keys = [a.key for a in self.attributes]
-        if len(set(keys)) != 6:
-            raise ValueError(f"attribute keys must be unique (got {keys})")
-        displays = [a.display.strip().lower() for a in self.attributes]
-        if len(set(displays)) != 6:
-            raise ValueError(f"attribute display names must be unique (got {[a.display for a in self.attributes]})")
-        descriptions = [a.description.strip().lower() for a in self.attributes]
-        if len(set(descriptions)) != 6:
-            raise ValueError("attribute descriptions must be distinct (no two attributes describe the same ground)")
-        return self
-
-
-class AttributeOverlap(BaseModel):
-    a: str
-    b: str
-    conflicting_examples: list[str] = Field(default_factory=list)
-    explanation: str = ""
-
-
-class AttributeOverlapReport(BaseModel):
-    overlaps: list[AttributeOverlap] = Field(default_factory=list)
-
-
-class ResourceDraft(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    key: str
-    display: str
-    kind: str
-    description: str | None = None
-    starting_value: int | float | str | bool | None = None
-    max_value_field: str | None = None
-    threshold_field: str | None = None
-    threshold_consequence: dict | None = None
-    threshold: int | None = None
-    threshold_effect: str | None = None
-    endgame_value: int | None = None
-    endgame_effect: str | None = None
-
-    @field_validator("key")
-    @classmethod
-    def _key_snake(cls, value: str) -> str:
-        return _ensure_snake_case(value, "resource key")
-
-    @field_validator("kind")
-    @classmethod
-    def _kind_known(cls, value: str) -> str:
-        allowed = {"pool", "pool_with_threshold", "counter", "static_value", "flag", "tally"}
-        if value not in allowed:
-            raise ValueError(f"resource kind must be one of {sorted(allowed)} (got {value!r})")
-        return value
-
-
-class ResourcesDraft(BaseModel):
-    resources: list[ResourceDraft]
-
-    @model_validator(mode="after")
-    def _validate(self) -> "ResourcesDraft":
-        keys = [r.key for r in self.resources]
-        if len(set(keys)) != len(keys):
-            raise ValueError(f"resource keys must be unique (got {keys})")
-        if "hp_current" not in keys or "hp_max" not in keys:
-            missing = [k for k in ("hp_current", "hp_max") if k not in keys]
-            raise ValueError(f"resources must include {missing}")
-        # Genre resources beyond the required hp pair: 2-4
-        non_required = [k for k in keys if k not in {"hp_current", "hp_max"}]
-        if not (2 <= len(non_required) <= 6):
-            raise ValueError(f"need 2-4 genre resources beyond hp_current/hp_max (got {len(non_required)})")
-        for resource in self.resources:
-            if resource.kind == "pool_with_threshold":
-                if not resource.threshold_field:
-                    raise ValueError(f"resource {resource.key!r} (pool_with_threshold) requires threshold_field")
-                if resource.threshold_field not in keys:
-                    raise ValueError(
-                        f"resource {resource.key!r} threshold_field {resource.threshold_field!r} is not a known resource key"
-                    )
-        live_kinds = {"pool", "pool_with_threshold", "counter", "tally"}
-        live_resources = [r for r in self.resources if r.kind in live_kinds]
-        if len(live_resources) > 4:
-            live_keys = [r.key for r in live_resources]
-            raise ValueError(
-                f"too many live resource tracks ({len(live_resources)}: {live_keys}); the authoring guide caps "
-                f"live tracks at 4 (HP plus three genre resources is the upper bound). Consolidate or demote "
-                f"one to a static descriptor"
-            )
-        return self
-
-
-Activation = Literal["active", "passive", "passive_or_triggered", "triggered", "ritual"]
-
-
-class AbilityCategoryDraft(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    key: str
-    display: str
-    description: str
-    activation: Activation
-    has_levels: bool = False
-    level_names: list[str] = Field(default_factory=list)
-    roll_attribute: str | None = None
-    consequence_on_failure: str | None = None
-    consequence_on_partial: str | None = None
-
-    @field_validator("key")
-    @classmethod
-    def _key_snake(cls, value: str) -> str:
-        return _ensure_snake_case(value, "ability category key")
-
-    @model_validator(mode="after")
-    def _validate_consequence_gradient(self) -> "AbilityCategoryDraft":
-        if not self.consequence_on_failure or not self.consequence_on_partial:
-            return self
-        failure = _parse_consequence(self.consequence_on_failure)
-        partial = _parse_consequence(self.consequence_on_partial)
-        if failure is None or partial is None:
-            return self
-        if failure == partial:
-            raise ValueError(
-                f"category {self.key!r}: consequence_on_failure and consequence_on_partial are identical "
-                f"({self.consequence_on_failure!r}); partial should be a lesser cost or different kind"
-            )
-        f_resource, f_delta = failure
-        p_resource, p_delta = partial
-        if f_resource == p_resource and abs(p_delta) > abs(f_delta):
-            raise ValueError(
-                f"category {self.key!r}: consequence_on_partial ({self.consequence_on_partial!r}) is "
-                f"harsher than consequence_on_failure ({self.consequence_on_failure!r}); partial should be lesser"
-            )
-        return self
-
-
-class AbilityCategoriesDraft(BaseModel):
-    categories: list[AbilityCategoryDraft]
-
-    @model_validator(mode="after")
-    def _validate(self) -> "AbilityCategoriesDraft":
-        if not (3 <= len(self.categories) <= 8):
-            raise ValueError(f"must produce 3-8 ability categories (got {len(self.categories)})")
-        keys = [c.key for c in self.categories]
-        if len(set(keys)) != len(keys):
-            raise ValueError(f"ability category keys must be unique (got {keys})")
-        active = [c for c in self.categories if c.activation == "active"]
-        seen: dict[tuple[str, str], str] = {}
-        for category in active:
-            if not category.roll_attribute or not category.consequence_on_failure:
-                continue
-            signature = (category.roll_attribute, category.consequence_on_failure.strip())
-            if signature in seen:
-                raise ValueError(
-                    f"active categories {seen[signature]!r} and {category.key!r} share the same roll_attribute "
-                    f"({signature[0]!r}) and consequence_on_failure ({signature[1]!r}); collapse them or "
-                    f"differentiate the mechanical signature"
-                )
-            seen[signature] = category.key
-        if len(self.categories) >= 4:
-            activations = {c.activation for c in self.categories}
-            if len(activations) < 2:
-                raise ValueError(
-                    f"all {len(self.categories)} categories share the same activation "
-                    f"({next(iter(activations))!r}); the authoring guide recommends a mix — "
-                    f"1-3 active, plus passive/triggered/ritual. Diversify the activation types"
-                )
-        return self
-
-
-class AbilityDraft(BaseModel):
-    name: str
-    category: str
-    prerequisite: str | None = None
-    description: str
-    effect: str
-
-    @field_validator("category")
-    @classmethod
-    def _category_snake(cls, value: str) -> str:
-        return _ensure_snake_case(value, "ability category reference")
-
-
-class AbilityCatalogDraft(BaseModel):
-    catalog: list[AbilityDraft]
-
-    @model_validator(mode="after")
-    def _validate(self) -> "AbilityCatalogDraft":
-        if not (15 <= len(self.catalog) <= 25):
-            raise ValueError(f"ability catalog must have 15-25 entries (got {len(self.catalog)})")
-        names = [a.name for a in self.catalog]
-        if len(set(names)) != len(names):
-            duplicates = sorted({n for n in names if names.count(n) > 1})
-            raise ValueError(f"ability names must be unique; duplicates: {duplicates}")
-        self._validate_prerequisite_depth()
-        return self
-
-    def _validate_prerequisite_depth(self) -> None:
-        by_name = {a.name: a for a in self.catalog}
-        depth_cache: dict[str, int] = {}
-
-        def depth(name: str, visiting: set[str]) -> int:
-            if name in depth_cache:
-                return depth_cache[name]
-            if name in visiting:
-                raise ValueError(f"prerequisite cycle detected involving ability {name!r}")
-            ability = by_name.get(name)
-            if ability is None:
-                return 0
-            prereq = (ability.prerequisite or "").strip()
-            if not prereq or prereq.lower() == "none":
-                depth_cache[name] = 0
-                return 0
-            if prereq not in by_name:
-                depth_cache[name] = 0
-                return 0
-            visiting = visiting | {name}
-            d = 1 + depth(prereq, visiting)
-            depth_cache[name] = d
-            return d
-
-        max_chain_depth = 3
-        for ability in self.catalog:
-            d = depth(ability.name, set())
-            if d > max_chain_depth:
-                raise ValueError(
-                    f"ability {ability.name!r} has prerequisite chain depth {d} (max {max_chain_depth}); "
-                    f"deep prerequisite chains straitjacket character builds"
-                )
+# --- GM prompt overlay (v2) ---------------------------------------------
 
 
 class GMOverlay(BaseModel):
+    """The story-mode GM overlay. Each section becomes a ``## Header`` in
+    the rendered ``gm_prompt_overlay.md``. The campaign generator embeds
+    the whole rendered file into the lorebook as ``__pack_gm_overlay``.
+
+    There are no resource_mechanics, attribute_guidance, or
+    ability_adjudication sections in v2 — the system has no scores,
+    pools, or rolls. Their place is taken by ``resolving_actions``
+    (narrative adjudication) and ``translating_pressures`` (the genre's
+    accumulating signs).
+    """
+
     setting_and_tone: str
     thematic_pillars: str
-    attribute_guidance: str
-    resource_mechanics: str
-    ability_adjudication: str
+    resolving_actions: str
+    translating_pressures: str
     npc_conventions: str
     content_to_include: str
     content_to_avoid: str
@@ -311,9 +58,8 @@ class GMOverlay(BaseModel):
         sections = (
             self.setting_and_tone,
             self.thematic_pillars,
-            self.attribute_guidance,
-            self.resource_mechanics,
-            self.ability_adjudication,
+            self.resolving_actions,
+            self.translating_pressures,
             self.npc_conventions,
             self.content_to_include,
             self.content_to_avoid,
@@ -322,28 +68,147 @@ class GMOverlay(BaseModel):
         total = sum(len(section.split()) for section in sections)
         if total > 1800:
             raise ValueError(
-                f"gm_prompt_overlay total word count is {total}; the authoring guide caps overlays at "
-                f"~1500 words (hard fail at 1800). Cut redundant prose; the LLM doesn't need every "
-                f"subtlety spelled out"
+                f"gm_prompt_overlay total word count is {total}; the authoring guide caps "
+                f"overlays at ~1500 words (hard fail at 1800). Cut redundant prose."
             )
         return self
-    story_mode_play: str = ""
+
+    @model_validator(mode="after")
+    def _validate_no_legacy_language(self) -> "GMOverlay":
+        # The runtime has no dice or numeric resources. If the overlay
+        # leaks stat-mode language, repair-loop the stage instead of
+        # shipping a broken pack.
+        haystack = (
+            self.resolving_actions
+            + "\n"
+            + self.translating_pressures
+            + "\n"
+            + self.character_creation
+        ).lower()
+        bad_terms = ("2d6", "+1 to ", "attribute roll", "make a roll", "status_update")
+        leaks = [term for term in bad_terms if term in haystack]
+        if leaks:
+            raise ValueError(
+                f"gm_prompt_overlay leaks retired stat-mode language: {leaks}. "
+                f"v2 packs use narrative adjudication only — no dice, no numeric resources."
+            )
+        return self
 
 
-class FailureMove(BaseModel):
+# --- Complications -------------------------------------------------------
+
+
+class Complication(BaseModel):
     title: str
     body: str
 
+    @field_validator("body")
+    @classmethod
+    def _body_substantive(cls, value: str) -> str:
+        if len(value.split()) < 6:
+            raise ValueError(
+                f"complication body too short ({value!r}); each complication is a concrete "
+                f"narrative consequence, at least one full sentence"
+            )
+        return value
 
-class FailureMovesDraft(BaseModel):
-    moves: list[FailureMove]
-    partial_success_trades: list[str] = Field(default_factory=list)
+
+class SuccessCost(BaseModel):
+    text: str
+
+    @field_validator("text")
+    @classmethod
+    def _trim(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned.split()) < 4:
+            raise ValueError(f"success-cost entry too short ({value!r})")
+        return cleaned
+
+
+class ComplicationsDraft(BaseModel):
+    complications: list[Complication]
+    success_costs: list[SuccessCost]
 
     @model_validator(mode="after")
-    def _validate(self) -> "FailureMovesDraft":
-        if not (8 <= len(self.moves) <= 12):
-            raise ValueError(f"failure_moves must have 8-12 genre-specific moves (got {len(self.moves)})")
+    def _shape(self) -> "ComplicationsDraft":
+        if not (10 <= len(self.complications) <= 15):
+            raise ValueError(
+                f"complications must have 10-15 genre-specific entries "
+                f"(got {len(self.complications)})"
+            )
+        if not (6 <= len(self.success_costs) <= 12):
+            raise ValueError(
+                f"success_costs must have 6-12 entries (got {len(self.success_costs)})"
+            )
+        # No vague phrases.
+        vague = ("something happens", "something bad", "the gm decides", "you fail", "you lose")
+        for entry in self.complications:
+            haystack = f"{entry.title} {entry.body}".lower()
+            for phrase in vague:
+                if phrase in haystack:
+                    raise ValueError(
+                        f"complication {entry.title!r} contains vague phrase {phrase!r}; "
+                        f"replace with a concrete change to the situation"
+                    )
         return self
+
+
+UNIVERSAL_COMPLICATIONS: tuple[str, ...] = (
+    "Reveal an unwelcome truth or danger the player didn't know.",
+    "Separate the protagonist from something they value.",
+    "Force a hard choice between two things they want to keep.",
+    "Burn a resource — gear breaks, a torch dies, ammunition spent.",
+    "Attract attention from someone dangerous.",
+    "Inflict a condition (bleeding, exhausted, shaken, marked).",
+)
+
+
+# --- Advantages / disadvantages -----------------------------------------
+
+
+class VocabAxis(BaseModel):
+    title: str
+    entries: list[str]
+
+    @model_validator(mode="after")
+    def _shape(self) -> "VocabAxis":
+        if not (4 <= len(self.entries) <= 8):
+            raise ValueError(
+                f"axis {self.title!r}: must have 4-8 entries (got {len(self.entries)})"
+            )
+        for entry in self.entries:
+            if len(entry.split()) < 3:
+                raise ValueError(
+                    f"axis {self.title!r}: entry {entry!r} is too vague — needs a specific "
+                    f"thing the GM can picture (a place, training, mark, debt)"
+                )
+        return self
+
+
+class AdvantagesDisadvantagesDraft(BaseModel):
+    advantage_axes: list[VocabAxis]
+    disadvantage_axes: list[VocabAxis]
+
+    @model_validator(mode="after")
+    def _shape(self) -> "AdvantagesDisadvantagesDraft":
+        if not (3 <= len(self.advantage_axes) <= 5):
+            raise ValueError(
+                f"advantage_axes must have 3-5 axes (got {len(self.advantage_axes)})"
+            )
+        if not (3 <= len(self.disadvantage_axes) <= 5):
+            raise ValueError(
+                f"disadvantage_axes must have 3-5 axes (got {len(self.disadvantage_axes)})"
+            )
+        adv_total = sum(len(a.entries) for a in self.advantage_axes)
+        dis_total = sum(len(a.entries) for a in self.disadvantage_axes)
+        if not (20 <= adv_total <= 35):
+            raise ValueError(f"advantages total must be 20-35 (got {adv_total})")
+        if not (15 <= dis_total <= 25):
+            raise ValueError(f"disadvantages total must be 15-25 (got {dis_total})")
+        return self
+
+
+# --- Example hooks -------------------------------------------------------
 
 
 class ExampleHook(BaseModel):
@@ -362,14 +227,23 @@ class ExampleHooksDraft(BaseModel):
             tail = hook.body.strip().lower()[-200:]
             if "?" in tail:
                 continue
-            choice_phrases = ("what do you do", "what now", "you must decide", "your move", "you must choose")
+            choice_phrases = (
+                "what do you do",
+                "what now",
+                "you must decide",
+                "your move",
+                "you must choose",
+            )
             if any(phrase in tail for phrase in choice_phrases):
                 continue
             raise ValueError(
-                f"hook {hook.title!r} does not end at a moment of choice; the last paragraph should "
-                f"present the player with a question or explicit decision point"
+                f"hook {hook.title!r} does not end at a moment of choice; the last paragraph "
+                f"should present the player with a question or explicit decision point"
             )
         return self
+
+
+# --- Generator seed defaults (v2) ----------------------------------------
 
 
 class GeneratorSeedDraft(BaseModel):
@@ -378,18 +252,37 @@ class GeneratorSeedDraft(BaseModel):
     themes_exclude: list[str]
     tone: list[str]
     antagonist_archetypes_preferred: list[str]
-    num_acts: int = 4
-    num_npcs: int = 10
-    num_locations: int = 8
-    clue_chain_density: Literal["low", "medium", "high"] = "medium"
-    branch_points: int = 6
+    num_npcs: int = 18
+    num_locations: int = 12
+    num_factions: int = 4
+    num_truths: int = 7
+    num_complications: int = 12
 
     @model_validator(mode="after")
     def _non_empty_lists(self) -> "GeneratorSeedDraft":
-        for field in ("setting_anchors", "themes_include", "tone", "antagonist_archetypes_preferred"):
+        for field in (
+            "setting_anchors",
+            "themes_include",
+            "tone",
+            "antagonist_archetypes_preferred",
+        ):
             value = getattr(self, field)
             if not value:
                 raise ValueError(f"{field} must not be empty")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_counts(self) -> "GeneratorSeedDraft":
+        for field, lo, hi in (
+            ("num_npcs", 8, 30),
+            ("num_locations", 6, 20),
+            ("num_factions", 2, 6),
+            ("num_truths", 5, 10),
+            ("num_complications", 8, 15),
+        ):
+            v = getattr(self, field)
+            if not (lo <= v <= hi):
+                raise ValueError(f"{field}={v} out of expected range [{lo}, {hi}]")
         return self
 
     @model_validator(mode="after")
@@ -401,20 +294,22 @@ class GeneratorSeedDraft(BaseModel):
         exact_overlap = normalized_include & normalized_exclude
         if exact_overlap:
             raise ValueError(
-                f"themes_include and themes_exclude overlap on terms: {sorted(exact_overlap)}; "
-                f"the same theme cannot be both wanted and forbidden"
+                f"themes_include and themes_exclude overlap on: {sorted(exact_overlap)}"
             )
         normalized_tone = {_normalize_seed_term(t) for t in self.tone if t}
         normalized_tone.discard("")
         contradictions: list[tuple[str, str]] = []
         for tone_term in normalized_tone:
             for exclude_term in normalized_exclude:
-                if tone_term == exclude_term or tone_term in exclude_term or exclude_term in tone_term:
+                if (
+                    tone_term == exclude_term
+                    or tone_term in exclude_term
+                    or exclude_term in tone_term
+                ):
                     contradictions.append((tone_term, exclude_term))
         if contradictions:
             raise ValueError(
-                f"tone keywords contradict themes_exclude: {contradictions}; the GM cannot be told to "
-                f"evoke a tone whose name overlaps a forbidden theme (e.g. tone:[grim] + exclude:[grimdark])"
+                f"tone keywords contradict themes_exclude: {contradictions}"
             )
         return self
 
@@ -442,9 +337,8 @@ class GeneratorSeedDraft(BaseModel):
                 too_generic.append(anchor)
         if too_generic:
             raise ValueError(
-                f"setting_anchors entries are too generic: {too_generic}; each anchor needs a specific "
-                f"descriptor (not 'the_frontier' but 'verdant_prime_derelict_colony'). At least 2 tokens "
-                f"and not in the cliché blocklist"
+                f"setting_anchors entries are too generic: {too_generic}; "
+                f"each anchor needs at least 2 tokens and not in the cliché blocklist"
             )
         return self
 
@@ -455,13 +349,16 @@ class GeneratorSeedDraft(BaseModel):
         if len(normalized) < 3:
             raise ValueError(
                 f"antagonist_archetypes_preferred must have at least 3 distinct archetypes "
-                f"(got {len(normalized)} unique: {sorted(normalized)}); single-archetype packs feel flat"
+                f"(got {sorted(normalized)})"
             )
         return self
 
 
 def _normalize_seed_term(term: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", term.lower()).strip("_")
+
+
+# --- Pack description ----------------------------------------------------
 
 
 class PackDescription(BaseModel):
@@ -476,6 +373,9 @@ class PackDescription(BaseModel):
         if len(cleaned) > 280:
             raise ValueError("description should be a single evocative sentence (<= 280 chars)")
         return cleaned
+
+
+# --- Naming --------------------------------------------------------------
 
 
 class NamingDraft(BaseModel):
@@ -495,16 +395,19 @@ class NamingDraft(BaseModel):
         for entry in self.naming_registers:
             if len(entry) < 30:
                 raise ValueError(
-                    f"naming register entry too short ({entry!r}); each entry should describe a "
-                    f"naming convention specifically enough that an LLM can sample names from it"
+                    f"naming register entry too short ({entry!r}); each entry should describe "
+                    f"a naming convention specifically enough that an LLM can sample names"
                 )
         for entry in self.district_flavors:
             if len(entry) < 20:
                 raise ValueError(
-                    f"district flavor entry too short ({entry!r}); each entry should be a concrete "
-                    f"neighborhood or precinct archetype that fits the genre"
+                    f"district flavor entry too short ({entry!r}); each entry should be a "
+                    f"concrete neighborhood or precinct archetype that fits the genre"
                 )
         return self
+
+
+# --- Review checklist ----------------------------------------------------
 
 
 class ChecklistItem(BaseModel):
@@ -518,5 +421,7 @@ class ReviewChecklistDraft(BaseModel):
     @model_validator(mode="after")
     def _validate(self) -> "ReviewChecklistDraft":
         if len(self.items) < 4:
-            raise ValueError(f"review checklist must have at least 4 specific items (got {len(self.items)})")
+            raise ValueError(
+                f"review checklist must have at least 4 specific items (got {len(self.items)})"
+            )
         return self

@@ -1,8 +1,0 @@
-{
-  "kind": "event",
-  "description": "Odel Fen pulls {{user}} aside in the Waystation stables: he saw something on the bridge that night that doesn't fit Dren's official story.",
-  "relevant_npcs": [
-    "Odel Fen"
-  ],
-  "relevant_location": "Saint's Rest Waystation"
-}

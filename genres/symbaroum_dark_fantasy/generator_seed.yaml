@@ -19,14 +19,14 @@ tone:
   - mysterious
   - morally_ambiguous
   - patient
-num_acts: 4
-num_npcs: 10
-num_locations: 8
+num_npcs: 18
+num_locations: 12
+num_factions: 4
+num_truths: 7
+num_complications: 12
 antagonist_archetypes_preferred:
   - corrupt_inquisitor
   - ancient_sorcerer
   - cult_leader
   - tainted_noble
   - forest_spirit
-clue_chain_density: medium
-branch_points: 7

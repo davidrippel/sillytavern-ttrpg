@@ -4,6 +4,8 @@ Reference for humans (or LLMs) writing genre packs by hand, without the pack gen
 
 Read `02_GENRE_PACK_SPEC.md` first for the formal contract. This document is the conceptual guide — what each file is *for*, common pitfalls, and patterns that work across genres.
 
+This guide describes **schema v2** packs (story-mode only — no attribute scores, no resource pools, no dice). For migrating v1 packs, see the migration section in `02_GENRE_PACK_SPEC.md`.
+
 ---
 
 ## Before you start
@@ -12,19 +14,25 @@ Answer these questions. The answers shape every file in the pack.
 
 ### What is one campaign in this genre about?
 
-Not the meta-genre ("cyberpunk"), but what a typical campaign looks like. "Street-level netrunners pulling a job that goes wrong" is a campaign. "Cyberpunk" is not. The answer drives tone, ability catalog, and the default generator seed.
+Not the meta-genre ("cyberpunk"), but what a typical campaign looks like. "Street-level netrunners pulling a job that goes wrong" is a campaign. "Cyberpunk" is not. The answer drives tone, complications, the kinds of advantages players will pick, and the default generator seed.
 
 ### What does failure feel like?
 
-In Symbaroum, failure means corruption creeping in — you succeed at magic but lose a piece of yourself. In cosmic horror, failure means losing grip on sanity. In heist, failure means heat rising — the law closing in. The failure texture is the genre's emotional core. Get this right and the rest falls into place.
+In Symbaroum, failure means corruption creeping in — you succeed but lose a piece of yourself. In cosmic horror, failure means losing grip on sanity. In heist, failure means heat rising — the law closing in. The failure texture is the genre's emotional core. Get this right and the rest falls into place.
 
-### What are the protagonist's abilities *in kind*, not in list?
+The pack expresses failure in two places: the *complications* list (concrete consequences) and the *translating pressures into fiction* section of the overlay (how accumulating signs land in prose).
 
-Fantasy protagonists wield magic (supernatural, costly). Cyberpunk protagonists wield cyberware (technological, invasive, also costly). Hard SF protagonists wield training and tools (mundane but hard-won). What is the *class* of power available, and what's its cost? This is the ability catalog's backbone.
+### What are the protagonist's signature capabilities?
 
-### What do the six attributes care about?
+Fantasy protagonists wield magic — supernatural, costly. Cyberpunk protagonists wield cyberware — technological, invasive, also costly. Hard SF protagonists wield training and tools — mundane but hard-won. What is the *class* of power available, and what's its cost?
 
-Most genres have a physical, a mental, a social, and a "skill" pool. The sixth attribute is where the genre lives. Symbaroum has Shadow (the occult). Cyberpunk might have Edge (street instinct). Hard SF might have Discipline (training). The sixth attribute tells you what the game is *about*.
+In v2 packs, this lives in two places: the *advantages_disadvantages* vocabulary (the kinds of phrases a character builds with) and the overlay's *resolving actions* section (how the GM leans on those advantages).
+
+### What is the genre's accumulating pressure?
+
+The thing that piles up. Symbaroum: corruption. Cosmic horror: sanity loss. Heist: heat. Hard SF: ship damage / oxygen / supply. Cyberpunk: a mix — humanity, heat, debt.
+
+The pack does not track this as a number. The GM describes accumulating signs in prose, and the system's fact extractor picks them up. The overlay must give the GM a vocabulary of concrete signs for the pressure (smells, sensations, NPC reactions, physical marks) so the prose stays specific.
 
 ### What content is in-bounds, and what is out?
 
@@ -36,108 +44,75 @@ Not every genre wants every theme. Dark fantasy probably wants body horror; it p
 
 ### `pack.yaml`
 
-Metadata. Fill it in last, when everything else is stable. The `description` field is what shows in the extension's pack picker — make it evocative in one sentence.
-
-### `attributes.yaml`
-
-**The hardest file.** Six attributes must cover everything the GM might call for, without overlap. Common failure modes:
-
-- *Overlap.* "Strength" and "Might" are the same attribute. "Charisma" and "Presence" are the same. If two attributes share any core examples, collapse them.
-- *Abstraction imbalance.* One attribute names a specific skill (Pilot), while others name capabilities (Wits, Will). Keep the level of abstraction consistent — either all capabilities or all domains, not a mix.
-- *Overloaded social.* Many genres put "persuade, intimidate, deceive, and lead" all in one attribute (Presence, Charisma). This is usually fine in narrative play. Don't split them across two attributes just because tabletop systems do.
-- *The sixth attribute problem.* If the sixth attribute is just "magic" or "hacking" or "psionics", you've created a tax: characters who don't do that thing have a wasted stat slot. Better: name the sixth attribute something broader that magic/hacking/psionics *uses*, so non-specialists can still benefit. Symbaroum's Shadow isn't only for witches — it's perception of the unnatural, usable by anyone. Cyberpunk's Edge isn't only for netrunners — it's street instinct.
-
-The six names, collectively, should sound like a genre, not like a checklist. Read them in sequence: Might, Finesse, Wits, Will, Presence, Shadow. That's fantasy. Now: Grit, Reflex, Tech, Nerve, Charm, Edge. That's cyberpunk. Different feel entirely.
-
-### `resources.yaml`
-
-Every pack needs HP (universal). Beyond that, pick resources that *interact* with the GM loop:
-
-- Resources that tick up from ability use (corruption from magic, heat from loud action)
-- Resources that tick up from failure (sanity loss, stress)
-- Resources that tick down from time (oxygen, fuel)
-- Resources that represent relationships (faction reputation, crew morale)
-
-Avoid resources that don't change in play — those are just character descriptors, not mechanics.
-
-A pack with one HP and one "genre resource" is enough. A pack with HP and four different mental/physical/social resources is overdesigned — the player spends all their time tracking state instead of playing.
-
-Threshold mechanics (accumulate to N, then bad thing happens, reset) are almost always good. They create escalation pressure without instant death.
-
-### `abilities.yaml`
-
-Two-part structure: categories declare how abilities *work mechanically*, the catalog is concrete examples.
-
-**Category design:**
-
-A category's `activation` and `roll_attribute` determine its mechanical signature. Active abilities (roll to use, cost on failure) are the most interesting — they're where player choices have real weight. Passive abilities are the supporting cast. Ritual abilities are the genre's "I spend a scene doing a thing" lever.
-
-A good pack has:
-- 1-3 active categories (the main levers)
-- 1 "passive/general" category for skills that don't need a mechanical signature
-- Optionally 1 ritual category for out-of-combat setup-to-payoff moments
-- Optionally 1 trait category for permanent character features
-
-If every category is active and uses the same attribute and the same consequence, you've actually only made one category.
-
-**Catalog design:**
-
-Players pick from the catalog (loosely) or invent within categories (also fine). The catalog's job is:
-- Establish the *flavor* of what's possible in the genre
-- Give new players concrete starting points
-- Give the campaign generator a pool to draw from when creating antagonist capabilities
-
-Catalog diversity matters more than size. 15 abilities spanning 4 categories with 4 ranges of power is better than 30 abilities all in one category.
-
-Prerequisite chains (A requires B requires C) create progression arcs — a character starts with A, earns B, eventually unlocks C. Use sparingly. Most abilities should be independent so character builds aren't straitjacketed.
+Metadata. Fill it in last, when everything else is stable. The `description` field is what shows in the extension's pack picker — make it evocative in one sentence. Make sure `schema_version: 2`.
 
 ### `character_template.json`
 
-Largely mechanical: derived from attributes.yaml and resources.yaml. Little creative work here. The starting values for resources should represent "a healthy character at the start of their story" — full HP, zero corruption/heat/stress, etc.
+Almost no creative work. The shape is fixed (`name`, `concept`, `advantages`, `disadvantages`, `belongings`, `relationships`, `notes`). You may pre-seed defaults that fit the genre — a witch-hunter pack might pre-fill `belongings` with `["silver-edged knife", "manual of rites"]` so new characters start with genre-appropriate gear without the player having to invent every item.
+
+Don't pre-fill `advantages` or `disadvantages` — those are the player's expressive choices. The vocabulary file is the right place to suggest, not the template.
 
 ### `gm_prompt_overlay.md`
 
-**The second-hardest file.** This is what makes the pack *feel* like the genre in play. The base GM prompt (`07_GM_BASE_PROMPT.md`) handles structure and mechanics; this handles voice, texture, and priorities.
+**The hardest file.** This is what makes the pack *feel* like the genre in play. The base GM prompt handles structure; this handles voice, texture, and priorities.
 
 Keep it under 1500 words. The GM doesn't need every subtlety spelled out — LLMs interpolate well from a few strong examples. What they need:
 
 - **Sensory markers of the genre.** Not "dark and mysterious" but "the smell of wet stone and old blood; the sound of distant bells; the ever-present weight of the forest."
-- **Priority hierarchy.** When in doubt, does the GM favor mood over clarity? Player agency over authored plot? Danger over comfort? State the tradeoffs.
-- **Specific things to do / not to do.** "Describe corruption as physical — sweat, nausea, a buzzing at the edge of vision — not as a number going up." "Don't soften witch-hunters. They believe they're right."
-- **Reference to the pack's mechanics.** When is corruption inflicted? What does a failed Shadow roll feel like? What does a successful ability activation look like in narration?
+- **The adjudication grammar.** When does an advantage land hard? What does a clean win look like in this genre (rare, costly, earned)? What does a failure look like? Don't restate the engine — describe the *texture* the engine should produce.
+- **The pressure vocabulary.** For the genre's accumulating pressure, give the GM 4–8 concrete signs they can drop into prose — sweat, smell, animals reacting, a reflection wrong, a debt remembered. Without this list, the GM defaults to "you feel corrupted" and the genre dies.
+- **NPC voices.** 3–6 archetypes with one-line speech notes — "the inquisitor speaks in formal, certain cadence" lands; "NPCs talk normally" doesn't.
 
 Avoid:
-- Lists of rules the base prompt already covers (scene structure, STATUS_UPDATE format, roll interpretation — these are engine-level)
-- Mere vibes without specifics ("make it dark") — the LLM will read this as "be grim constantly" and over-correct
+
+- Lists of rules the base prompt already covers (NPC format, OOC handling, length cap, "never invent campaign truths")
+- Mere vibes without specifics ("make it dark")
 - Internal contradictions ("prioritize mood" vs "always be clear about options")
+- References to dice, attribute scores, abilities, or resources — those concepts are retired in v2
 
 ### `tone.md`
 
-Optional and not runtime-injected. Think of it as the pack's mood board. Soundtrack notes, writing samples, visual references. Useful for pack authors and pack reviewers; ignored by tools.
+Optional and not runtime-injected. Think of it as the pack's mood board. Soundtrack notes, writing samples, visual references. Useful for pack authors and pack reviewers; ignored by tools at runtime, but the campaign generator does scan it to calibrate hook prose.
 
 Can be empty. Don't pad.
 
-### `failure_moves.md`
+### `complications.md`
 
-Genre-flavored additions to the universal failure-move list. Aim for 6-10 genre-specific moves. Each move is a concrete thing the GM can do on a 2-6 result.
+Genre-flavored narrative complications. Aim for 10–15 genre-specific entries plus 5–8 universal ones (marked `[universal]`).
 
-Good moves:
-- Are *specific* to the genre (not "something bad happens")
-- Are *actionable* (describe a concrete change to the situation)
-- Ratchet tension rather than ending scenes
+Good complications:
 
-Bad moves:
-- "The player loses." (Not a move, a dead end.)
+- Are *specific* to the genre (not "something bad happens").
+- Are *actionable* (describe a concrete change to the situation).
+- Ratchet tension rather than ending scenes.
+- Layer with the pressure vocabulary — when an action goes badly *and* a corruption sign appears, the genre's emotional core lands harder.
+
+Bad complications:
+
+- "The player loses." (Dead end.)
 - "Something mysterious happens." (Too vague.)
 - "The GM decides." (Not a move.)
 
-The best moves are specific enough that the GM, reading the list during play, can pick one and immediately know what to narrate.
+The mandatory "success but..." section is where most packs get sloppy. Authors write 12 great failure complications and then list 3 lazy "success but slower" entries. Spend the same effort on the success-with-cost section — that's where the genre's texture shows up most often, because most player actions succeed.
+
+### `advantages_disadvantages.md`
+
+Two parts: advantages and disadvantages, each grouped by axis. The genre defines its own axes. Symbaroum uses bodily / knowledge / mystical / social. A heist pack might use crew-role / contact-network / mark / heat. A space opera pack might use shipboard / planetside / faction-credit / debt.
+
+Each entry is a short phrase that:
+
+- Names a **specific** thing the GM can picture (place, person, training, mark).
+- Is invocable — the player can point to it and say *"this is in play."*
+- Cuts both ways when appropriate. "Spoken for by a forest spirit" is an advantage in the woods and a disadvantage in church.
+- Stays grounded in the genre. No mechanical jargon, no anachronism, no genre-mixing.
+
+Aim for 20–35 advantages and 15–25 disadvantages total. Less than that and the player has too few suggestions; more than that and the list reads like a catalog and stops being scannable.
 
 ### `example_hooks.md`
 
 Three is plenty. Two in the same tone, one deliberately different (a comic relief hook in an otherwise grim pack — shows the GM the tonal range available).
 
-Each hook is 2-3 paragraphs, written from the player's perspective or as an opening scene. Ends at a moment of choice — what does the player do?
+Each hook is 2–3 paragraphs, written from the player's perspective or as an opening scene. Ends at a moment of choice — "What do you do?"
 
 These don't run at runtime. They're read by the campaign generator's prompts to calibrate its own hook generation, and by humans reviewing the pack.
 
@@ -145,30 +120,33 @@ These don't run at runtime. They're read by the campaign generator's prompts to 
 
 The defaults a campaign generator uses when you run it with no seed file. Be specific — "setting_anchors: [the frontier]" is useless; "setting_anchors: [derelict_colonies, alien_ruins, contested_trade_routes]" is useful.
 
+Key v2 fields:
+
+- `num_truths`: typical 5–10. The atomic underlying facts the campaign hangs on. Fewer for shorter campaigns, more for sprawling ones.
+- `num_complications`: typical 8–15. Campaign-specific complications layered on top of the pack's universal list.
+- `num_factions`: typical 3–5.
+
+Retired fields (don't include): `clue_chain_density`, `branch_points`, `num_acts`.
+
 The campaign-level seed file overrides these. The pack seed is a starting point.
 
 ### `naming.yaml` (optional)
 
-Two lists of one-sentence prompts the campaign generator uses to keep NPC and location naming diverse and on-genre across runs:
+Two lists of one-sentence prompts the campaign generator uses to keep NPC and location naming diverse and on-genre across runs.
 
-- `naming_registers`: 8-14 entries, each a culturally or stylistically distinct naming convention an LLM can sample names from. Cover the genre's social spectrum (insiders, outsiders, underclass, institutions). For real-world-coded registers, name the source culture(s) concretely. For invented-culture registers, describe the *pattern* (compound construction, honorific particles, generational markers), not just vibes.
-- `district_flavors`: 8-16 entries, each a kind of neighborhood, deck, settlement, or precinct cluster the genre actually has. Concrete and rooted in the genre — "diplomatic envoy berths at a neutral station" beats "embassy row".
+- `naming_registers`: 8–14 entries, each a culturally or stylistically distinct naming convention an LLM can sample names from. Cover the genre's social spectrum (insiders, outsiders, underclass, institutions). For real-world-coded registers, name the source culture(s) concretely. For invented-culture registers, describe the *pattern* (compound construction, honorific particles, generational markers), not just vibes.
+- `district_flavors`: 8–16 entries, each a kind of neighborhood, deck, settlement, or precinct cluster the genre actually has. Concrete and rooted in the genre.
 
-When in doubt, **author this file**. The campaign generator has cross-genre fallbacks but they're Earth-historical-coded and will misfire on hard-SF, weird-fiction, or strongly-coded fantasy packs (Symbaroum-Ambrian, Eberron, post-apocalyptic). Five minutes of authoring here saves the user from seeing the same five attractor names across three campaigns.
-
-Anti-patterns:
-- Listing real-world ethnicities for a SF or high-fantasy pack ("Italian-American immigrant" in a space opera).
-- Two entries that say the same thing in different words.
-- Vague entries ("the rich neighborhood") with no concrete texture.
+When in doubt, **author this file**. The campaign generator has cross-genre fallbacks but they're Earth-historical-coded and will misfire on hard-SF, weird-fiction, or strongly-coded fantasy packs.
 
 ### `REVIEW_CHECKLIST.md`
 
 When hand-authoring, write this last. It should contain items *specific to the pack* that a reviewer should check, not generic process items. Examples:
 
-- Specific attribute overlaps you're uncertain about
-- Ability categories that might feel thin
+- Specific archetypes you're uncertain about
+- Pressure signs that might be too subtle or too on-the-nose
 - Tone sections you're not sure landed
-- Mechanics that might be too fiddly
+- Whether the advantages_disadvantages vocabulary covers the genre's spectrum
 
 If you can't think of concrete items, the pack is either very good or you're not being critical enough.
 
@@ -176,25 +154,27 @@ If you can't think of concrete items, the pack is either very good or you're not
 
 ## Patterns that work across genres
 
-### The "weird" category
+### The signature pressure
 
-Every genre pack should have one ability category that makes the genre *itself* — not a substitute for combat or social, but the thing that makes this genre different from generic adventure. Magic, cyberware, psionics, alien tech, the taint.
+Every genre has one accumulating pressure that defines its emotional core. Magic costs corruption. Cyberware costs humanity. Sanity is sanity. Heat is heat. Pick one. Two is overdesign — the GM will track neither well.
 
-### Resource tied to the weird category
+The pressure is rendered in *prose signs* (sensory and social), not numbers. The pack's overlay must enumerate at least 4 concrete signs for that pressure. The campaign generator's truth-discovery surfaces can hook into the same vocabulary.
 
-The genre-defining category should have a genre-defining resource cost. Magic costs corruption. Cyberware costs humanity. Psionics costs focus. This cost is what prevents the weird from being strictly better than the mundane, and it's where the genre's thematic weight lives.
+### Advantages that cut both ways
 
-### The ambiguous social resource
+The best advantages in story mode are double-edged. "Known to the river clans as one of theirs" is a clear advantage at the docks and a clear disadvantage at the bishop's palace. The pack's vocabulary should favor these — they generate scene variety without the player having to invent it.
 
-Reputation, standing, heat, notoriety — something that rises with visibility and makes the character more powerful AND more exposed. Creates interesting tradeoffs.
+### Specific NPC voices
+
+The overlay's NPC conventions should list 3–6 recognizable archetypes for the genre. Give each a one-line speech note. The GM uses these as a vocabulary when improvising NPCs between the named ones in the lorebook.
 
 ### Tone via constraint
 
 The overlay is most effective when it says "never do X" and "always do Y" rather than "try to be grim." Constraints generate style more reliably than descriptors.
 
-### One NPC archetype per faction type
+### Complications that escalate, not end
 
-The overlay's NPC conventions should list 3-5 recognizable archetypes for the genre (inquisitor, witch-hunter, cultist, corrupt noble; or: fixer, netrunner, corp suit, street samurai). The GM uses these as a vocabulary when improvising NPCs between the named ones in the lorebook.
+Every complication should leave the scene playable. "You die" is not a complication; it's a dead end. "You wake up somewhere you shouldn't be" is a complication — it opens new scenes.
 
 ---
 
@@ -204,10 +184,6 @@ The overlay's NPC conventions should list 3-5 recognizable archetypes for the ge
 
 "My pack is fantasy AND science fiction AND horror." This is not a pack; it's three packs fighting in a trenchcoat. Pick one. Ship three if you really need all of them.
 
-### The "system heartbreaker" pack
-
-Porting a full tabletop system's mechanics into the pack. Skill lists, combat subsystems, specific spell lists. The engine is PbtA-adjacent; it doesn't support granular mechanics. Narrative fidelity to the source system beats mechanical fidelity.
-
 ### The empty overlay
 
 "The setting is grimdark fantasy." Not enough. The LLM will fill in generic grimdark fantasy, which is usually lazy. Specific is kind.
@@ -216,9 +192,13 @@ Porting a full tabletop system's mechanics into the pack. Skill lists, combat su
 
 The GM prompt bloats to 3000 words and starts repeating itself. If you can't say it in 1500 words, the pack isn't crystallized yet. Cut.
 
-### The unused catalog entry
+### The number-leak
 
-An ability in the catalog that no NPC could ever have and no starting character would take. If it doesn't enter play, delete it.
+A v2 pack that says "1 temporary corruption" or "+1 to rolls" anywhere. The system has no numbers. Every quantity must be expressed in prose — *a single corruption sign*, *a clear advantage in this moment*, etc. Audit every file for stray integers and dice notation before shipping.
+
+### The vague advantage
+
+`advantages_disadvantages.md` listing "strong," "smart," "lucky." The GM cannot adjudicate against these specifically enough. Force concreteness — "knife-fighter from the river camps," "schooled in herbalism," "a face people forget within an hour."
 
 ### The contradictory content list
 
@@ -231,15 +211,15 @@ An ability in the catalog that no NPC could ever have and no starting character 
 If you're reviewing and editing a pack the pack generator produced, work in this order:
 
 1. Read `REVIEW_CHECKLIST.md` first. Address each item.
-2. Read `attributes.yaml`. This is where generation most often lacks taste. Rename, redefine, consolidate.
-3. Read `gm_prompt_overlay.md` with the genre in your ear. Cut the generic, sharpen the specific.
-4. Read `failure_moves.md` and `example_hooks.md` together. Do the moves land the tone the hooks promise?
-5. Read `abilities.yaml`. Are there obvious gaps? Any two abilities doing the same thing?
-6. Spot-check `resources.yaml` and `character_template.json` for consistency.
+2. Read `gm_prompt_overlay.md` with the genre in your ear. Cut the generic, sharpen the specific. Audit for any leaked stat-mode language ("rolls," "attributes," "+1").
+3. Read `complications.md`. Are at least 10 entries specific to the genre? Is the "success but..." section as strong as the failure section?
+4. Read `advantages_disadvantages.md`. Are the entries concrete enough to invoke? Are the axes the right axes for this genre?
+5. Read `example_hooks.md`. Do the hooks promise the tone the overlay describes?
+6. Spot-check `character_template.json` for genre-appropriate default `belongings` (if seeded).
 7. Run the pack through the validator. Fix errors.
-8. Run a test campaign generation. Scan the opening hook and initial Author's Note. Does it feel like the genre?
+8. Run a test campaign generation. Scan the opening hook and initial Author's Note. Does it feel like the genre? Does the AN list live threads, recent facts, and (when applicable) a director's note — and nothing else?
 
-The goal is not perfection on the first pass. The pack improves with play. After a session or two, come back and revise the overlay, add abilities that came up, delete categories that never fired.
+The goal is not perfection on the first pass. The pack improves with play. After a session or two, come back and revise the overlay, add complications that came up, sharpen advantage phrases the player kept rephrasing.
 
 ---
 
@@ -247,9 +227,9 @@ The goal is not perfection on the first pass. The pack improves with play. After
 
 Sometimes a pack generation goes wrong in ways that aren't worth fixing by editing. Signs:
 
-- The six attributes fundamentally don't carve the genre correctly
-- The GM overlay is structurally generic and rewriting it would be writing from scratch
-- The resource mechanics don't interact with the ability categories at all
-- The tone keywords produced a pack whose tone you don't actually want
+- The complications list is generic across genres — the pack hasn't found its specific voice.
+- The advantages vocabulary reads like every-genre-ever — no genre-specific texture.
+- The overlay is structurally generic and rewriting it would be writing from scratch.
+- The pressure vocabulary doesn't connect to the complications (signs accumulate to nothing).
 
-When this happens, rewrite the brief (the tone and attribute hints are usually the culprits) and regenerate. Editing a bad pack takes longer than generating a new one.
+When this happens, rewrite the brief (the tone hints and pressure description are usually the culprits) and regenerate. Editing a bad pack takes longer than generating a new one.

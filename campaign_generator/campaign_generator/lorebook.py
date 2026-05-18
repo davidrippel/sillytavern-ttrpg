@@ -1,10 +1,47 @@
+"""v2 lorebook assembly.
+
+The campaign lorebook is the bundle of constant + keyword entries that
+SillyTavern's World Info system loads alongside the chat. The v3
+extension reads a small set of constant entries by exact ``comment``
+to wire up its runtime:
+
+  __pack_gm_overlay     ← embeds pack.gm_prompt_overlay
+  __pack_complications  ← embeds pack.complications
+  __pack_reference      ← embeds pack.advantages_disadvantages
+                          plus a small JSON header used by the
+                          compatibility check.
+  __campaign_bible      ← premise / conflict / tone / thematic spine.
+  __campaign_truths     ← JSON array of authored truths. Disabled so
+                          the GM never sees the entry directly; the
+                          extension reads it by comment lookup.
+
+Everything else (NPCs, locations, factions) is a normal keyword-
+triggered entry. NPCs and locations also get a `(secret)` tier-2
+companion entry that is `disabled: true` by default; the extension's
+secrets.js unlocks them once the player has spent enough time on the
+underlying entity.
+
+The v1 node / clue / beat / current-act entries are gone.
+"""
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
 from common.pack import GenrePack
-from .schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NodeGraph, NPCRoster, PlotSkeleton, PremiseDocument, SampleCharacterSet
+
+from .schemas import (
+    BranchPlan,
+    ComplicationSet,
+    FactionSet,
+    LocationCatalog,
+    NPCRoster,
+    PlotSkeleton,
+    PremiseDocument,
+    SampleCharacterSet,
+    TruthSet,
+)
 
 
 _HONORIFICS = {
@@ -51,8 +88,6 @@ def _strip_leading_honorifics(name: str) -> str:
 
 
 def _generate_short_forms(name: str) -> list[str]:
-    """Personal-name short forms after honorifics (e.g. 'Sister Valeria' → 'Valeria',
-    'Lord Cassius Valerius' → 'Cassius', 'Cassius Valerius')."""
     after_titles = _strip_leading_honorifics(name)
     if not after_titles or after_titles == name.strip():
         return []
@@ -89,16 +124,11 @@ def _is_acceptable(variant: str) -> bool:
 
 
 def _name_variants(name: str, *, type_hint: str | None = None) -> list[str]:
-    """Trigger keys for SillyTavern. ST does substring matching; we emit the full
-    name plus likely short forms a player would actually type — first names after
-    honorifics, article-stripped variants, parenthetical-stripped variants, and
-    (for locations) the bare name without a generic type suffix."""
     base = name.strip()
     if not base:
         return []
 
     candidates: list[str] = [base]
-
     head, inside = _strip_parenthetical(base)
     if head and head != base:
         candidates.append(head)
@@ -133,13 +163,9 @@ def _name_variants(name: str, *, type_hint: str | None = None) -> list[str]:
 
 
 def _short_relationship_tag(description: str, *, max_len: int = 80) -> str:
-    """Trim a relationship sentence to its first clause for compact NPC entries.
-    The full prose is GM-eyes-only; the LLM only needs a short tag so it knows
-    *that* a relationship exists and its flavor."""
     text = (description or "").strip()
     if not text:
         return ""
-    # First clause: cut at the first sentence terminator or semicolon.
     for sep in (". ", "; ", " — ", ", "):
         idx = text.find(sep)
         if 0 < idx <= max_len:
@@ -213,10 +239,10 @@ def assemble_lorebook(
     factions: FactionSet,
     npcs: NPCRoster,
     locations: LocationCatalog,
-    clue_graph: ClueGraph,
+    truths: TruthSet,
+    complications: ComplicationSet,
     branches: BranchPlan,
     sample_characters: SampleCharacterSet | None = None,
-    node_graph: NodeGraph | None = None,
 ) -> dict[str, Any]:
     entries: dict[str, dict[str, Any]] = {}
     uid = 0
@@ -224,352 +250,314 @@ def assemble_lorebook(
     def add(entry: dict[str, Any]) -> None:
         entries[str(entry["uid"])] = entry
 
-    uid += 1
-    add(
-        _entry(
-            uid,
-            comment="GM Prompt Overlay",
-            content=pack.gm_prompt_overlay,
-            constant=True,
-            order=1000,
-        )
-    )
+    # ---- Constant tier — the four `__pack_*` + `__campaign_*` entries
+    # the v3 extension binds to by exact comment.
 
     uid += 1
-    add(
-        _entry(
-            uid,
-            comment="Failure Moves",
-            content=pack.failure_moves,
-            constant=True,
-            order=950,
-        )
-    )
+    add(_entry(
+        uid,
+        comment="__pack_gm_overlay",
+        content=pack.gm_prompt_overlay,
+        constant=True,
+        order=1000,
+    ))
 
     uid += 1
-    add(
-        _entry(
-            uid,
-            comment=f"Pack Reference: {pack.metadata.display_name}",
-            content=(
-                f'{{"pack_name":"{pack.metadata.pack_name}","pack_version":"{pack.metadata.version}",'
-                f'"display_name":"{pack.metadata.display_name}"}}'
-            ),
-            constant=False,
-            selective=False,
-            order=0,
-        )
-    )
+    add(_entry(
+        uid,
+        comment="__pack_complications",
+        content=_compose_complications_text(pack.complications, complications),
+        constant=True,
+        order=950,
+    ))
+
+    uid += 1
+    add(_entry(
+        uid,
+        comment="__pack_reference",
+        content=_compose_pack_reference(pack),
+        constant=True,
+        order=940,
+    ))
 
     title = (premise.title or pack.metadata.display_name).strip()
-    campaign_bible = "\n\n".join(
-        [
-            premise.premise_text,
-            f"Central conflict: {premise.central_conflict}",
-            f"Tone: {premise.tone_statement}",
-            "Themes:\n" + "\n".join(f"- {theme}" for theme in premise.thematic_pillars),
-        ]
-    )
     uid += 1
-    add(
-        _entry(
-            uid,
-            comment=f"Campaign Bible: {title}",
-            content=campaign_bible,
-            constant=True,
-            order=900,
-        )
-    )
+    add(_entry(
+        uid,
+        comment="__campaign_bible",
+        content=_compose_campaign_bible(premise, plot, title),
+        constant=True,
+        order=900,
+    ))
 
-    for act_index, act in enumerate(plot.acts):
-        if node_graph is not None:
-            # Node-mode: act entry shows premise and stakes only, no beat sequence.
-            act_content = "\n\n".join(
-                [
-                    f"Act {act.act_number}: {act.title}",
-                    f"Goal: {act.goal}",
-                ]
-            )
-        else:
-            act_content = "\n\n".join(
-                [
-                    f"Act {act.act_number}: {act.title}",
-                    f"Goal: {act.goal}",
-                    "Beats:\n" + "\n".join(f"- {beat.rendered}" for beat in act.beats),
-                ]
-            )
-        beat_labels = [beat.label for beat in act.beats if beat.label]
-        act_keys = [act.title, f"Act {act.act_number}", *beat_labels]
-        is_first_act = act_index == 0
-        comment = (
-            f"Current Act: {act.title}" if is_first_act else f"Act {act.act_number}: {act.title}"
-        )
-        uid += 1
-        add(
-            _entry(
-                uid,
-                comment=comment,
-                content=act_content,
-                keys=act_keys,
-                constant=is_first_act,
-                order=850 - act_index,
-                exclude_recursion=not is_first_act,
-                prevent_recursion=not is_first_act,
-            )
-        )
+    # __campaign_truths is intentionally `disable: true` — the GM never
+    # sees it via keyword firing. The extension reads it by comment
+    # lookup and injects one truth at a time as a director's note.
+    uid += 1
+    add(_entry(
+        uid,
+        comment="__campaign_truths",
+        content=json.dumps(
+            [t.model_dump() for t in truths.truths],
+            ensure_ascii=False,
+            indent=2,
+        ),
+        constant=False,
+        disable=True,
+        order=0,
+    ))
+
+    # ---- Faction tier --------------------------------------------------
 
     for faction in factions.factions:
-        content = "\n\n".join(
-            [
-                f"Faction: {faction.name}",
-                faction.description,
-                f"Goals: {', '.join(faction.goals)}",
-                f"Methods: {', '.join(faction.methods)}",
-                f"Internal tensions: {', '.join(faction.internal_tensions)}",
-                f"Plot role: {faction.relationship_to_plot}",
-            ]
-        )
         uid += 1
-        add(
-            _entry(
-                uid,
-                comment=f"Faction: {faction.name}",
-                content=content,
-                keys=_name_variants(faction.name),
-                order=500,
-                prevent_recursion=True,
-                match_whole_words=True,
-                scan_depth=25,
-            )
-        )
+        keys = _name_variants(faction.name)
+        add(_entry(
+            uid,
+            comment=f"Faction: {faction.name}",
+            content=_compose_faction(faction),
+            keys=keys,
+            order=500,
+            prevent_recursion=True,
+            scan_depth=25,
+        ))
+
+    # ---- NPC tier (public + secret) -----------------------------------
 
     for npc in npcs.npcs:
-        relationships = "; ".join(
-            f"{rel.name} — {_short_relationship_tag(rel.description)}"
-            for rel in npc.relationships
-        ) or "none recorded"
-        public_content = "\n".join(
-            [
-                f"Name: {npc.name}",
-                f"Role: {npc.role}",
-                f"Faction: {npc.faction_affiliation or 'independent'}",
-                f"Description: {npc.physical_description}",
-                f"Voice: {npc.speaking_style}",
-                f"Motivation: {npc.motivation}",
-                f"Relationships: {relationships}",
-                f"Abilities: {', '.join(npc.abilities) if npc.abilities else 'none'}",
-            ]
-        )
         uid += 1
-        add(
-            _entry(
-                uid,
-                comment=f"NPC: {npc.name}",
-                content=public_content,
-                keys=_name_variants(npc.name),
-                order=450,
-                prevent_recursion=True,
-                scan_depth=25,
-            )
-        )
-
-        secret_text = (npc.secret or "").strip()
-        if secret_text:
-            secret_content = "\n".join(
-                [
-                    f"Hidden truth — {npc.name}",
-                    "(GM-only. Reveal only when the campaign reaches the moment this becomes earned. Enable this entry by setting disable=false once the reveal lands.)",
-                    "",
-                    secret_text,
-                ]
-            )
+        public_keys = _name_variants(npc.name)
+        add(_entry(
+            uid,
+            comment=f"NPC: {npc.name}",
+            content=_compose_npc_public(npc),
+            keys=public_keys,
+            order=450,
+            prevent_recursion=True,
+            scan_depth=25,
+        ))
+        # Secret companion entry (tier-2): disabled by default; the
+        # extension's secrets.js enables it when the player has
+        # accumulated enough facts/threads naming this NPC.
+        if npc.secret:
             uid += 1
-            add(
-                _entry(
-                    uid,
-                    comment=f"NPC Secret: {npc.name}",
-                    content=secret_content,
-                    keys=[],
-                    selective=False,
-                    constant=False,
-                    order=440,
-                    disable=True,
-                )
-            )
+            add(_entry(
+                uid,
+                comment=f"NPC Secret: {npc.name}",
+                content=_compose_npc_secret(npc),
+                keys=public_keys,
+                order=440,
+                disable=True,
+                prevent_recursion=True,
+                scan_depth=10,
+            ))
+
+    # ---- Location tier (public + secret) ------------------------------
 
     for location in locations.locations:
-        content = "\n\n".join(
-            [
-                f"Location: {location.name}",
-                f"Type: {location.type}",
-                "Sensory details:\n"
-                + "\n".join(
-                    f"- {sense}: {value}"
-                    for sense, value in location.sensory_description.model_dump(exclude_none=True).items()
-                ),
-                "Notable features:\n" + "\n".join(f"- {item}" for item in location.notable_features),
-                f"NPCs present: {', '.join(location.npc_names) if location.npc_names else 'varies'}",
-            ]
-        )
         uid += 1
-        add(
-            _entry(
-                uid,
-                comment=f"Location: {location.name}",
-                content=content,
-                keys=_name_variants(location.name, type_hint=location.type),
-                order=350,
-                prevent_recursion=True,
-                scan_depth=25,
-            )
-        )
-
-        hidden = [item for item in location.hidden_elements if str(item).strip()]
-        if hidden:
-            secret_content = "\n".join(
-                [
-                    f"Hidden elements — {location.name}",
-                    "(GM-only. Reveal only when the player has earned the discovery. Enable this entry by setting disable=false when the secret should become active.)",
-                    "",
-                    *(f"- {item}" for item in hidden),
-                ]
-            )
+        public_keys = _name_variants(location.name, type_hint=location.type)
+        add(_entry(
+            uid,
+            comment=f"Location: {location.name}",
+            content=_compose_location_public(location),
+            keys=public_keys,
+            order=350,
+            prevent_recursion=True,
+            scan_depth=25,
+        ))
+        if location.hidden_elements:
             uid += 1
-            add(
-                _entry(
-                    uid,
-                    comment=f"Location Secret: {location.name}",
-                    content=secret_content,
-                    keys=[],
-                    selective=False,
-                    constant=False,
-                    order=340,
-                    disable=True,
-                    exclude_recursion=True,
-                    prevent_recursion=True,
-                )
-            )
-
-    if node_graph is not None:
-        # Derive per-node entry/exit clue lists from the clue graph.
-        entry_clues_by_node: dict[str, list[str]] = {n.id: [] for n in node_graph.nodes}
-        exit_clues_by_node: dict[str, list[str]] = {n.id: [] for n in node_graph.nodes}
-        for clue in clue_graph.clues:
-            if clue.found_at_node in exit_clues_by_node:
-                exit_clues_by_node[clue.found_at_node].append(clue.id)
-            if clue.points_to_node in entry_clues_by_node:
-                entry_clues_by_node[clue.points_to_node].append(clue.id)
-
-        for node in node_graph.nodes:
-            sections = [
-                f"Node: {node.id}",
-                f"Kind: {node.kind}",
-                f"Description: {node.description}",
-            ]
-            entries_here = entry_clues_by_node.get(node.id, [])
-            exits_here = exit_clues_by_node.get(node.id, [])
-            if entries_here:
-                sections.append(f"Entry clues: {', '.join(entries_here)}")
-            if exits_here:
-                sections.append(f"Exit clues: {', '.join(exits_here)}")
-            if node.gating:
-                sections.append(f"Gating: {', '.join(node.gating)}")
-            if node.triggers:
-                sections.append(f"Triggers: {node.triggers}")
-            sections.append(f"Act: {node.act_number}")
-            if node.is_act_start:
-                sections.append("Act start: true")
-            if node.is_act_final:
-                sections.append("Act final: true")
-            if node.is_victory:
-                sections.append("Victory: true")
-            content = "\n\n".join(sections)
-            uid += 1
-            add(
-                _entry(
-                    uid,
-                    comment=f"Node: {node.id}",
-                    content=content,
-                    keys=[node.id],
-                    order=320,
-                    exclude_recursion=True,
-                    match_whole_words=True,
-                    scan_depth=10,
-                )
-            )
-
-    for clue in clue_graph.clues:
-        sections = [
-            f"Clue {clue.id}",
-            f"Found at: {clue.found_at_type} {clue.found_at}",
-            f"Found at node: {clue.found_at_node}",
-            f"Points to node: {clue.points_to_node}",
-        ]
-        if clue.hint:
-            sections.append(f"Hint: {clue.hint}")
-        sections.append(f"Reveals: {clue.reveals}")
-        content = "\n\n".join(sections)
-        uid += 1
-        add(
-            _entry(
+            add(_entry(
                 uid,
-                comment=f"Clue: {clue.id}",
-                content=content,
-                keys=[clue.id],
-                order=300,
-                exclude_recursion=True,
+                comment=f"Location Secret: {location.name}",
+                content=_compose_location_secret(location),
+                keys=public_keys,
+                order=340,
+                disable=True,
                 prevent_recursion=True,
-                match_whole_words=True,
                 scan_depth=10,
-            )
-        )
+            ))
 
-    branch_lines = [
-        f"{branch.name}: if {branch.if_condition}, then {branch.then_outcome}. Consequences: {', '.join(branch.later_act_consequences)}"
-        for branch in branches.branches
-    ]
-    branch_content = "\n\n".join(branch_lines)
-    branch_keys: list[str] = []
-    for branch in branches.branches:
-        branch_keys.append(branch.name)
-    uid += 1
-    add(
-        _entry(
+    # ---- Branches (informational) -------------------------------------
+
+    if branches.branches:
+        uid += 1
+        add(_entry(
             uid,
             comment="Branch Contingencies",
-            content=branch_content,
-            keys=branch_keys,
+            content=_compose_branches(branches),
+            keys=[],
+            constant=False,
             order=700,
-            prevent_recursion=True,
-        )
+            disable=True,  # GM-facing reference; enable manually if desired
+        ))
+
+    # ---- Sample characters (informational) ----------------------------
+
+    if sample_characters is not None and sample_characters.characters:
+        uid += 1
+        add(_entry(
+            uid,
+            comment="Sample Characters",
+            content=_compose_sample_characters(sample_characters),
+            keys=[],
+            constant=False,
+            order=750,
+            disable=True,
+        ))
+
+    return {"entries": entries}
+
+
+# ---- Content composition ------------------------------------------------
+
+
+def _compose_pack_reference(pack: GenrePack) -> str:
+    header = {
+        "pack_name": pack.metadata.pack_name,
+        "pack_version": pack.metadata.version,
+        "display_name": pack.metadata.display_name,
+    }
+    return (
+        json.dumps(header, ensure_ascii=False, indent=2)
+        + "\n\n"
+        + pack.advantages_disadvantages
     )
 
-    if sample_characters is not None:
-        sample_lines = [
-            f"- {character.archetype}: {character.hook_into_campaign}"
-            for character in sample_characters.characters
-        ]
-        sample_content = (
-            "Pre-built sample characters available for this campaign. "
-            "If a player needs help making a character, offer one of:\n\n"
-            + "\n".join(sample_lines)
-        )
-        uid += 1
-        add(
-            _entry(
-                uid,
-                comment="Sample Characters",
-                content=sample_content,
-                keys=["sample characters", "pregens", "make a character", "character creation"],
-                order=750,
-                exclude_recursion=True,
-                prevent_recursion=True,
-                match_whole_words=True,
-            )
-        )
 
-    return {
-        "name": title,
-        "description": f"Campaign lorebook: {title} ({pack.metadata.display_name})",
-        "entries": entries,
-    }
+def _compose_complications_text(pack_complications: str, campaign_complications: ComplicationSet) -> str:
+    pack_block = pack_complications.strip() if pack_complications else ""
+    campaign_lines = ["## Campaign-specific complications", ""]
+    for entry in campaign_complications.complications:
+        campaign_lines.append(f"- **{entry.title}** {entry.body}")
+    parts = []
+    if pack_block:
+        parts.append(pack_block)
+    parts.append("\n".join(campaign_lines).rstrip())
+    return "\n\n".join(parts)
+
+
+def _compose_campaign_bible(premise: PremiseDocument, plot: PlotSkeleton, title: str) -> str:
+    return "\n\n".join([
+        f"Title: {title}",
+        premise.premise_text,
+        f"Central conflict: {premise.central_conflict}",
+        f"Tone: {premise.tone_statement}",
+        "Thematic pillars:\n" + "\n".join(f"- {p}" for p in premise.thematic_pillars),
+        "Thematic spine (escalation themes):\n" + "\n".join(f"- {s}" for s in plot.thematic_spine),
+        f"Driving mystery: {plot.driving_mystery}",
+        f"Hook: {plot.hook}",
+        f"Escalation arc: {plot.escalation_arc}",
+        (
+            "Antagonist: "
+            + plot.main_antagonist.name
+            + " — "
+            + plot.main_antagonist.motivation
+            + " (relationship to protagonist: "
+            + plot.main_antagonist.relationship_to_protagonist
+            + ")"
+        ),
+    ])
+
+
+def _compose_faction(faction) -> str:
+    return "\n\n".join([
+        f"{faction.name} ({faction.moral_alignment})",
+        faction.description,
+        "Goals:\n" + "\n".join(f"- {g}" for g in faction.goals),
+        "Methods:\n" + "\n".join(f"- {m}" for m in faction.methods),
+        "Internal tensions:\n" + "\n".join(f"- {t}" for t in faction.internal_tensions),
+        f"Relationship to the plot: {faction.relationship_to_plot}",
+    ])
+
+
+def _compose_npc_public(npc) -> str:
+    lines = [
+        f"{npc.name} — {npc.role}",
+        f"Affiliation: {npc.faction_affiliation or 'independent'}",
+        f"Appearance: {npc.physical_description}",
+        f"Speech: {npc.speaking_style}",
+        f"Motivation: {npc.motivation}",
+    ]
+    if npc.advantages:
+        lines.append("Advantages: " + "; ".join(npc.advantages))
+    if npc.relationships:
+        rels = []
+        for rel in npc.relationships:
+            tag = _short_relationship_tag(rel.description)
+            rels.append(f"{rel.name} — {tag}" if tag else rel.name)
+        lines.append("Relationships: " + "; ".join(rels))
+    if npc.discovery_surfaces:
+        lines.append(
+            "Discovery surfaces:\n" + "\n".join(f"- {h}" for h in npc.discovery_surfaces)
+        )
+    return "\n".join(lines)
+
+
+def _compose_npc_secret(npc) -> str:
+    return (
+        f"SECRET about {npc.name} — reveal-eligible only when the player has "
+        f"earned proximity:\n\n{npc.secret}"
+    )
+
+
+def _compose_location_public(location) -> str:
+    senses = []
+    if location.sensory_description.sight:
+        senses.append(f"Sight: {location.sensory_description.sight}")
+    if location.sensory_description.sound:
+        senses.append(f"Sound: {location.sensory_description.sound}")
+    if location.sensory_description.smell:
+        senses.append(f"Smell: {location.sensory_description.smell}")
+    lines = [
+        f"{location.name} ({location.type})",
+        "\n".join(senses),
+        "Notable features:\n" + "\n".join(f"- {f}" for f in location.notable_features),
+    ]
+    if location.npc_names:
+        lines.append("Found here: " + ", ".join(location.npc_names))
+    if location.discovery_surfaces:
+        lines.append(
+            "Discovery surfaces:\n" + "\n".join(f"- {h}" for h in location.discovery_surfaces)
+        )
+    return "\n\n".join(lines)
+
+
+def _compose_location_secret(location) -> str:
+    return (
+        f"HIDDEN at {location.name} — reveal-eligible only when the player "
+        f"has earned proximity:\n\n"
+        + "\n".join(f"- {h}" for h in location.hidden_elements)
+    )
+
+
+def _compose_branches(branches: BranchPlan) -> str:
+    lines = ["## Branch contingencies", ""]
+    for branch in branches.branches:
+        lines.append(f"### {branch.name}")
+        lines.append(f"IF: {branch.if_condition}")
+        lines.append(f"THEN: {branch.then_outcome}")
+        if branch.later_consequences:
+            lines.append("Later: " + "; ".join(branch.later_consequences))
+        if branch.references:
+            lines.append("References: " + ", ".join(branch.references))
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def _compose_sample_characters(sample_characters: SampleCharacterSet) -> str:
+    lines = ["## Sample characters (story-mode)", ""]
+    for character in sample_characters.characters:
+        lines.append(f"### {character.name}")
+        lines.append(character.concept)
+        lines.append("Advantages: " + "; ".join(character.advantages))
+        lines.append("Disadvantages: " + "; ".join(character.disadvantages))
+        if character.belongings:
+            lines.append("Belongings: " + ", ".join(character.belongings))
+        if character.relationships:
+            rels = [f"{r.name} ({r.tie})" for r in character.relationships]
+            lines.append("Relationships: " + "; ".join(rels))
+        lines.append(f"Hook: {character.hook_into_campaign}")
+        lines.append("")
+    return "\n".join(lines).rstrip()

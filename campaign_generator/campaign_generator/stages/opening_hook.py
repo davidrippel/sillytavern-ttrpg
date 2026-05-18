@@ -238,23 +238,19 @@ def _join_displays(items: list[str], *, limit: int = 6) -> str:
 
 
 def _pack_character_summary(pack: GenrePack) -> str:
-    attributes = _join_displays([attribute.display for attribute in pack.attributes.attributes])
-    categories = _join_displays([category.display for category in pack.abilities.categories])
-    resources = _join_displays(
-        [
-            resource.display
-            for resource in pack.resources.resources
-            if resource.kind != "static_value"
-        ]
+    """v2: the pack's character template is name/concept/advantages/
+    disadvantages/belongings/relationships. The player picks advantage
+    and disadvantage phrases from the pack's
+    ``advantages_disadvantages.md`` reference (also embedded into the
+    lorebook as ``__pack_reference``). We don't need to enumerate
+    attributes or abilities — they don't exist.
+    """
+    return (
+        f"Use the {pack.metadata.display_name} sheet: name + concept + 2–3 advantages "
+        f"+ 1–2 disadvantages + a few belongings and relationships. Pick advantage and "
+        f"disadvantage phrases from the pack reference (see `__pack_reference` in the "
+        f"lorebook); make them specific and grounded in the genre."
     )
-
-    parts = [
-        f"Use the {pack.metadata.display_name} sheet",
-        f"build around attributes such as {attributes}" if attributes else "",
-        f"choose abilities from {categories}" if categories else "",
-        f"expect pressures like {resources}" if resources else "",
-    ]
-    return "; ".join(part for part in parts if part) + "."
 
 
 def _character_guidance(

@@ -1,4 +1,4 @@
-<div class="solo-ttrpg-assistant">
+<div id="solo-ttrpg-panel" class="solo-ttrpg-assistant">
     <div class="inline-drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
             <b>Solo TTRPG Assistant</b>
@@ -6,220 +6,135 @@
         </div>
         <div class="inline-drawer-content">
             <div class="solo-shell">
-                <section class="solo-section solo-stack">
-                    <div class="solo-row spread">
-                        <div class="solo-stack">
-                            <h4>Control</h4>
-                            <p class="solo-muted">Play-focused tools, character editing, pack management, and automation.</p>
+
+                <div class="solo-row solo-row-spread">
+                    <label class="solo-row">
+                        <input type="checkbox" id="solo-enabled" />
+                        <span>Enabled</span>
+                    </label>
+                    <span id="solo-active-pack-label" class="solo-muted"></span>
+                </div>
+
+                <!-- Campaign card -->
+                <details class="solo-card" open>
+                    <summary>Campaign &amp; Pack</summary>
+                    <div class="solo-stack">
+                        <div class="solo-row">
+                            <select id="solo-pack-select" class="solo-grow"></select>
+                            <button type="button" id="solo-pack-load" class="menu_button">Load pack…</button>
                         </div>
-                        <button id="solo-enabled-toggle" class="menu_button solo-inline-button solo-enabled" type="button">Active</button>
-                    </div>
-                </section>
-
-                <section class="solo-disclosure inline-drawer">
-                    <div class="inline-drawer-toggle inline-drawer-header solo-disclosure-toggle">
-                        <b>Play</b>
-                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-up up"></div>
-                    </div>
-                    <div class="solo-disclosure-body inline-drawer-content" style="display: block;">
-                        <div class="solo-grid">
-                            <section class="solo-section solo-stack">
-                                <div class="solo-row spread solo-row-start">
-                                    <label class="solo-stack solo-grow">
-                                        <span>Active character</span>
-                                        <select id="solo-play-character-select" class="solo-requires-enabled"></select>
-                                    </label>
-                                    <div class="solo-badge-column">
-                                        <span class="solo-badge" id="solo-play-character-type">Stats-Based</span>
-                                        <span class="solo-badge" id="solo-play-pack-status">No pack loaded</span>
-                                    </div>
-                                </div>
-                                <p class="solo-muted" id="solo-play-pack-description">Load a pack to enable structured rolls and resource tracking.</p>
-                            </section>
-
-                            <section class="solo-section solo-stack">
-                                <div class="solo-row spread">
-                                    <h4>Persona Link</h4>
-                                </div>
-                                <div class="solo-stack">
-                                    <strong id="solo-play-persona-state">Not linked</strong>
-                                    <span class="solo-muted" id="solo-play-persona-meta">Choose a persona for auto-switching.</span>
-                                </div>
-                                <div class="solo-actions">
-                                    <button id="solo-play-persona-change" class="menu_button solo-requires-enabled" type="button">Change</button>
-                                    <button id="solo-play-persona-sync" class="menu_button solo-requires-enabled" type="button">Sync</button>
-                                </div>
-                            </section>
-
-                            <section class="solo-section solo-stack">
-                                <div class="solo-row spread">
-                                    <h4>Rolls</h4>
-                                    <button id="solo-play-manual-roll" class="menu_button solo-requires-enabled" type="button">Manual Roll</button>
-                                </div>
-                                <div id="solo-play-rolls" class="solo-quick-grid"></div>
-                                <label class="solo-stack">
-                                    <span>Ability roll</span>
-                                    <div class="solo-row wrap">
-                                        <select id="solo-play-ability-select" class="solo-requires-enabled"></select>
-                                        <button id="solo-play-ability-roll" class="menu_button solo-requires-enabled" type="button">Roll Ability</button>
-                                    </div>
-                                </label>
-                                <p class="solo-muted" id="solo-play-story-note"></p>
-                            </section>
-
-                            <section class="solo-section solo-stack">
-                                <div class="solo-row spread">
-                                    <h4>Current State</h4>
-                                </div>
-                                <div id="solo-play-resources" class="solo-summary-grid"></div>
-                                <div id="solo-play-conditions"></div>
-                            </section>
-
-                            <section class="solo-section solo-stack">
-                                <div class="solo-row spread">
-                                    <h4>Story</h4>
-                                    <span class="solo-muted" id="solo-play-story-status"></span>
-                                </div>
-                                <div class="solo-actions">
-                                    <button id="solo-play-move-plot-forward" class="menu_button solo-requires-enabled" type="button" title="Mark the current beat resolved if fiction has stalled.">Move plot forward</button>
-                                    <button id="solo-play-move-plot-back" class="menu_button solo-requires-enabled" type="button" title="Undo the most recent beat or act advance if the GM tagged prematurely.">Move plot back</button>
-                                    <button id="solo-play-reset-campaign" class="menu_button solo-requires-enabled" type="button" title="Reset story progress to Act 1, beat 1.1. Does not affect chat messages.">Reset campaign</button>
-                                </div>
-                            </section>
+                        <div id="solo-pack-info" class="solo-muted solo-mini"></div>
+                        <input type="file" id="solo-pack-files" webkitdirectory multiple style="display:none" />
+                        <div class="solo-row">
+                            <button type="button" id="solo-backup-export" class="menu_button solo-grow">Export backup…</button>
+                            <button type="button" id="solo-backup-import" class="menu_button solo-grow">Import backup…</button>
+                            <input type="file" id="solo-backup-file" accept=".json" style="display:none" />
                         </div>
                     </div>
-                </section>
+                </details>
 
-                <section class="solo-disclosure inline-drawer">
-                    <div class="inline-drawer-toggle inline-drawer-header solo-disclosure-toggle">
-                        <b>Character</b>
-                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                <!-- Character card -->
+                <details class="solo-card" open>
+                    <summary>Character</summary>
+                    <div class="solo-stack">
+                        <div class="solo-row">
+                            <select id="solo-character-select" class="solo-grow"></select>
+                            <button type="button" id="solo-character-new" class="menu_button">+ New</button>
+                            <button type="button" id="solo-character-duplicate" class="menu_button">Duplicate</button>
+                            <button type="button" id="solo-character-delete" class="menu_button solo-danger">Delete</button>
+                        </div>
+                        <div class="solo-row">
+                            <input type="text" id="solo-character-rename" class="solo-grow" placeholder="Rename active character" />
+                            <button type="button" id="solo-character-rename-go" class="menu_button">Rename</button>
+                        </div>
+                        <div class="solo-row">
+                            <button type="button" id="solo-persona-link" class="menu_button">Link persona</button>
+                            <span id="solo-persona-status" class="solo-muted solo-mini"></span>
+                        </div>
+                        <div class="solo-row">
+                            <button type="button" id="solo-sample-import" class="menu_button solo-grow">Import pregen from campaign…</button>
+                            <input type="file" id="solo-sample-file" accept=".json,application/json" style="display:none" />
+                        </div>
+                        <div id="solo-sheet-root" class="solo-sheet-root"></div>
                     </div>
-                    <div class="solo-disclosure-body inline-drawer-content" style="display: none;">
-                        <div class="solo-grid">
-                            <section class="solo-section solo-stack">
-                                <label class="solo-stack">
-                                    <span>Active character</span>
-                                    <select id="solo-character-select" class="solo-requires-enabled"></select>
-                                </label>
-                                <div class="solo-row spread solo-row-start">
-                                    <div class="solo-stack solo-grow">
-                                        <span class="solo-muted">Type</span>
-                                        <div class="solo-row solo-row-start">
-                                            <span class="solo-badge" id="solo-character-type-badge">Stats-Based</span>
-                                            <button id="solo-character-convert" class="menu_button solo-requires-enabled" type="button">Convert type&hellip;</button>
-                                        </div>
-                                    </div>
-                                    <div class="solo-stack">
-                                        <span class="solo-muted">Sheet</span>
-                                        <span id="solo-sheet-mode"></span>
-                                    </div>
-                                </div>
-                                <div class="solo-actions">
-                                    <button id="solo-character-new" class="menu_button solo-requires-enabled" type="button">+ New character&hellip;</button>
-                                    <button id="solo-character-rename" class="menu_button solo-requires-enabled" type="button">Rename</button>
-                                    <button id="solo-character-duplicate" class="menu_button solo-requires-enabled" type="button">Duplicate</button>
-                                    <button id="solo-character-delete" class="menu_button solo-requires-enabled" type="button">Delete</button>
-                                    <button id="solo-character-import-samples" class="menu_button solo-requires-enabled" type="button">Import Samples</button>
-                                </div>
-                                <input id="solo-character-samples-input" type="file" accept=".json,application/json" hidden />
-                            </section>
+                </details>
 
-                            <div id="solo-sheet-root"></div>
+                <!-- Story card -->
+                <details class="solo-card" open>
+                    <summary>Story</summary>
+                    <div class="solo-stack">
+                        <div class="solo-row solo-row-spread">
+                            <span id="solo-turn-label" class="solo-muted"></span>
+                            <div class="solo-row">
+                                <button type="button" id="solo-rewind" class="menu_button">Rewind to turn…</button>
+                                <button type="button" id="solo-reset-campaign" class="menu_button solo-danger">Reset campaign…</button>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="solo-h4">Live threads</h4>
+                            <ul id="solo-threads-list" class="solo-list"></ul>
+                            <button type="button" id="solo-thread-add" class="menu_button">+ Add thread</button>
+                        </div>
+                        <div>
+                            <h4 class="solo-h4">Recent facts</h4>
+                            <ul id="solo-facts-list" class="solo-list"></ul>
+                        </div>
+                        <div>
+                            <h4 class="solo-h4">Truths revealed</h4>
+                            <ul id="solo-truths-list" class="solo-list"></ul>
+                        </div>
+                        <div>
+                            <h4 class="solo-h4">Scene</h4>
+                            <div id="solo-scene" class="solo-muted"></div>
                         </div>
                     </div>
-                </section>
+                </details>
 
-                <section class="solo-disclosure inline-drawer">
-                    <div class="inline-drawer-toggle inline-drawer-header solo-disclosure-toggle">
-                        <b>Pack</b>
-                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-                    </div>
-                    <div class="solo-disclosure-body inline-drawer-content" style="display: none;">
-                        <div class="solo-grid">
-                            <section class="solo-section solo-stack">
-                                <div class="solo-row spread">
-                                    <h4>Pack</h4>
-                                    <span class="solo-badge" id="solo-pack-status">No pack loaded</span>
-                                </div>
-                                <p class="solo-muted" id="solo-pack-description">Load a genre pack to enable the structured sheet, attribute rolls, and ability catalog.</p>
-                                <div class="solo-actions">
-                                    <button id="solo-pack-load" class="menu_button solo-requires-enabled" type="button">Load Pack</button>
-                                    <button id="solo-pack-reload" class="menu_button solo-requires-enabled" type="button">Reload Pack</button>
-                                </div>
-                                <label class="solo-stack">
-                                    <span>Active pack</span>
-                                    <select id="solo-pack-select" class="solo-requires-enabled"></select>
-                                </label>
-                                <input id="solo-pack-input" type="file" webkitdirectory multiple hidden />
-                            </section>
+                <!-- Director card -->
+                <details class="solo-card">
+                    <summary>Director</summary>
+                    <div class="solo-stack">
+                        <label class="solo-row">
+                            <input type="checkbox" id="solo-extractor-enabled" />
+                            <span>Run fact extractor after every assistant message</span>
+                        </label>
+                        <label class="solo-row">
+                            <input type="checkbox" id="solo-ui-chips" />
+                            <span>Show inline fact chips under messages</span>
+                        </label>
+                        <label class="solo-row">
+                            <input type="checkbox" id="solo-ui-tray" />
+                            <span>Show threads tray above chat</span>
+                        </label>
+                        <div>
+                            <h4 class="solo-h4">Add a fact manually</h4>
+                            <textarea id="solo-manual-fact" rows="2" placeholder="Type a fact the GM established but the extractor missed."></textarea>
+                            <button type="button" id="solo-manual-fact-add" class="menu_button">Add fact</button>
                         </div>
-                    </div>
-                </section>
-
-                <section class="solo-disclosure inline-drawer">
-                    <div class="inline-drawer-toggle inline-drawer-header solo-disclosure-toggle">
-                        <b>Automation</b>
-                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-                    </div>
-                    <div class="solo-disclosure-body inline-drawer-content" style="display: none;">
-                        <div class="solo-grid">
-                            <section class="solo-section solo-stack">
-                                <div class="solo-row spread">
-                                    <h4>Story</h4>
-                                    <span class="solo-muted" id="solo-story-status"></span>
-                                </div>
-                                <div class="solo-actions">
-                                    <button id="solo-move-plot-forward" class="menu_button solo-requires-enabled" type="button" title="Mark the current beat resolved if fiction has stalled.">Move plot forward</button>
-                                    <button id="solo-move-plot-back" class="menu_button solo-requires-enabled" type="button" title="Undo the most recent beat or act advance if the GM tagged prematurely.">Move plot back</button>
-                                    <button id="solo-reset-campaign" class="menu_button solo-requires-enabled" type="button" title="Reset story progress to Act 1, beat 1.1. Does not affect chat messages.">Reset campaign</button>
-                                </div>
-                            </section>
-
-                            <section class="solo-section solo-stack">
-                                <div class="solo-row spread">
-                                    <h4>Scene analyzer (node-mode)</h4>
-                                </div>
-                                <p class="solo-muted">A silent LLM call runs after each GM response to detect which clues were revealed and which node was reached. When disabled, node-mode state stops advancing automatically.</p>
-                                <label class="solo-row solo-row-start">
-                                    <input id="solo-analyzer-enabled" type="checkbox" class="solo-requires-enabled" />
-                                    <span>Run analyzer automatically on each assistant message</span>
-                                </label>
-                                <div class="solo-actions">
-                                    <button id="solo-analyzer-run" class="menu_button solo-requires-enabled" type="button" title="Re-run the analyzer against the most recent assistant message. Useful when a turn's bookkeeping was dropped.">Run analysis on last message</button>
-                                </div>
-                            </section>
-
-                            <section class="solo-section solo-stack">
-                                <div class="solo-row spread">
-                                    <h4>Backup</h4>
-                                </div>
-                                <div class="solo-actions">
-                                    <button id="solo-backup-export" class="menu_button solo-requires-enabled" type="button">Export Backup</button>
-                                    <button id="solo-backup-import" class="menu_button solo-requires-enabled" type="button">Import Backup</button>
-                                </div>
-                                <input id="solo-backup-input" type="file" accept=".zip" hidden />
-                            </section>
+                        <div>
+                            <h4 class="solo-h4">Active director's note</h4>
+                            <div id="solo-active-note" class="solo-muted"></div>
                         </div>
-                    </div>
-                </section>
-
-                <section class="solo-disclosure inline-drawer">
-                    <div class="inline-drawer-toggle inline-drawer-header solo-disclosure-toggle">
-                        <b>Log</b>
-                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-                    </div>
-                    <div class="solo-disclosure-body inline-drawer-content" style="display: none;">
-                        <div class="solo-grid">
-                            <section class="solo-section solo-stack">
-                                <div class="solo-row spread">
-                                    <h4>Activity</h4>
-                                </div>
-                                <div id="solo-log-root" class="solo-log"></div>
-                            </section>
+                        <div>
+                            <h4 class="solo-h4">Pressure cue</h4>
+                            <div id="solo-pressure-cue" class="solo-muted"></div>
                         </div>
+                        <button type="button" id="solo-an-rebuild" class="menu_button">Rebuild Author's Note from state</button>
                     </div>
-                </section>
+                </details>
+
+                <!-- Debug card -->
+                <details class="solo-card">
+                    <summary>Debug</summary>
+                    <div class="solo-stack">
+                        <div class="solo-row">
+                            <button type="button" id="solo-log-clear" class="menu_button">Clear log</button>
+                            <button type="button" id="solo-state-dump" class="menu_button">Dump state to log</button>
+                        </div>
+                        <pre id="solo-log" class="solo-log"></pre>
+                    </div>
+                </details>
+
             </div>
         </div>
     </div>

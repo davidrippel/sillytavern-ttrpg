@@ -1,9 +1,0 @@
-{
-  "kind": "npc_encounter",
-  "description": "{{user}} confronts Dren Halvek at the Saint's Rest Waystation counter, the recovered satchel laid out between them \u2014 and the survey marks point to one truth Dren cannot disown.",
-  "relevant_npcs": [
-    "Dren Halvek",
-    "Maelin Voss"
-  ],
-  "relevant_location": "Saint's Rest Waystation"
-}

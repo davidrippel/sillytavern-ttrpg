@@ -1,6 +1,32 @@
+"""Campaign generator pipeline (v2 — story-mode only).
+
+Stages, in order:
+
+1. premise           — central conflict, tone, thematic pillars.
+2. plot_skeleton     — acts (title + goal), antagonist, hook,
+                       thematic spine. No beats.
+3. factions          — 2-4 factions with goals/methods/tensions.
+4. npcs              — full roster, story-mode advantage phrases,
+                       optional discovery surfaces.
+5. locations         — sensory-rich locations with discovery surfaces.
+6. truths            — the campaign's atomic truth set (the answer key
+                       the GM never sees as a whole).
+7. complications     — campaign-specific narrative complications.
+8. branches          — 4-10 if/then contingencies referencing NPCs,
+                       locations, factions, and truth ids.
+9. sample_characters — story-mode sample protagonists.
+10. opening_hook     — player-facing premise + opening scene.
+11. lorebook         — assembled JSON (v2 constant entries).
+
+The retired v1 stages (nodes, clue_chains, pc_known_npcs, spoilers,
+node_generation, graph, initial_an) are gone with the v3 extension's
+move away from beats and node graphs. The extension assembles the
+runtime AN itself; we only ship an empty starter file.
+"""
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -8,59 +34,52 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from .artifacts import serialize_clue_graph, serialize_location_catalog, serialize_plot_skeleton
-from .diversity import collect_recent_names, pick_diversity_seed
 from common.llm import LLMClient, OpenRouterClient, UsageStats
-from .lorebook import assemble_lorebook
 from common.pack import GenrePack, load_pack
+from common.settings import get_default_model, get_default_temperature, get_dry_run_model
+
+from .artifacts import serialize_location_catalog, serialize_plot_skeleton
+from .diversity import collect_recent_names, pick_diversity_seed
+from .lorebook import assemble_lorebook
 from .placeholders import infer_protagonist_name_candidates, sanitize_model
 from .schemas import (
     BranchPlan,
-    ClueGraph,
+    ComplicationSet,
     FactionSet,
     LocationCatalog,
-    NodeGraph,
     NPCRoster,
-    PCKnownNPCs,
     PlotSkeleton,
     PremiseDocument,
     SampleCharacterSet,
-    SupportingCastMember,
+    TruthSet,
 )
 from .seed import LoadedSeed, load_seed
-from .validation import ValidationLog, find_phantom_plot_names, validate_cross_stage
 from .stages import branches as branches_stage
-from .stages import clue_chains as clue_chains_stage
+from .stages import complications as complications_stage
 from .stages import factions as factions_stage
-from .stages import graph as graph_stage
-from .stages import initial_an as initial_an_stage
 from .stages import locations as locations_stage
-from .stages import node_generation as nodes_stage
 from .stages import npcs as npcs_stage
 from .stages import opening_hook as opening_hook_stage
-from .stages import pc_known_npcs as pc_known_npcs_stage
 from .stages import plot_skeleton as plot_stage
 from .stages import premise as premise_stage
 from .stages import sample_characters as sample_characters_stage
-from .stages import spoilers as spoilers_stage
-from common.settings import get_default_model, get_default_temperature, get_dry_run_model, get_node_mode
+from .stages import truths as truths_stage
+from .validation import ValidationLog, validate_cross_stage
 
 PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
 STAGE_ALIASES = {
+    "premise": "premise",
     "plot": "plot_skeleton",
     "plot_skeleton": "plot_skeleton",
-    "premise": "premise",
     "factions": "factions",
     "npcs": "npcs",
     "locations": "locations",
-    "nodes": "nodes",
-    "clue_chains": "clue_chains",
-    "clues": "clue_chains",
+    "truths": "truths",
+    "complications": "complications",
     "branches": "branches",
-    "pc_known_npcs": "pc_known_npcs",
-    "sample_characters": "sample_characters",
     "samples": "sample_characters",
+    "sample_characters": "sample_characters",
     "all": "all",
 }
 
@@ -70,10 +89,9 @@ STAGE_MODELS: dict[str, type[BaseModel]] = {
     "factions": FactionSet,
     "npcs": NPCRoster,
     "locations": LocationCatalog,
-    "nodes": NodeGraph,
-    "clue_chains": ClueGraph,
+    "truths": TruthSet,
+    "complications": ComplicationSet,
     "branches": BranchPlan,
-    "pc_known_npcs": PCKnownNPCs,
     "sample_characters": SampleCharacterSet,
 }
 
@@ -82,6 +100,8 @@ class PipelineResult(BaseModel):
     output_dir: Path
     pack: GenrePack
     seed: LoadedSeed
+
+    model_config = {"arbitrary_types_allowed": True}
 
 
 ProgressCallback = Callable[[str], None]
@@ -108,16 +128,12 @@ def _write_text(path: Path, content: str) -> None:
 
 
 def _slugify_title(title: str) -> str:
-    import re
-
     slug = re.sub(r"[^A-Za-z0-9]+", "_", title.strip()).strip("_").lower()
     return slug or "campaign_lorebook"
 
 
-def _format_duration(duration_seconds: float) -> str:
-    if duration_seconds >= 60:
-        return f"{duration_seconds / 60:.1f}m"
-    return f"{duration_seconds:.1f}s"
+def _format_duration(seconds: float) -> str:
+    return f"{seconds / 60:.1f}m" if seconds >= 60 else f"{seconds:.1f}s"
 
 
 def _format_usage_summary(usage: UsageStats) -> str:
@@ -143,16 +159,16 @@ def _stage_cache_path(stages_dir: Path, stage_name: str) -> Path:
     return stages_dir / f"{stage_name}.json"
 
 
-def _run_or_load_stage(
+def _run_or_load(
     *,
     name: str,
     selected: set[str],
     stages_dir: Path,
-    runner,
     model_cls: type[BaseModel],
     client: LLMClient,
-    progress_callback: ProgressCallback | None = None,
-    resume: bool = False,
+    runner: Callable[[], BaseModel],
+    progress_callback: ProgressCallback | None,
+    resume: bool,
 ) -> BaseModel:
     cache_path = _stage_cache_path(stages_dir, name)
     if (name not in selected or resume) and cache_path.exists():
@@ -162,14 +178,14 @@ def _run_or_load_stage(
     if progress_callback is not None:
         progress_callback(f"Starting stage: {name}")
     started_at = time.monotonic()
-    usage_started_at = client.usage_snapshot()
+    usage_started = client.usage_snapshot()
     result = runner()
     _write_json(cache_path, result.model_dump())
     if progress_callback is not None:
         duration = time.monotonic() - started_at
-        stage_usage = client.usage_snapshot() - usage_started_at
+        usage = client.usage_snapshot() - usage_started
         progress_callback(
-            f"Completed stage: {name} ({_format_duration(duration)}, {_format_usage_summary(stage_usage)})"
+            f"Completed stage: {name} ({_format_duration(duration)}, {_format_usage_summary(usage)})"
         )
     return result
 
@@ -185,17 +201,14 @@ def run_pipeline(
     stages: str = "all",
     llm_client: LLMClient | None = None,
     progress_callback: ProgressCallback | None = None,
-    node_mode: bool | None = None,
     resume: bool = False,
 ) -> PipelineResult:
     started_at = time.monotonic()
     output_dir = Path(output_path).resolve()
     stages_dir = output_dir / "stages"
-    spoilers_dir = output_dir / "spoilers"
     partials_dir = output_dir / "partials"
     output_dir.mkdir(parents=True, exist_ok=True)
     stages_dir.mkdir(parents=True, exist_ok=True)
-    spoilers_dir.mkdir(parents=True, exist_ok=True)
     partials_dir.mkdir(parents=True, exist_ok=True)
     (stages_dir / "calls.jsonl").touch(exist_ok=True)
     (stages_dir / "validation_log.txt").touch(exist_ok=True)
@@ -225,7 +238,8 @@ def run_pipeline(
 
     client = llm_client or OpenRouterClient(call_log_path=stages_dir / "calls.jsonl")
 
-    premise = _run_or_load_stage(
+    # ---- 1. premise -----------------------------------------------------
+    premise: PremiseDocument = _run_or_load(
         name="premise",
         selected=selected,
         stages_dir=stages_dir,
@@ -235,7 +249,7 @@ def run_pipeline(
         resume=resume,
         runner=lambda: premise_stage.run(
             client=client,
-            system_prompt=_load_prompt(premise_stage.PROMPT_FILE),
+            system_prompt=_load_prompt("01_premise.md"),
             pack=pack,
             seed=loaded_seed.resolved,
             model=resolved_model,
@@ -246,7 +260,8 @@ def run_pipeline(
     premise = sanitize_model(premise)
     _write_json(_stage_cache_path(stages_dir, "premise"), premise.model_dump())
 
-    plot = _run_or_load_stage(
+    # ---- 2. plot_skeleton ----------------------------------------------
+    plot: PlotSkeleton = _run_or_load(
         name="plot_skeleton",
         selected=selected,
         stages_dir=stages_dir,
@@ -256,7 +271,7 @@ def run_pipeline(
         resume=resume,
         runner=lambda: plot_stage.run(
             client=client,
-            system_prompt=_load_prompt(plot_stage.PROMPT_FILE),
+            system_prompt=_load_prompt("02_plot_skeleton.md"),
             pack=pack,
             premise=premise,
             seed=loaded_seed.resolved,
@@ -269,17 +284,8 @@ def run_pipeline(
     plot = sanitize_model(plot, protagonist_names=protagonist_names)
     _write_json(_stage_cache_path(stages_dir, "plot_skeleton"), serialize_plot_skeleton(plot))
 
-    opening_hook_draft = opening_hook_stage.render(pack, premise, plot, loaded_seed.resolved)
-    _write_text(partials_dir / "opening_hook.partial.txt", opening_hook_draft.render())
-    if progress_callback is not None:
-        progress_callback("Wrote partials/opening_hook.partial.txt")
-
-    initial_note_draft = initial_an_stage.render(plot)
-    _write_text(partials_dir / "initial_authors_note.partial.txt", initial_note_draft.render())
-    if progress_callback is not None:
-        progress_callback("Wrote partials/initial_authors_note.partial.txt")
-
-    factions = _run_or_load_stage(
+    # ---- 3. factions ----------------------------------------------------
+    factions: FactionSet = _run_or_load(
         name="factions",
         selected=selected,
         stages_dir=stages_dir,
@@ -289,7 +295,7 @@ def run_pipeline(
         resume=resume,
         runner=lambda: factions_stage.run(
             client=client,
-            system_prompt=_load_prompt(factions_stage.PROMPT_FILE),
+            system_prompt=_load_prompt("03_factions.md"),
             pack=pack,
             premise=premise,
             plot=plot,
@@ -301,6 +307,7 @@ def run_pipeline(
     factions = sanitize_model(factions, protagonist_names=protagonist_names)
     _write_json(_stage_cache_path(stages_dir, "factions"), factions.model_dump())
 
+    # ---- 4. npcs --------------------------------------------------------
     recent_npc_names, recent_location_names = collect_recent_names(
         campaigns_dir=output_dir.parent,
         current_dir=output_dir,
@@ -314,7 +321,7 @@ def run_pipeline(
             f"{len(recent_location_names)} recent location names"
         )
 
-    npcs = _run_or_load_stage(
+    npcs: NPCRoster = _run_or_load(
         name="npcs",
         selected=selected,
         stages_dir=stages_dir,
@@ -324,7 +331,7 @@ def run_pipeline(
         resume=resume,
         runner=lambda: npcs_stage.run(
             client=client,
-            system_prompt=_load_prompt(npcs_stage.PROMPT_FILE),
+            system_prompt=_load_prompt("04_npc.md"),
             pack=pack,
             premise=premise,
             plot=plot,
@@ -342,70 +349,8 @@ def run_pipeline(
     npcs = sanitize_model(npcs, protagonist_names=protagonist_names)
     _write_json(_stage_cache_path(stages_dir, "npcs"), npcs.model_dump())
 
-    for repair_attempt in range(1, 3):
-        phantoms = find_phantom_plot_names(
-            plot,
-            npcs,
-            factions=factions,
-            protagonist_names=protagonist_names,
-        )
-        if not phantoms:
-            break
-        validation_log.write(
-            f"[plot-prose-validation] phantom names found in plot prose: {phantoms}; "
-            f"re-running NPC stage with these names appended (attempt {repair_attempt})"
-        )
-        if progress_callback is not None:
-            progress_callback(
-                f"Plot prose mentions {phantoms} not in roster; regenerating NPCs to cover them "
-                f"(repair attempt {repair_attempt}/2)"
-            )
-        existing_cast_names = {member.name for member in plot.supporting_cast}
-        for phantom in phantoms:
-            if phantom in existing_cast_names:
-                continue
-            plot.supporting_cast.append(
-                SupportingCastMember(
-                    name=phantom,
-                    archetype="phantom-name auto-repair: archetype unspecified",
-                    narrative_role=(
-                        f"Mentioned in plot prose as {phantom!r} but not declared in supporting_cast; "
-                        "infer role from surrounding beats."
-                    ),
-                )
-            )
-        _write_json(_stage_cache_path(stages_dir, "plot_skeleton"), serialize_plot_skeleton(plot))
-        npcs = npcs_stage.run(
-            client=client,
-            system_prompt=_load_prompt(npcs_stage.PROMPT_FILE),
-            pack=pack,
-            premise=premise,
-            plot=plot,
-            factions=factions,
-            seed=loaded_seed.resolved,
-            model=resolved_model,
-            temperature=temperature,
-            validation_log=validation_log,
-            progress_callback=progress_callback,
-            snapshot_path=partials_dir / "npcs.partial.json",
-            avoid_names=recent_npc_names,
-            diversity_seed=diversity_seed,
-        )
-        npcs = sanitize_model(npcs, protagonist_names=protagonist_names)
-        _write_json(_stage_cache_path(stages_dir, "npcs"), npcs.model_dump())
-    else:
-        remaining_phantoms = find_phantom_plot_names(
-            plot,
-            npcs,
-            factions=factions,
-            protagonist_names=protagonist_names,
-        )
-        if remaining_phantoms:
-            raise ValueError(
-                f"plot prose still references names not in roster after 2 repair attempts: {remaining_phantoms}"
-            )
-
-    locations = _run_or_load_stage(
+    # ---- 5. locations ---------------------------------------------------
+    locations: LocationCatalog = _run_or_load(
         name="locations",
         selected=selected,
         stages_dir=stages_dir,
@@ -415,7 +360,7 @@ def run_pipeline(
         resume=resume,
         runner=lambda: locations_stage.run(
             client=client,
-            system_prompt=_load_prompt(locations_stage.PROMPT_FILE),
+            system_prompt=_load_prompt("05_location.md"),
             premise=premise,
             plot=plot,
             factions=factions,
@@ -431,82 +376,67 @@ def run_pipeline(
         ),
     )
     locations = sanitize_model(locations, protagonist_names=protagonist_names)
-    _write_json(_stage_cache_path(stages_dir, "locations"), serialize_location_catalog(locations, plot))
+    _write_json(
+        _stage_cache_path(stages_dir, "locations"),
+        serialize_location_catalog(locations),
+    )
 
-    # Node graph is generated before clues because clues are edges between nodes.
-    # The optional `node_mode` kwarg / CG_NODE_MODE env var are retained for
-    # backwards-compatibility but no longer toggle real behavior — node-mode
-    # is the only supported path.
-    if node_mode is False:
-        raise ValueError(
-            "node_mode=False is no longer supported; the clue model now requires nodes."
-        )
-    _ = get_node_mode()  # touched for env-var compatibility; value ignored
-
-    node_graph: NodeGraph
-    node_cache_path = _stage_cache_path(stages_dir, "nodes")
-    if "nodes" not in selected and "clue_chains" not in selected and node_cache_path.exists():
-        if progress_callback is not None:
-            progress_callback("Using cached stage: nodes")
-        with node_cache_path.open("r", encoding="utf-8") as handle:
-            node_graph = NodeGraph.model_validate(json.load(handle))
-    else:
-        if progress_callback is not None:
-            progress_callback("Starting stage: nodes")
-        node_prompts = {
-            nodes_stage.PROMPT_START: _load_prompt(nodes_stage.PROMPT_START),
-            nodes_stage.PROMPT_FINAL: _load_prompt(nodes_stage.PROMPT_FINAL),
-            nodes_stage.PROMPT_INTERMEDIATE: _load_prompt(nodes_stage.PROMPT_INTERMEDIATE),
-        }
-        node_graph = nodes_stage.run(
-            client=client,
-            premise=premise,
-            plot=plot,
-            npcs=npcs,
-            locations=locations,
-            model=resolved_model,
-            temperature=temperature,
-            validation_log=validation_log,
-            snapshot_path=partials_dir / "nodes.partial.json",
-            progress_callback=progress_callback,
-            prompts=node_prompts,
-            nodes_per_act=loaded_seed.resolved.nodes_per_act or nodes_stage.DEFAULT_NODES_PER_ACT,
-        )
-        _write_json(node_cache_path, node_graph.model_dump())
-
-    clue_graph = _run_or_load_stage(
-        name="clue_chains",
+    # ---- 6. truths ------------------------------------------------------
+    truths: TruthSet = _run_or_load(
+        name="truths",
         selected=selected,
         stages_dir=stages_dir,
-        model_cls=ClueGraph,
+        model_cls=TruthSet,
         client=client,
         progress_callback=progress_callback,
         resume=resume,
-        runner=lambda: clue_chains_stage.run(
+        runner=lambda: truths_stage.run(
             client=client,
-            node_graph=node_graph,
+            system_prompt=_load_prompt("06_truths.md"),
+            pack=pack,
             premise=premise,
             plot=plot,
+            factions=factions,
             npcs=npcs,
             locations=locations,
+            seed=loaded_seed.resolved,
             model=resolved_model,
             temperature=temperature,
             validation_log=validation_log,
-            snapshot_path=partials_dir / "clue_chains.partial.json",
-            progress_callback=progress_callback,
-            prose_system_prompt=_load_prompt(clue_chains_stage.PROSE_PROMPT_FILE),
         ),
     )
-    clue_graph = sanitize_model(clue_graph, protagonist_names=protagonist_names)
-    _write_json(_stage_cache_path(stages_dir, "clue_chains"), serialize_clue_graph(clue_graph, node_graph))
+    truths = sanitize_model(truths, protagonist_names=protagonist_names)
+    _write_json(_stage_cache_path(stages_dir, "truths"), truths.model_dump())
 
-    mermaid_src, html_doc = graph_stage.render(node_graph, clue_graph, plot)
-    _write_text(spoilers_dir / "campaign_graph.mmd", mermaid_src)
-    _write_text(spoilers_dir / "campaign_graph.html", html_doc)
-    if progress_callback is not None:
-        progress_callback("Wrote spoilers/campaign_graph.mmd + spoilers/campaign_graph.html")
+    # ---- 7. complications ----------------------------------------------
+    complications: ComplicationSet = _run_or_load(
+        name="complications",
+        selected=selected,
+        stages_dir=stages_dir,
+        model_cls=ComplicationSet,
+        client=client,
+        progress_callback=progress_callback,
+        resume=resume,
+        runner=lambda: complications_stage.run(
+            client=client,
+            system_prompt=_load_prompt("07_complications.md"),
+            pack=pack,
+            premise=premise,
+            plot=plot,
+            factions=factions,
+            npcs=npcs,
+            truths=truths,
+            seed=loaded_seed.resolved,
+            model=resolved_model,
+            temperature=temperature,
+            validation_log=validation_log,
+        ),
+    )
+    complications = sanitize_model(complications, protagonist_names=protagonist_names)
+    _write_json(_stage_cache_path(stages_dir, "complications"), complications.model_dump())
 
-    branches = _run_or_load_stage(
+    # ---- 8. branches ----------------------------------------------------
+    branches: BranchPlan = _run_or_load(
         name="branches",
         selected=selected,
         stages_dir=stages_dir,
@@ -516,13 +446,13 @@ def run_pipeline(
         resume=resume,
         runner=lambda: branches_stage.run(
             client=client,
-            system_prompt=_load_prompt(branches_stage.PROMPT_FILE),
+            system_prompt=_load_prompt("08_branches.md"),
             premise=premise,
             plot=plot,
             factions=factions,
             npcs=npcs,
             locations=locations,
-            clue_graph=clue_graph,
+            truths=truths,
             seed=loaded_seed.resolved,
             model=resolved_model,
             temperature=temperature,
@@ -532,74 +462,49 @@ def run_pipeline(
     branches = sanitize_model(branches, protagonist_names=protagonist_names)
     _write_json(_stage_cache_path(stages_dir, "branches"), branches.model_dump())
 
-    pc_known_npcs = _run_or_load_stage(
-        name="pc_known_npcs",
+    # ---- 9. sample characters ------------------------------------------
+    sample_characters: SampleCharacterSet = _run_or_load(
+        name="sample_characters",
         selected=selected,
         stages_dir=stages_dir,
-        model_cls=PCKnownNPCs,
+        model_cls=SampleCharacterSet,
         client=client,
         progress_callback=progress_callback,
         resume=resume,
-        runner=lambda: pc_known_npcs_stage.run(
+        runner=lambda: sample_characters_stage.run(
             client=client,
-            system_prompt=_load_prompt(pc_known_npcs_stage.PROMPT_FILE),
+            system_prompt=_load_prompt(sample_characters_stage.PROMPT_FILE),
+            pack=pack,
             premise=premise,
             plot=plot,
-            node_graph=node_graph,
+            factions=factions,
             npcs=npcs,
+            locations=locations,
             seed=loaded_seed.resolved,
             model=resolved_model,
             temperature=temperature,
             validation_log=validation_log,
         ),
     )
-    known_npc_names = set(pc_known_npcs.known_names)
-    start_location_name = pc_known_npcs.start_location_name
+    sample_characters = sanitize_model(sample_characters, protagonist_names=protagonist_names)
+    _write_json(
+        _stage_cache_path(stages_dir, "sample_characters"),
+        sample_characters.model_dump(),
+    )
 
-    sample_characters: SampleCharacterSet | None = None
-    sample_cache_path = _stage_cache_path(stages_dir, "sample_characters")
-    if "sample_characters" in selected or sample_cache_path.exists():
-        sample_characters = _run_or_load_stage(
-            name="sample_characters",
-            selected=selected,
-            stages_dir=stages_dir,
-            model_cls=SampleCharacterSet,
-            client=client,
-            progress_callback=progress_callback,
-            resume=resume,
-            runner=lambda: sample_characters_stage.run(
-                client=client,
-                system_prompt=_load_prompt(sample_characters_stage.PROMPT_FILE),
-                pack=pack,
-                premise=premise,
-                plot=plot,
-                factions=factions,
-                npcs=npcs,
-                locations=locations,
-                seed=loaded_seed.resolved,
-                model=resolved_model,
-                temperature=temperature,
-                validation_log=validation_log,
-                known_npc_names=known_npc_names,
-            ),
-        )
-        sample_payload = {
-            "pack_name": pack.metadata.pack_name,
-            "pack_version": pack.metadata.version,
-            "characters": [character.model_dump() for character in sample_characters.characters],
-        }
-        _write_json(output_dir / "sample_characters.json", sample_payload)
-        if progress_callback is not None:
-            progress_callback("Wrote sample_characters.json")
-
-    cross_stage_errors = validate_cross_stage(pack, plot, factions, npcs, locations, clue_graph, branches, node_graph=node_graph)
-    if cross_stage_errors:
-        for error in cross_stage_errors:
-            validation_log.write(f"[cross-stage] {error}")
-        raise ValueError("cross-stage validation failed; see stages/validation_log.txt")
+    # ---- Cross-stage sanity -------------------------------------------
+    validate_cross_stage(
+        plot=plot,
+        factions=factions,
+        npcs=npcs,
+        locations=locations,
+        truths=truths,
+        validation_log=validation_log,
+    )
     if progress_callback is not None:
         progress_callback("Cross-stage validation passed")
 
+    # ---- 10. opening hook ---------------------------------------------
     opening_hook = opening_hook_stage.render(
         pack,
         premise,
@@ -607,8 +512,6 @@ def run_pipeline(
         loaded_seed.resolved,
         npcs=npcs,
         locations=locations,
-        known_npc_names=known_npc_names,
-        start_location_name=start_location_name,
         client=client,
         system_prompt=_load_prompt(opening_hook_stage.PROMPT_FILE),
         prior_knowledge_system_prompt=_load_prompt(opening_hook_stage.PRIOR_KNOWLEDGE_PROMPT_FILE),
@@ -621,11 +524,17 @@ def run_pipeline(
     if progress_callback is not None:
         progress_callback("Wrote opening_hook.txt")
 
-    initial_text = initial_an_stage.render_node_mode(plot, node_graph, clue_graph)
-    _write_text(output_dir / "initial_authors_note.txt", initial_text)
+    # ---- 11. starter Author's Note ------------------------------------
+    # In v3 the extension assembles the AN deterministically from state on
+    # every turn. The campaign generator only ships a small starter file
+    # that holds the scene context for turn 0; everything else fills in
+    # as play begins.
+    initial_an = _starter_authors_note(premise, plot)
+    _write_text(output_dir / "initial_authors_note.txt", initial_an)
     if progress_callback is not None:
         progress_callback("Wrote initial_authors_note.txt")
 
+    # ---- 12. lorebook --------------------------------------------------
     lorebook = assemble_lorebook(
         pack=pack,
         premise=premise,
@@ -633,26 +542,16 @@ def run_pipeline(
         factions=factions,
         npcs=npcs,
         locations=locations,
-        clue_graph=clue_graph,
+        truths=truths,
+        complications=complications,
         branches=branches,
         sample_characters=sample_characters,
-        node_graph=node_graph,
     )
     lorebook_filename = _slugify_title(premise.title) + ".json"
     _write_json(output_dir / lorebook_filename, lorebook)
     if progress_callback is not None:
         progress_callback(f"Wrote {lorebook_filename}")
 
-    spoilers = spoilers_stage.render(
-        premise=premise,
-        plot=plot,
-        factions=factions,
-        npcs=npcs,
-        locations=locations,
-        clues=clue_graph,
-        branches=branches,
-    )
-    _write_text(spoilers_dir / "full_campaign.md", spoilers)
     if progress_callback is not None:
         total_duration = time.monotonic() - started_at
         progress_callback(
@@ -661,3 +560,28 @@ def run_pipeline(
         )
 
     return PipelineResult(output_dir=output_dir, pack=pack, seed=loaded_seed)
+
+
+def _starter_authors_note(premise: PremiseDocument, plot: PlotSkeleton) -> str:
+    """A minimal turn-0 Author's Note.
+
+    The v3 extension regenerates the AN from state on every turn, so
+    this file is overwritten almost immediately. We still produce a
+    plausible starting state for the GM in case the player sends a
+    message before the first extraction has run.
+    """
+    spine = " | ".join(plot.thematic_spine[:3])
+    return "\n".join([
+        f"Thematic spine: {spine}",
+        "Live threads: (none yet — the campaign is about to begin)",
+        "Recent facts: (none yet)",
+        f"Scene context: Where: {plot.acts[0].title}. Tension: {plot.acts[0].goal}.",
+        "On-screen NPCs: (set as the opening scene plays out)",
+        "Tone reminders: See __pack_gm_overlay for the genre voice and posture.",
+        "",
+        (
+            "Response length cap: Cap your reply at the base prompt's length rules: "
+            "1–2 short paragraphs by default (~80–120 words), 3 paragraphs only for scene "
+            "transitions or climaxes. Never four."
+        ),
+    ])

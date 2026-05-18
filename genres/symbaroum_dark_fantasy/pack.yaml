@@ -1,10 +1,13 @@
-schema_version: 1
+schema_version: 2
 pack_name: symbaroum_dark_fantasy
 display_name: "Symbaroum Dark Fantasy"
-version: 1.0.0
+version: 2.0.0
 description: >
   Grim dark fantasy in the shadow of an ancient corrupting forest.
-  Witches, inquisitors, and the price of forbidden knowledge.
+  Witches, inquisitors, and the price of forbidden knowledge. Story-mode:
+  no dice, no attribute scores — narrative resolution leaning on the
+  character's advantages and disadvantages.
 inspirations: [symbaroum, witcher, dark_souls, annihilation]
 created: 2026-04-19
+updated: 2026-05-16
 author: dudi

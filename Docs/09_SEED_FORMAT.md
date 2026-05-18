@@ -1,378 +1,167 @@
 # Campaign Seed Format
 
-The seed file is a small YAML document you write to shape a specific campaign within a genre. This file documents exactly what fields it supports, how they interact with the pack's defaults, and how much you should write.
+What you write to generate a campaign with the campaign generator.
 
-Read this when: you're about to generate a new campaign and need to know what to put in your seed file. Come back when: the campaign didn't turn out how you wanted and you need to tune the seed for the next generation.
+The seed is a small YAML file (typically 10–40 lines). It anchors the generator on a specific campaign's themes, tone, and structural shape. Everything else — premise, plot, NPCs, locations, truths, complications — comes from the generator.
 
----
-
-## Mental model
-
-The pack answers "what kind of world is this?" (dark fantasy, cyberpunk, space opera). The seed answers "what kind of story in that world?" (a corrupt inquisitor's hunt, a heist gone wrong, a derelict colony mystery).
-
-Your seed sits on top of the pack's `generator_seed.yaml`, which provides genre-level defaults. Your seed's fields override matching fields in the pack's defaults; fields you omit fall through to pack defaults.
+This is the **v2 seed format** (story-mode runtime). v1 fields (`num_acts`, `clue_chain_density`, `branch_points`, `nodes_per_act`) are retired; the loader ignores them with a warning.
 
 ---
 
-## Quickest start
-
-If you just want to generate something now and see what comes out:
+## Worked example
 
 ```yaml
-genre: symbaroum_dark_fantasy
-campaign_pitch: >
-  A missing mentor, a frontier town that's hiding something,
-  and a forest that's been watching.
-```
-
-That's a legal seed. You'll get a playable campaign — generic, but playable. Every other field falls through to pack defaults.
-
----
-
-## Getting a blank template
-
-The campaign generator can produce a blank annotated seed file for you to fill in:
-
-```bash
-python -m campaign_generator --init-seed my_seed.yaml --genre genres/symbaroum_dark_fantasy/
-```
-
-This writes `my_seed.yaml` with every field present, commented out, with inline documentation — so you can uncomment and edit what you want and leave the rest. Much faster than writing from scratch.
-
----
-
-## Full field reference
-
-### Required fields
-
-**`genre`** *(string)*
-Which pack this seed is for. Must match the pack's `pack_name` from `pack.yaml`. The campaign generator validates this before running anything.
-
-```yaml
-genre: symbaroum_dark_fantasy
-```
-
-### High-leverage fields (write these first)
-
-These four shape the campaign more than all other fields combined. If you're only writing a few fields, write these.
-
-**`campaign_pitch`** *(string, paragraph-length)*
-One paragraph describing the campaign you want. The generator uses this as the spine of the premise and plot skeleton. The single biggest lever in the whole seed.
-
-```yaml
-campaign_pitch: >
-  A mentor's last letter summons the protagonist to a frontier town
-  where the witch-hunters have turned predator. Something old in the
-  forest has been woken.
-```
-
-Omitting this field is legal — the generator will invent a pitch from the pack's tone alone. But explicit pitches produce sharper campaigns than implicit ones.
-
-**`themes_include`** *(list of strings)*
-Themes you want woven through the campaign. Use specific, concrete themes ("a mentor's last secret") rather than abstract ones ("mystery"). Overrides the pack's default.
-
-```yaml
-themes_include:
-  - a_mentor's_last_secret
-  - trust_in_institutions_eroding
-  - the_forest_as_witness
-```
-
-**`themes_exclude`** *(list of strings)*
-Themes to avoid for this specific campaign. Merges with the pack's default exclusions — pack-level exclusions always apply; your seed can only add to them, not remove.
-
-```yaml
-themes_exclude:
-  - sexual_violence
-  - torture_as_spectacle
-```
-
-**`protagonist_archetype`** *(string, 1-3 sentences)*
-Rough shape of the character you intend to play. Not a character sheet — the generator uses this to craft a hook and opening scene that fits this kind of character.
-
-```yaml
-protagonist_archetype: >
-  Changeling witch, elf-touched, trained in shadow magic.
-  Outlawed in most of Ambria. Has a raven familiar.
-```
-
-### Structural fields (affect campaign shape)
-
-**`num_acts`** *(integer, default 4)*
-How many acts the campaign has. 3 = tight, 4 = standard, 5 = sprawling. Range 3–6.
-
-**`num_npcs`** *(integer, default 10)*
-How many named NPCs to generate. Range 6–15 reasonable.
-
-**`num_locations`** *(integer, default 8)*
-How many locations to generate. Range 5–12 reasonable.
-
-**`num_sample_characters`** *(integer, default 5)*
-How many ready-to-play pregen characters to generate. Range 1–10. Each pregen is grounded in `protagonist_archetype` / `protagonist_known_facts` (when set) and may only hook into NPCs the protagonist already knows when play begins — see the `pc_known_npcs` stage in [`03_CAMPAIGN_GENERATOR_BRIEF.md`](03_CAMPAIGN_GENERATOR_BRIEF.md) §8.5 for how that set is derived from the act-1 start node and the LLM vet step.
-
-**`nodes_per_act`** *(integer, default 5, range 3–10)*
-How many nodes each act contains: one start, `nodes_per_act - 2` intermediate "points of interest", and one final. Adjacent acts share a transition node (act N's final = act N+1's start), so total distinct nodes for N acts = `nodes_per_act + (N-1) * (nodes_per_act - 1)`. With defaults (3 acts × 5 nodes): 13 distinct nodes. Smaller values produce tighter, more linear campaigns; larger values produce more parallel side investigations.
-
-**`clue_chain_density`** *(string: `light`, `medium`, or `heavy`, default `medium`)*
-*Deprecated under the node-edge clue model.* The new clue generator produces a deterministic 3-inbound / start-3-outbound graph per act regardless of this setting. The field is still accepted for backwards compatibility but currently has no effect.
-
-**`branch_points`** *(integer, default 7)*
-How many explicit "if player does X, then Y" contingencies the generator creates. Range 4–10.
-
-### Setting fields (ground the campaign in specific places and powers)
-
-**`setting_anchors`** *(list of strings)*
-Specific, evocative nouns that locate the campaign. Not themes — these are *places and things*. Overrides the pack's defaults.
-
-```yaml
-setting_anchors:
-  - thistle_hold
-  - davokar_outskirts
-  - abandoned_ordo_magica_lodge
-  - a_ruin_that_shouldnt_exist
-```
-
-**`antagonist_archetypes_preferred`** *(list of strings)*
-Preferred archetypes for the main antagonist. The generator picks one as the primary antagonist and may use others as secondary threats. Values must be archetypes the pack knows about — see the pack's `generator_seed.yaml` for the menu.
-
-```yaml
-antagonist_archetypes_preferred:
-  - corrupt_inquisitor
-  - ancient_sorcerer
-```
-
-### Protagonist context fields (shape the opening)
-
-**`protagonist_known_facts`** *(list of strings)*
-Facts the protagonist already knows at campaign start. These become lorebook entries accessible from turn one — the GM treats them as established canon the protagonist can reference.
-
-```yaml
-protagonist_known_facts:
-  - Their mentor is named Iselde and taught them for eleven years.
-  - Their mentor was researching something she wouldn't name.
-  - The Church of Prios has opinions about people like them.
-```
-
-Use this to anchor backstory without having to explain it during play.
-
-**`opening_hook_seed`** *(string, paragraph-length)*
-Explicit opening hook. Rare — use only when you have a specific first scene in mind. If omitted, the generator invents the hook from premise + tone + protagonist.
-
-```yaml
-opening_hook_seed: >
-  The protagonist receives a raven-delivered letter from their
-  mentor, summoning them to Thistle Hold with urgency. When they
-  arrive, the mentor is missing.
-```
-
-**Warning:** the more you specify here, the less surprised you'll be. Consider leaving this blank unless you really want control.
-
-### Tone fields
-
-**`tone_modifiers`** *(list of strings)*
-Adjustments layered on top of the pack's tone. Each modifier is a dial rotating the pack tone slightly. Free-form — the generator interprets them.
-
-```yaml
-tone_modifiers:
-  - slightly_more_hopeful_than_default
-  - investigative_rather_than_action_heavy
-  - quieter_in_the_opening_acts
-```
-
-**`image_style_hint`** *(string, optional)*
-Hard visual direction for NPC portraits. This is passed into the NPC stage and is the main control for keeping every generated `image_generation_prompt` in one consistent medium.
-
-```yaml
-image_style_hint: >
-  Full-body photorealistic character portrait, realistic skin texture,
-  natural anatomy, cinematic lighting. No illustration, comic,
-  painting, or sketch look.
-```
-
-Use this when you care about portrait consistency. Leave it blank if you want the generator to use its default fallback, which now biases toward full-body photorealistic portraits instead of illustration-style media.
-
-### Generation control fields
-
-**`random_seed`** *(integer, optional)*
-Seed for reproducibility. Same random_seed + same model + same prompts + same pack = same campaign. Useful for regenerating after editing the seed. Also drives the naming-diversity register sampled for NPCs and locations — leave unset for a fresh cultural flavor on every run.
-
-**`model`** *(string, optional)*
-OpenRouter model slug. Overrides the `--model` CLI flag. Default: the pack's preferred model, or the CLI flag's value.
-
-**`temperature`** *(float, optional, default 0.8)*
-LLM temperature for generation. 0.5 = more predictable, 1.0 = more varied. Values above 1.0 get unstable; stay in 0.5–1.0.
-
-### Strictness fields
-
-**`strictness`** *(object)*
-How rigorously the generator validates and repairs its outputs. Merges with pack defaults field-by-field.
-
-```yaml
-strictness:
-  clue_graph_connectivity: strict    # strict | lenient
-  npc_voice_diversity: strict        # reject if NPCs sound alike
-  canon_consistency: strict          # cross-reference validation
-```
-
-Leave this alone for your first few campaigns. Tighten specific fields if you see quality issues in those areas.
-
----
-
-## How seed fields interact with the pack
-
-- Fields in the pack's `generator_seed.yaml` are defaults.
-- Your seed's fields override those defaults — EXCEPT:
-  - **`themes_exclude` merges** (both apply; pack exclusions are never weakened)
-  - **`strictness` merges field-by-field** (your seed's settings override only the fields you specify)
-- Any field you omit falls through to the pack default.
-- Any field present in your seed but not in the pack default is still used — your seed can add fields the pack didn't mention.
-
----
-
-## How much should I write?
-
-A real question with a real answer: write as much as you want to control, and no more. The unwritten parts are where the generator surprises you.
-
-### Minimum-specificity seed (generator does most of the work)
-
-```yaml
-genre: symbaroum_dark_fantasy
-campaign_pitch: >
-  A missing mentor, a frontier town that's hiding something,
-  and a forest that's been watching.
-```
-
-Legal. Playable. Generic.
-
-### Balanced seed (recommended starting point)
-
-```yaml
-genre: symbaroum_dark_fantasy
-
-campaign_pitch: >
-  A mentor's last letter summons the protagonist to a frontier town
-  where the witch-hunters have turned predator. Something old in the
-  forest has been woken.
-
-themes_include:
-  - a_mentor's_last_secret
-  - trust_in_institutions_eroding
-
-protagonist_archetype: >
-  Someone connected to the old magical traditions — a witch or
-  changeling. Not a warrior; they solve problems by knowing things.
-
-antagonist_archetypes_preferred:
-  - corrupt_inquisitor
-  - ancient_sorcerer
-```
-
-Specific enough to produce a campaign with clear shape. Vague enough that the details will surprise you.
-
-### Maximum-specificity seed (tight control, low surprise)
-
-```yaml
-genre: symbaroum_dark_fantasy
-
-campaign_pitch: >
-  A changeling witch returns to the town where their mentor died
-  to investigate rumors of corruption in the Ordo Magica. What
-  they find implicates both the Church and their own mentor.
-
-protagonist_archetype: >
-  Changeling witch, elf-touched, trained in shadow magic.
-  Outlawed in most of Ambria. Has a raven familiar.
-
-protagonist_known_facts:
-  - The mentor's name was Varanise.
-  - Varanise was researching pre-Symbaroum ruins in northern Davokar.
-  - The protagonist has 1 permanent corruption from their training.
-
-setting_anchors:
-  - thistle_hold
-  - the_ordo_magica_chapterhouse
-  - a_ruin_north_of_thistle_hold
-
-themes_include:
-  - betrayal_by_an_institution_you_trusted
-  - the_cost_of_truth
-  - being_the_monster_they_fear_you_are
-
-themes_exclude:
-  - romance
-
-antagonist_archetypes_preferred:
-  - corrupt_inquisitor
-  - ancient_sorcerer
-
-num_acts: 4
-clue_chain_density: medium
-
-opening_hook_seed: >
-  The protagonist arrives in Thistle Hold in a cold autumn rain.
-  The raven carries a letter they cannot yet read.
-```
-
-You know most of what's coming. The generator fills in NPCs, secondary clues, and the resolution, but the shape is set.
-
----
-
-## Validation
-
-The campaign generator validates your seed before running the pipeline. Invalid seeds fail fast with clear messages:
-
-- **Missing `genre`**: error — field is required
-- **`genre` doesn't match the pack's `pack_name`**: error — pack mismatch, showing both the expected and provided values
-- **`antagonist_archetypes_preferred` contains archetypes not in the pack's menu**: error, listing the pack's available archetypes
-- **`num_acts` outside 3–6**: warning — will still run, but may produce unbalanced pacing
-- **`num_sample_characters` outside 1–10**: warning — will still run, but the LLM may struggle at the extremes
-- **`themes_include` and `themes_exclude` contain the same theme**: error — contradictory
-- **Unknown fields**: warning — the field is ignored, but typos in field names won't silently do nothing
-
-Fail-fast validation is intentional: the campaign generator can take 15–30 minutes to run end-to-end, and you don't want to discover a typo in your seed after twenty minutes of LLM calls.
-
----
-
-## Common mistakes
-
-**Over-specifying the opening hook.** You wrote out the whole first scene, character-by-character, beat-by-beat. The generator produces what you described and the opening doesn't surprise you. Fix: leave `opening_hook_seed` blank unless you really need that control.
-
-**Contradicting the pack.** Your seed's tone modifiers pull toward lighthearted romance, but the pack is grim dark fantasy. The generator tries to honor both and produces mush. Fix: pick a pack that matches the tone you want, or change the pack's tone modifiers directly for this run.
-
-**Themes as abstractions rather than hooks.** `themes_include: [mystery, adventure, growth]` is too abstract to steer anything. `themes_include: [a_mentor's_last_secret, trust_in_institutions_eroding]` gives the generator something specific to weave. Fix: make themes concrete.
-
-**Too many antagonist archetypes preferred.** You listed six. The generator picks arbitrarily, and you don't know which you'll get. Fix: list 1–3; if you want variety, run multiple campaigns with different preferences.
-
-**Stale `random_seed`.** You ran once, didn't like the output, edited the seed, ran again with the same `random_seed`. Same LLM inputs + same seed ≈ same output. Fix: change the random_seed OR remove it entirely when iterating.
-
----
-
-## Working with the blank template
-
-After running `--init-seed`, you'll have a file like:
-
-```yaml
-# Required: which pack this seed is for.
-# Must match the pack.yaml pack_name of your --genre pack.
+# Required: must match the pack's pack_name.
 genre: symbaroum_dark_fantasy
 
 # Optional but high-leverage: one paragraph describing the campaign.
-# campaign_pitch: >
-#   (your pitch here)
+campaign_pitch: >
+  A disgraced scholar is called to Thistle Hold after their former mentor
+  vanishes while investigating a noble family's private excavations in
+  Davokar. The deeper truth points toward both church scrutiny and
+  something old that has begun answering back.
 
-# Optional: specific themes to weave through the campaign.
-# Concrete phrases work better than abstractions.
-# themes_include:
-#   - a_mentor's_last_secret
-#   - trust_in_institutions_eroding
+themes_include:
+  - the_cost_of_inheritance
+  - knowledge_that_makes_you_complicit
+  - pity_for_the_monstrous
 
-# Optional: themes to avoid. Merges with pack-level exclusions.
-# themes_exclude:
-#   - romance
+themes_exclude:
+  - torture_as_spectacle
 
-# ... (all other fields, each commented, with docs)
+protagonist_archetype: >
+  A lore-seeker or hedge mystic who solves problems by noticing patterns,
+  reading old signs, and knowing which truths to leave unsaid.
+
+protagonist_known_facts:
+  - "My mentor disappeared eight days ago, somewhere along the Davokar fringe."
+  - "I owe the Iron Pact a debt I never wanted to take."
+
+antagonist_archetypes_preferred:
+  - tainted_noble
+  - corrupt_inquisitor
+
+opening_hook_seed: >
+  A raven brought a folded letter sealed with my mentor's old sigil.
+  Three words: "Come. Now. —I."
+
+tone_modifiers:
+  - a_touch_more_tragic_than_default
+  - patient_horror_in_the_first_half
+
+image_style_hint: >
+  Full-body photorealistic character portrait, realistic skin texture,
+  cinematic lighting, no illustration or painting look.
+
+# Optional structural counts.
+num_npcs: 18
+num_locations: 12
+num_factions: 4
+num_truths: 7
+num_complications: 12
+num_sample_characters: 5
+
+# Optional generation controls.
+random_seed: 44119
+model: anthropic/claude-sonnet-4.5
+temperature: 0.7
+
+# Optional strictness overrides. Merge field-by-field with pack defaults.
+strictness:
+  truth_adjacency: strict
+  npc_voice_diversity: strict
+  canon_consistency: strict
 ```
 
-Uncomment and edit what you want to control. Leave the rest commented — it will fall through to pack defaults.
+---
 
-The blank template is regenerated per-pack, so the available `antagonist_archetypes_preferred` values (for example) are listed in a comment, pulled from that pack's `generator_seed.yaml`. This means the template is always accurate to the pack you're targeting.
+## Field reference
+
+### Required
+
+- `genre` — the pack's `pack_name` (snake_case). Must match exactly. The generator refuses to run against a mismatched pack.
+
+### High-leverage prose (recommended)
+
+- `campaign_pitch` — one paragraph naming the central tension, the protagonist's stake, and the world detail that makes this campaign specific. The single most influential field.
+- `protagonist_archetype` — a short phrase describing the kind of protagonist the seed asks for. Feeds the opening hook's character-creation guidance and the sample-characters stage.
+- `protagonist_known_facts` — list of short sentences describing what the protagonist already knows at game start. Reaches the "What you already know" section of the opening hook.
+
+### Theme controls
+
+- `themes_include` — themes to weave in (snake_case). 2–6 entries typical.
+- `themes_exclude` — themes to avoid (snake_case). 1–4 entries. Merges with the pack's defaults; the generator validates that no entry appears in both `themes_include` and `themes_exclude`.
+- `tone` / `tone_modifiers` — short keywords adjusting tone on top of the pack defaults.
+
+### Setting & antagonists
+
+- `setting_anchors` — specific places, locales, or institutions the campaign hangs on. snake_case.
+- `antagonist_archetypes_preferred` — must be a subset of the pack's `antagonist_archetypes_preferred` (defined in the pack's `generator_seed.yaml`). The seed loader rejects unknown values with a list of valid options.
+
+### Opening hook
+
+- `opening_hook_seed` — one short paragraph the opening-hook stage uses as raw material for the opening scene. Optional; the generator invents one if omitted.
+
+### Image style
+
+- `image_style_hint` — full prompt-style guidance the NPC stage embeds into every `image_generation_prompt`. Use this to enforce a consistent visual look across the campaign's portraits (photorealistic vs. painterly, full-body vs. portrait, etc.).
+
+### Structural counts (v2)
+
+| Field | Range | Default | Effect |
+|---|---|---|---|
+| `num_npcs` | 6–30 | from pack | NPC roster size. |
+| `num_locations` | 5–20 | from pack | Location catalog size. |
+| `num_factions` | 2–6 | from pack | Faction count. |
+| `num_truths` | 4–10 | from pack | Atomic truth count. Fewer = tighter mystery; more = sprawling campaign. |
+| `num_complications` | 6–15 | from pack | Campaign-specific complications (on top of the pack's universal list). |
+| `num_sample_characters` | 1–10 | 5 | Pregenerated story-mode sample characters. |
+
+**Retired v1 fields** (the loader ignores them with a warning):
+
+- `num_acts` — acts are now thematic chapters, not beat sequences; the act count is generator-decided (typically 2–4).
+- `nodes_per_act` — there are no nodes.
+- `clue_chain_density` — there are no clue chains.
+- `branch_points` — `branches` are still emitted, but their count is generator-decided.
+
+### Generation controls
+
+- `random_seed` — reproducibility hint. Picks the naming-diversity seed and may inform LLM sampling on supported models.
+- `model` — OpenRouter model slug. Overrides the env default for this run.
+- `temperature` — sampling temperature. Defaults to the env value.
+
+### Strictness
+
+- `strictness` — a map of strictness levers. Recognised keys (others pass through):
+  - `truth_adjacency` — `strict` rejects truths whose `adjacency_keys` don't match any NPC, location, or faction in the campaign.
+  - `npc_voice_diversity` — `strict` rejects rosters whose NPCs share a speaking style.
+  - `canon_consistency` — `strict` rejects branches referencing tokens not in the canon menu.
+
+Defaults come from the pack's `generator_seed.yaml`. The seed merges field-by-field — set only the keys you want to override.
+
+---
+
+## Pack-default fallbacks
+
+Any field omitted from the seed falls back to the pack's `generator_seed.yaml`. Fields the pack didn't supply fall back to the generator's hard-coded defaults. The seed loader prints a warning for any unknown top-level field.
+
+To generate a fully-annotated empty seed for a specific pack:
+
+```bash
+python -m campaign_generator --init-seed my_seed.yaml --genre <pack_name>
+```
+
+The output is a YAML file with every field documented and pre-filled with the pack's antagonist menu and other pack-specific suggestions.
+
+---
+
+## Migrating a v1 seed
+
+A v1 seed with `num_acts`, `clue_chain_density`, `branch_points`, or `nodes_per_act` will load with warnings; those fields are silently stripped during merge. Replace them as follows:
+
+- `num_acts` → drop entirely; acts emerge from the premise.
+- `nodes_per_act` → drop entirely.
+- `clue_chain_density: heavy` → translate to a higher `num_truths` if you want a more layered mystery.
+- `branch_points: 8` → drop entirely; branches are generator-decided.
+
+Add the v2 fields you actually want to control (`num_truths`, `num_complications`, `num_factions`).

@@ -3,26 +3,26 @@ from __future__ import annotations
 import json
 
 from common.llm import LLMClient, generate_structured
-from ..schemas import BranchPlan, ClueGraph, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument
+
+from ..schemas import BranchPlan, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, PremiseDocument, TruthSet
 from ..seed import CampaignSeed
 from ..validation import ValidationLog
 
 
-PROMPT_FILE = "07_branches.md"
-
-
-def _normalize_reference(reference: str, token_map: dict[str, str]) -> str:
-    return token_map.get(reference, reference)
+PROMPT_FILE = "08_branches.md"
 
 
 def _build_reference_token_map(
     *,
-    plot: PlotSkeleton,
     factions: FactionSet,
     npcs: NPCRoster,
     locations: LocationCatalog,
-    clue_graph: ClueGraph,
+    truths: TruthSet,
 ) -> dict[str, str]:
+    """v2: branches reference NPCs, locations, factions, and (optionally)
+    truth ids by name. v1 also let them reference beat ids and clue
+    ids; both concepts are retired.
+    """
     token_map: dict[str, str] = {}
 
     def register(value: str) -> None:
@@ -36,11 +36,8 @@ def _build_reference_token_map(
         register(npc.name)
     for location in locations.locations:
         register(location.name)
-    for clue in clue_graph.clues:
-        register(clue.id)
-    for beat_id, beat_text in plot.beat_id_to_text().items():
-        token_map.setdefault(beat_id, beat_id)
-        token_map.setdefault(beat_text, beat_id)
+    for truth in truths.truths:
+        register(truth.id)
 
     return token_map
 
@@ -54,18 +51,17 @@ def run(
     factions: FactionSet,
     npcs: NPCRoster,
     locations: LocationCatalog,
-    clue_graph: ClueGraph,
+    truths: TruthSet,
     seed: CampaignSeed,
     model: str,
     temperature: float,
     validation_log: ValidationLog,
 ) -> BranchPlan:
     reference_token_map = _build_reference_token_map(
-        plot=plot,
         factions=factions,
         npcs=npcs,
         locations=locations,
-        clue_graph=clue_graph,
+        truths=truths,
     )
     context = {
         "premise": premise.model_dump(),
@@ -73,9 +69,9 @@ def run(
         "factions": factions.model_dump(),
         "npcs": npcs.model_dump(),
         "locations": locations.model_dump(),
-        "clues": clue_graph.model_dump(),
+        "truths": truths.model_dump(),
         "reference_menu": sorted(reference_token_map),
-        "target_count": seed.branch_points,
+        "target_count": 6,
     }
     raw_plan = generate_structured(
         client=client,
@@ -88,11 +84,12 @@ def run(
         validation_log=validation_log,
     )
     normalized_payload = raw_plan.model_dump()
+    valid_values = set(reference_token_map.values())
     for branch in normalized_payload["branches"]:
         cleaned: list[str] = []
         for raw_reference in branch["references"]:
-            normalized = _normalize_reference(raw_reference, reference_token_map)
-            if normalized in reference_token_map.values():
+            normalized = reference_token_map.get(raw_reference, raw_reference)
+            if normalized in valid_values:
                 cleaned.append(normalized)
             else:
                 validation_log.write(

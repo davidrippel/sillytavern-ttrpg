@@ -1,4 +1,11 @@
-import { AUTHORS_NOTE_KEYS, DEFAULT_SETTINGS, MODULE_NAME, STORY_STATE_KEY, STORY_STATE_SCHEMA_VERSION } from './constants.js';
+import {
+    AUTHORS_NOTE_KEYS,
+    DEFAULT_SETTINGS,
+    MODULE_NAME,
+    STORY_STATE_ARCHIVE_KEY,
+    STORY_STATE_KEY,
+    STORY_STATE_SCHEMA_VERSION,
+} from './constants.js';
 
 export function getContext() {
     return globalThis.SillyTavern.getContext();
@@ -21,13 +28,17 @@ export function getSettings() {
     target.sheetInjection ??= structuredClone(DEFAULT_SETTINGS.sheetInjection);
     target.backup ??= structuredClone(DEFAULT_SETTINGS.backup);
     target.authorsNote ??= structuredClone(DEFAULT_SETTINGS.authorsNote);
-    target.statusUpdate ??= structuredClone(DEFAULT_SETTINGS.statusUpdate);
-    target.canonDetection ??= structuredClone(DEFAULT_SETTINGS.canonDetection);
-    target.analyzer ??= structuredClone(DEFAULT_SETTINGS.analyzer);
+    target.factExtractor ??= structuredClone(DEFAULT_SETTINGS.factExtractor);
+    target.ui ??= structuredClone(DEFAULT_SETTINGS.ui);
     target.characters ??= {};
     if (!('activeCharacterId' in target)) {
         target.activeCharacterId = null;
     }
+
+    // Strip retired v1 settings keys quietly.
+    delete target.statusUpdate;
+    delete target.canonDetection;
+    delete target.analyzer;
 
     if (!target.activePack && target.activePackName && target.packs[target.activePackName]) {
         target.activePack = target.packs[target.activePackName];
@@ -91,6 +102,14 @@ export function newCharacterId() {
     return `char_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+export function newFactId() {
+    return `f_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function newThreadId() {
+    return `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function saveSettings() {
     getContext().saveSettingsDebounced();
 }
@@ -125,11 +144,6 @@ export function timestampFilePart(date = new Date()) {
     ].join('');
 }
 
-export function formatSignedNumber(value) {
-    const num = Number(value) || 0;
-    return num > 0 ? `+${num}` : String(num);
-}
-
 export function normalizeName(text) {
     return String(text ?? '').trim().toLowerCase();
 }
@@ -153,19 +167,49 @@ export async function writeAuthorsNote(text) {
     await context.saveMetadata();
 }
 
+// ---- Story state (v3 story-mode) ----------------------------------------
+
+/**
+ * The shape of `chatMetadata[solo_ttrpg_story_state]` in v3.
+ *
+ * facts[]      — append-only ledger of established facts. Each entry has
+ *                `{ id, turn, text, entities, sourceQuote, status }`.
+ *                `status` is one of:
+ *                  - "provisional"  : just-extracted, not yet auto-accepted
+ *                  - "accepted"     : in-canon, GM sees it in recent facts
+ *                  - "rejected"     : user-rejected; kept for audit, hidden
+ *                                     from the AN, may be re-extracted later.
+ * threads[]    — open dramatic questions. Each entry has
+ *                `{ id, question, status: live|escalating|resolved|retired,
+ *                   lastAdvancedTurn, openedTurn, notes }`.
+ * truthsRevealed[] — `{ truthId, turn, how }`. Tracks which of the
+ *                campaign's authored truths the player now knows.
+ * scene        — `{ location, presentNpcIds, tension, lastUpdatedTurn }`.
+ * npcs         — `{ [id]: { lastSeenTurn, attitude, status } }`.
+ *                Lightweight runtime state, derived by the fact extractor.
+ * directorsNotes — `{ active: TruthRef|null, history[] }`. The pacing module
+ *                writes to `active` when a campaign truth becomes
+ *                reveal-eligible this scene.
+ * pressureCue  — `{ kind: "lean-in"|"let-it-breathe"|"complication"|null,
+ *                   reason, setTurn }`. The pacing module manages it.
+ * turn         — monotonically increasing count of assistant messages.
+ */
 function defaultStoryState() {
     return {
         schemaVersion: STORY_STATE_SCHEMA_VERSION,
-        actNumber: 1,
-        currentBeatLabel: null,
-        nextBeatLabel: null,
-        resolvedBeatLabels: [],
-        completedActs: [],
-        discoveredClues: [],
-        pendingReveals: [],
-        visitedNodes: [],
-        completedNodes: [],
+        facts: [],
+        threads: [],
+        truthsRevealed: [],
+        scene: {
+            location: null,
+            presentNpcIds: [],
+            tension: null,
+            lastUpdatedTurn: 0,
+        },
         npcs: {},
+        directorsNotes: { active: null, history: [] },
+        pressureCue: { kind: null, reason: null, setTurn: 0 },
+        turn: 0,
     };
 }
 
@@ -183,9 +227,56 @@ export async function writeStoryState(state) {
     await context.saveMetadata();
 }
 
+/**
+ * Normalise an in-memory state document to the v3 shape, filling in any
+ * missing top-level keys. Does NOT migrate from older schema versions —
+ * for that see `archiveAndResetLegacyStoryState`.
+ */
 export function ensureStoryStateShape(state) {
     const base = defaultStoryState();
-    return { ...base, ...(state ?? {}) };
+    const merged = { ...base, ...(state ?? {}) };
+    merged.facts = Array.isArray(merged.facts) ? merged.facts : [];
+    merged.threads = Array.isArray(merged.threads) ? merged.threads : [];
+    merged.truthsRevealed = Array.isArray(merged.truthsRevealed) ? merged.truthsRevealed : [];
+    merged.scene = { ...base.scene, ...(merged.scene ?? {}) };
+    merged.npcs = (merged.npcs && typeof merged.npcs === 'object') ? merged.npcs : {};
+    merged.directorsNotes = { ...base.directorsNotes, ...(merged.directorsNotes ?? {}) };
+    merged.directorsNotes.history = Array.isArray(merged.directorsNotes.history)
+        ? merged.directorsNotes.history
+        : [];
+    merged.pressureCue = { ...base.pressureCue, ...(merged.pressureCue ?? {}) };
+    merged.turn = Number.isFinite(merged.turn) ? Number(merged.turn) : 0;
+    merged.schemaVersion = STORY_STATE_SCHEMA_VERSION;
+    return merged;
+}
+
+export function freshStoryState() {
+    return defaultStoryState();
+}
+
+/**
+ * If chatMetadata contains a v1/v2 story state (beats/nodes/clues), move it
+ * aside under `STORY_STATE_ARCHIVE_KEY` and reset the live key to a fresh
+ * v3 document. Idempotent. Returns true if something was archived.
+ */
+export async function archiveAndResetLegacyStoryState() {
+    const context = getContext();
+    if (!context.chatMetadata) return false;
+    const stored = context.chatMetadata[STORY_STATE_KEY];
+    if (!stored || typeof stored !== 'object') return false;
+    const version = Number(stored.schemaVersion);
+    if (version === STORY_STATE_SCHEMA_VERSION) return false;
+
+    const archive = context.chatMetadata[STORY_STATE_ARCHIVE_KEY] ?? [];
+    archive.push({
+        archivedAt: new Date().toISOString(),
+        previousSchemaVersion: Number.isFinite(version) ? version : null,
+        state: stored,
+    });
+    context.chatMetadata[STORY_STATE_ARCHIVE_KEY] = archive;
+    context.chatMetadata[STORY_STATE_KEY] = defaultStoryState();
+    await context.saveMetadata();
+    return true;
 }
 
 export function getNoteDepth() {

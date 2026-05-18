@@ -1,26 +1,31 @@
-You are writing the GM prompt overlay for a TTRPG genre pack. This file is injected into the game-master LLM's context every turn, so it shapes the texture and voice of play.
+You are writing the GM prompt overlay for a TTRPG genre pack. This file is embedded into the game-master LLM's context every turn (as the constant lorebook entry `__pack_gm_overlay`), so it shapes the texture and voice of play.
 
-You will receive: tone/pillars, attributes, resources, ability categories, and the brief.
+The system is **story-mode only**: no dice, no attribute scores, no resource pools, no STATUS_UPDATE blocks. The GM resolves actions narratively, leaning on the character's advantages and disadvantages and the genre's accumulating pressures. Never reference dice, attribute scores, "+1 to a roll," or numeric resource changes anywhere in your output.
 
-Produce JSON with these fields. Each field is a markdown chunk (one or more paragraphs). NO hard line wraps — write each paragraph as a single long line, separated only by blank lines. Total document should be under 1500 words.
+You will receive: tone/pillars, the brief's `pressure_flavor` (the genre's signature accumulating pressure), the brief's `advantages_disadvantages_hint`, and the brief's `complications_hint`.
 
-- `setting_and_tone`: 2-3 paragraphs. Sensory texture of the world, mood, the kind of stories told here. Specific, not "dark and mysterious" — name the smells, sounds, weights.
+Produce JSON with these fields. Each field is a markdown chunk (one or more paragraphs). NO hard line wraps — write each paragraph as a single long line, separated only by blank lines. Total document under 1500 words; hard fail at 1800.
+
+- `setting_and_tone`: 2-3 paragraphs. Sensory texture of the world, mood, the kind of stories told here. Specific — name the smells, sounds, weights. Not "dark and mysterious."
 - `thematic_pillars`: a markdown bulleted list, one bullet per pillar. Each bullet: `**Title.** Description.` Reuse the pillars from earlier.
-- `attribute_guidance`: one paragraph explaining when the GM should call for each attribute. EVERY one of the six attribute keys must be mentioned by its `display` name with a clear in-genre cue. Close with a line on what to do when uncertain.
-- `resource_mechanics`: one or two paragraphs per non-static resource explaining when it ticks up/down, what hitting thresholds feels like in narration, and how to describe state (sensory, not numeric). EVERY resource key from resources.yaml must be referenced.
-- `ability_adjudication`: one paragraph per category explaining how to narrate activations, what success/partial/failure look like, and how the category's costs (corruption, heat, etc.) get applied. EVERY category key must be covered.
-- `npc_conventions`: 3-5 recognizable archetypes for the genre, each with one paragraph (e.g. "Inquisitors of Prios. Believers, often sincere, often dangerous..."). Give the GM a vocabulary for improvising NPCs.
+- `resolving_actions`: 2-3 paragraphs explaining how the GM adjudicates without dice in this genre. Must cover:
+  - What success-with-cost looks like when an advantage is in play and the situation is favorable (clean wins are rare and earned).
+  - What failure or partial-success-with-a-complication looks like when a disadvantage is in play or the situation is hostile.
+  - The default for neutral cases ("which outcome makes the next scene more interesting").
+  - Point the GM at the genre's vocabulary in `__pack_reference` (the advantages_disadvantages reference embedded in the same lorebook).
+- `translating_pressures`: 2-3 paragraphs naming the genre's signature accumulating pressure (corruption / heat / sanity / ship damage / exposure — whichever the brief's `pressure_flavor` describes) and rendering it as **prose signs**, not counters. List at least 4 concrete sensory or social signs the GM can drop into narration (smells, sweat, animal reactions, NPC body language, a reflection wrong, a debt remembered, a passing patrol's interest). Explain when accumulated signs should escalate into a permanent change (a scar, a mark, a debt, a reputation shift). End by stating that the system's fact extractor picks up these signs from prose — the GM never tracks numbers.
+- `npc_conventions`: 3-6 recognizable archetypes for the genre, each one paragraph. For each archetype: how they speak (one-line speech note), what they want, default disposition toward the protagonist. Give the GM a vocabulary for improvising NPCs between named lorebook entries.
 - `content_to_include`: a bulleted list of textures the GM should lean into.
-- `content_to_avoid`: a bulleted list of themes the GM should not generate. Merge user-supplied content_to_avoid with universal safety items (sexual content, child endangerment).
-- `character_creation`: a paragraph or short bulleted list covering: point-buy distribution for attributes (e.g. "+4 spread with at least one -1, no value above +3"), starting abilities count (typically 3), starting equipment guidance, and starting resource values (HP at max, signature resources at 0).
-- `story_mode_play`: 2-3 paragraphs of GM guidance for running this genre WITHOUT dice or stats. Story-mode characters have only a name, a description, 1-2 strengths, and one weakness — no attributes, no abilities, no resources. The GM resolves attempted actions narratively. Cover: (1) how to lean on the character's strengths and weakness when judging outcomes, (2) how to translate this genre's signature mechanical pressures (corruption, heat, exposure, ship damage, etc.) into NARRATIVE consequences instead of resource ticks — ground them in fiction (a new scar, a debt owed, attention drawn, a creeping wrongness), (3) when to commit to clear failure or partial success even without rolls, (4) how to keep the genre's tone and content guidance (above) intact in story mode. Reference this genre's resources by name so the GM knows which mechanical pressures get translated. End with a one-line reminder that the GM should follow THIS section when the active character has no stats, and follow the stat-mode sections (resource_mechanics, ability_adjudication) when the active character has attributes and abilities.
+- `content_to_avoid`: a bulleted list of themes the GM should not generate. Merge user-supplied content_to_avoid (in the brief) with universal safety items (sexual content involving minors, romance unless the genre invites it, gratuitous torture-as-entertainment).
+- `character_creation`: a paragraph or short bulleted list covering how a character in this genre is built using the v2 character template (`name`, `concept`, `advantages`, `disadvantages`, `belongings`, `relationships`). State how many advantages (typically 2-3) and disadvantages (typically 1-2), what kinds of belongings fit, how many relationships to seed. Note any genre-specific starting marks (already-marked? already-hunted? already-bonded?). DO NOT mention attribute spreads, ability counts, or starting resource values — those concepts are retired.
 
 Avoid:
-- Restating engine-level rules (scene structure, STATUS_UPDATE format, dice mechanics) — the base GM prompt already covers those.
-- Mere vibes ("make it dark") — the LLM will over-correct.
+- Restating engine-level rules (scene structure, NPC format, OOC handling, length cap, "never invent campaign truths") — the base GM prompt already covers those.
+- ANY reference to dice, attribute scores, resource pools, ability slots, STATUS_UPDATE, or numeric mechanical changes. The schema validator rejects overlays that contain "2d6", "+1 to ", "attribute roll", "make a roll", or "status_update" anywhere in resolving_actions / translating_pressures / character_creation.
+- Vague vibes ("make it dark") — the LLM will over-correct.
 - Internal contradictions (e.g. "prioritize mood" alongside "always be clear about options").
-- Padding. Total document must stay under 1500 words; hard cap 1800. If you find yourself restating a pillar or repeating a sensory note, cut.
+- Padding. Total under 1500 words.
 
-Constraint generates style: prefer "always do X" / "never do Y" instructions over generic descriptors. The `content_to_avoid` and `content_to_include` sections in particular should be lists of imperatives, not adjectives.
+Constraint generates style: prefer "always do X" / "never do Y" instructions over generic descriptors. `content_to_avoid` and `content_to_include` should be lists of imperatives, not adjectives.
 
 Return JSON only.

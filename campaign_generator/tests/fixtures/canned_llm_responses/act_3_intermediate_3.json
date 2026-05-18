@@ -1,8 +1,0 @@
-{
-  "kind": "npc_encounter",
-  "description": "Sister Orsa intercepts {{user}} on the Cellar stair, asking what {{user}} would burn to keep the truth alive. Her answer is in the ash on her palms.",
-  "relevant_npcs": [
-    "Sister Orsa"
-  ],
-  "relevant_location": "Lantern Hall Cellar"
-}

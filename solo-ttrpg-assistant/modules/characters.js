@@ -1,4 +1,12 @@
-import { getActivePack, initializeCharacterForPack, setActivePack } from './pack.js';
+// characters.js — character CRUD (v3, story-mode only).
+//
+// In v2 the system carried two character "modes" (`pack` for stat-mode,
+// `story` for story-mode) with a runtime converter between them. v3
+// retires stat-mode entirely; every character uses the v2 character
+// template shape (name, concept, advantages, disadvantages, belongings,
+// relationships, notes). There is no mode field anymore.
+
+import { getActivePack, initializeCharacterForPack } from './pack.js';
 import { log } from './logger.js';
 import {
     getContext,
@@ -14,9 +22,7 @@ const characterMetaSubscribers = new Set();
 let suppressPersonaSync = false;
 
 function emitCharactersChanged() {
-    for (const listener of characterSubscribers) {
-        listener();
-    }
+    for (const listener of characterSubscribers) listener();
 }
 
 export function subscribeCharacters(listener) {
@@ -25,9 +31,7 @@ export function subscribeCharacters(listener) {
 }
 
 export function emitCharacterMetaChanged() {
-    for (const listener of characterMetaSubscribers) {
-        listener();
-    }
+    for (const listener of characterMetaSubscribers) listener();
 }
 
 export function subscribeCharacterMeta(listener) {
@@ -54,104 +58,31 @@ export function getActiveCharacter() {
     if (id && settings.characters?.[id]) {
         return settings.characters[id];
     }
-
-    // If we have characters but no active one, adopt the first.
     const first = Object.values(settings.characters ?? {})[0];
     if (first) {
         settings.activeCharacterId = first.id;
         return first;
     }
-
     return null;
 }
 
 export function ensureActiveCharacter() {
-    const settings = getSettings();
     const existing = getActiveCharacter();
-    if (existing) {
-        return existing;
-    }
-
-    const created = createCharacter({ name: '', packName: settings.activePackName ?? null });
-    return created;
+    if (existing) return existing;
+    return createCharacter({ name: '' });
 }
 
 function buildCharacterRecord({ name = '', packName = null, personaKey = null } = {}) {
-    const pack = getSettings().packs?.[packName] ?? null;
-    const base = initializeCharacterForPack(pack ?? getActivePack());
+    const settings = getSettings();
+    const pack = settings.packs?.[packName] ?? getActivePack();
+    const base = initializeCharacterForPack(pack);
     return {
         ...base,
         id: newCharacterId(),
-        mode: 'pack',
         name: name || base.name || '',
-        packName: packName ?? getSettings().activePackName ?? null,
+        packName: packName ?? settings.activePackName ?? null,
         personaKey: personaKey ?? null,
     };
-}
-
-function buildStoryCharacterRecord({
-    name = '',
-    description = '',
-    strengths = [],
-    weakness = '',
-    notes = '',
-    personaKey = null,
-} = {}) {
-    return {
-        id: newCharacterId(),
-        mode: 'story',
-        name: name || '',
-        packName: null,
-        personaKey: personaKey ?? null,
-        description: String(description ?? ''),
-        strengths: Array.isArray(strengths) ? strengths.slice(0, 2).map((value) => String(value)) : [],
-        weakness: String(weakness ?? ''),
-        notes: String(notes ?? ''),
-    };
-}
-
-export function convertCharacterMode(id, nextMode) {
-    const record = getCharacterById(id);
-    if (!record) {
-        throw new Error(`Unknown character "${id}".`);
-    }
-
-    const mode = nextMode === 'story' ? 'story' : 'pack';
-    if ((record.mode ?? 'pack') === mode) {
-        return record;
-    }
-
-    const settings = getSettings();
-    let converted;
-
-    if (mode === 'story') {
-        converted = buildStoryCharacterRecord({
-            name: record.name ?? '',
-            description: record.description ?? record.concept ?? '',
-            strengths: Array.isArray(record.strengths) ? record.strengths : [],
-            weakness: record.weakness ?? '',
-            notes: record.notes ?? '',
-            personaKey: record.personaKey ?? null,
-        });
-    } else {
-        const base = buildCharacterRecord({
-            name: record.name ?? '',
-            packName: settings.activePackName ?? record.packName ?? null,
-            personaKey: record.personaKey ?? null,
-        });
-        converted = {
-            ...base,
-            concept: record.concept ?? record.description ?? '',
-            notes: record.notes ?? '',
-        };
-    }
-
-    converted.id = record.id;
-    settings.characters[record.id] = converted;
-    saveSettings();
-    log(`Converted character ${converted.name || '(unnamed)'} to ${mode === 'story' ? 'story-based' : 'stats-based'}.`);
-    emitCharactersChanged();
-    return converted;
 }
 
 export function createCharacter(options = {}) {
@@ -165,41 +96,27 @@ export function createCharacter(options = {}) {
     return record;
 }
 
-export function createStoryCharacter(options = {}) {
-    const settings = getSettings();
-    const record = buildStoryCharacterRecord(options);
-    settings.characters[record.id] = record;
-    settings.activeCharacterId = record.id;
-    saveSettings();
-    log(`Created story character ${record.name || '(unnamed)'}.`);
-    emitCharactersChanged();
-    return record;
-}
-
 export function duplicateCharacter(id) {
     const source = getCharacterById(id);
-    if (!source) {
-        return null;
-    }
-
+    if (!source) throw new Error(`Unknown character "${id}".`);
     const settings = getSettings();
-    const copy = structuredClone(source);
-    copy.id = newCharacterId();
-    copy.name = `${source.name || 'Character'} (copy)`;
+    const copy = {
+        ...JSON.parse(JSON.stringify(source)),
+        id: newCharacterId(),
+        name: `${source.name || 'Unnamed'} (copy)`,
+        personaKey: null,
+    };
     settings.characters[copy.id] = copy;
-    settings.activeCharacterId = copy.id;
     saveSettings();
-    log(`Duplicated character ${source.name || '(unnamed)'}.`);
     emitCharactersChanged();
+    log(`Duplicated character ${source.name || '(unnamed)'}.`);
     return copy;
 }
 
 export function renameCharacter(id, name) {
     const record = getCharacterById(id);
-    if (!record) {
-        return null;
-    }
-    record.name = String(name ?? '');
+    if (!record) return null;
+    record.name = String(name ?? '').trim();
     saveSettings();
     emitCharactersChanged();
     return record;
@@ -207,35 +124,21 @@ export function renameCharacter(id, name) {
 
 export function deleteCharacter(id) {
     const settings = getSettings();
-    if (!settings.characters?.[id]) {
-        return false;
-    }
-
-    const remaining = Object.keys(settings.characters).filter((key) => key !== id);
-    if (remaining.length === 0) {
-        throw new Error('Cannot delete the last character.');
-    }
-
-    const wasActive = settings.activeCharacterId === id;
+    if (!settings.characters?.[id]) return false;
     delete settings.characters[id];
-    if (wasActive) {
-        settings.activeCharacterId = remaining[0];
+    if (settings.activeCharacterId === id) {
+        const next = Object.values(settings.characters)[0];
+        settings.activeCharacterId = next?.id ?? null;
     }
     saveSettings();
-    log('Deleted character.');
     emitCharactersChanged();
-
-    if (wasActive) {
-        void setActiveCharacter(settings.activeCharacterId);
-    }
+    log('Deleted character.');
     return true;
 }
 
 export function linkPersona(id, personaKey) {
     const record = getCharacterById(id);
-    if (!record) {
-        return null;
-    }
+    if (!record) return null;
     record.personaKey = personaKey ?? null;
     saveSettings();
     emitCharactersChanged();
@@ -244,109 +147,49 @@ export function linkPersona(id, personaKey) {
 
 export async function setActiveCharacter(id) {
     const settings = getSettings();
-    const target = settings.characters?.[id];
-    if (!target) {
-        throw new Error(`Unknown character "${id}".`);
-    }
-
+    if (!settings.characters?.[id]) return null;
     settings.activeCharacterId = id;
     saveSettings();
-
-    // Pack sync
-    if (target.packName && target.packName !== settings.activePackName && settings.packs?.[target.packName]) {
-        try {
-            await setActivePack(target.packName);
-        } catch (error) {
-            log(`Failed to switch pack for character: ${error.message}`, 'warn');
-        }
-    }
-
-    // Persona sync
-    if (target.personaKey && !suppressPersonaSync) {
-        await syncPersonaForCharacter(target);
-    }
-
     emitCharactersChanged();
-    return target;
+    return settings.characters[id];
 }
 
 export async function syncPersonaForCharacter(character) {
-    if (!character?.personaKey) {
-        return;
-    }
-
-    const personas = getPersonasMap();
-    const displayName = personas[character.personaKey];
-    if (!displayName) {
-        return;
-    }
-
-    const currentKey = await getCurrentPersonaKey();
-    if (currentKey === character.personaKey) {
-        return;
-    }
-
+    if (!character?.personaKey) return false;
     const context = getContext();
+    const personas = getPersonasMap();
+    if (!personas[character.personaKey]) return false;
     try {
         suppressPersonaSync = true;
-        if (typeof context.executeSlashCommandsWithOptions === 'function') {
-            await context.executeSlashCommandsWithOptions(`/persona ${escapeForSlash(displayName)}`);
+        if (typeof context.setUserAvatar === 'function') {
+            await context.setUserAvatar(character.personaKey);
+        } else {
+            globalThis.user_avatar = character.personaKey;
+            context.eventSource?.emit?.(context.eventTypes?.PERSONA_CHANGED);
         }
     } catch (error) {
-        log(`Failed to switch persona: ${error.message}`, 'warn');
+        log('Failed to sync persona.', 'warn', error?.message ?? String(error));
+        return false;
     } finally {
         suppressPersonaSync = false;
     }
-}
-
-function escapeForSlash(value) {
-    const text = String(value ?? '');
-    if (/\s|"/.test(text)) {
-        return `"${text.replaceAll('"', '\\"')}"`;
-    }
-    return text;
+    return true;
 }
 
 export function findCharacterForPersona(personaKey) {
-    if (!personaKey) {
-        return null;
-    }
-    return listCharacters().find((character) => character.personaKey === personaKey) ?? null;
+    if (!personaKey) return null;
+    return listCharacters().find((c) => c.personaKey === personaKey) ?? null;
 }
 
 export async function handleExternalPersonaChange(personaKey) {
-    if (suppressPersonaSync || !personaKey) {
-        return null;
-    }
-
     const match = findCharacterForPersona(personaKey);
-    if (!match) {
-        return null;
-    }
-
+    if (!match) return;
     const settings = getSettings();
-    if (settings.activeCharacterId === match.id) {
-        return match;
-    }
-
-    try {
-        suppressPersonaSync = true;
-        settings.activeCharacterId = match.id;
-        saveSettings();
-
-        if (match.packName && match.packName !== settings.activePackName && settings.packs?.[match.packName]) {
-            try {
-                await setActivePack(match.packName);
-            } catch (error) {
-                log(`Failed to switch pack for character: ${error.message}`, 'warn');
-            }
-        }
-
-        emitCharactersChanged();
-        return match;
-    } finally {
-        suppressPersonaSync = false;
-    }
+    if (settings.activeCharacterId === match.id) return;
+    settings.activeCharacterId = match.id;
+    saveSettings();
+    emitCharactersChanged();
+    log(`Switched active character to ${match.name || '(unnamed)'} (persona link).`);
 }
 
 export function isPersonaSyncSuppressed() {

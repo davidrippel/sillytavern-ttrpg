@@ -5,15 +5,12 @@ from common.validation import ValidationLog
 
 from ..brief import GenreBrief
 from ..schemas import (
-    AbilityCatalogDraft,
-    AbilityCategoriesDraft,
-    AttributesDraft,
+    AdvantagesDisadvantagesDraft,
+    ComplicationsDraft,
     ExampleHooksDraft,
-    FailureMovesDraft,
     GeneratorSeedDraft,
     GMOverlay,
     PackDescription,
-    ResourcesDraft,
     ReviewChecklistDraft,
     ToneAndPillars,
 )
@@ -28,12 +25,9 @@ def run(
     system_prompt: str,
     brief: GenreBrief,
     tone: ToneAndPillars,
-    attributes: AttributesDraft,
-    resources: ResourcesDraft,
-    categories: AbilityCategoriesDraft,
-    catalog: AbilityCatalogDraft,
     overlay: GMOverlay,
-    failure_moves: FailureMovesDraft,
+    complications: ComplicationsDraft,
+    advantages_disadvantages: AdvantagesDisadvantagesDraft,
     example_hooks: ExampleHooksDraft,
     generator_seed: GeneratorSeedDraft,
     pack_description: PackDescription,
@@ -45,12 +39,11 @@ def run(
     context = {
         "brief": brief.model_dump(exclude_none=True),
         "tone_and_pillars": tone.model_dump(),
-        "attributes": [a.model_dump() for a in attributes.attributes],
-        "resources": [r.model_dump(exclude_none=True) for r in resources.resources],
-        "categories": [c.model_dump(exclude_none=True) for c in categories.categories],
-        "catalog_summary": _catalog_summary(catalog),
         "overlay_sections": overlay.model_dump(),
-        "failure_moves": failure_moves.model_dump(),
+        "complication_titles": [c.title for c in complications.complications],
+        "success_costs": [s.text for s in complications.success_costs],
+        "advantage_axes": [a.title for a in advantages_disadvantages.advantage_axes],
+        "disadvantage_axes": [a.title for a in advantages_disadvantages.disadvantage_axes],
         "example_hooks": example_hooks.model_dump(),
         "generator_seed": generator_seed.model_dump(),
         "pack_description": pack_description.description,
@@ -66,10 +59,3 @@ def run(
         temperature=temperature,
         validation_log=validation_log,
     )
-
-
-def _catalog_summary(catalog: AbilityCatalogDraft) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for ability in catalog.catalog:
-        counts[ability.category] = counts.get(ability.category, 0) + 1
-    return counts

@@ -5,8 +5,9 @@ Task: generate one location at a time for the campaign.
 Requirements:
 - strong sensory detail
 - concrete notable features and hidden elements
-- reference only supplied NPC names from `npc_name_menu` and supplied plot beat ids
+- reference only supplied NPC names from `npc_name_menu`
 - never invent or infer an NPC name that is not in the supplied roster
+- `discovery_surfaces` (optional): 1–3 short hints about what a player can learn by paying attention at this location. Free-form; not authoritative. Pure colour / vibe is enough.
 - whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name
 - do not reuse any name in `avoid_names` (these are location names from recent campaigns — pick something different)
 

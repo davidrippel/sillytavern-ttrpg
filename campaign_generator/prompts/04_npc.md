@@ -5,8 +5,9 @@ Task: generate one named NPC at a time for the campaign roster.
 Requirements:
 - do not duplicate names in the supplied roster
 - do not use any name in `avoid_names` (these are names from recent campaigns — pick something different)
-- cite only abilities that exist in the supplied ability catalog
 - give the NPC a distinct voice, motivation, secret, and relationships
+- `advantages`: 1–3 short story-mode advantage phrases describing what the NPC is good at, in the genre's vocabulary (e.g. "trained witchsight", "best stick on the Verge route"). Free-form; not validated against any catalog. Leave empty if the NPC's role is purely social.
+- `discovery_surfaces` (optional): 1–3 short hints about what a player might learn through this NPC — facts they could let slip under pressure, expertise they share when trusted. Not authoritative; the campaign generator's truths stage owns the actual underlying answer set. These are GM-side affordances, not a clue list.
 - vary demographics, role, and agenda from existing NPCs
 - if `must_use_one_of_names` is non-empty, the NPC name must be one of those names exactly
 - ensure every name in `required_npc_names` appears somewhere in the final roster

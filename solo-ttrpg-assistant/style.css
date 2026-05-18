@@ -277,3 +277,269 @@
         justify-items: start;
     }
 }
+
+/* ===== v3 inline UI: fact chips + threads tray ===== */
+
+.solo-fact-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+    padding-top: 0.4rem;
+    border-top: 1px dashed color-mix(in srgb, var(--SmartThemeBorderColor, #666) 30%, transparent);
+}
+
+.solo-fact-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #111) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor, #666) 40%, transparent);
+    font-size: 0.85em;
+    line-height: 1.25;
+    transition: opacity 0.25s ease;
+}
+
+.solo-fact-chip.solo-fact-accepted {
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor, #6c8) 18%, transparent);
+}
+
+.solo-fact-chip.solo-fact-rejected {
+    text-decoration: line-through;
+}
+
+.solo-fact-chip.solo-fact-edited {
+    border-style: dashed;
+}
+
+.solo-fact-text {
+    white-space: nowrap;
+    max-width: 36ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.solo-fact-actions {
+    display: inline-flex;
+    gap: 0.2rem;
+}
+
+.solo-fact-btn {
+    background: transparent;
+    border: none;
+    padding: 0 0.25rem;
+    cursor: pointer;
+    color: inherit;
+    font-size: 0.95em;
+    opacity: 0.7;
+}
+
+.solo-fact-btn:hover { opacity: 1; }
+.solo-fact-accept:hover { color: #6c8; }
+.solo-fact-reject:hover { color: #d77; }
+.solo-fact-edit:hover { color: var(--solo-accent, #c08a4a); }
+
+.solo-threads-tray {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+    padding: 0.35rem 0.6rem;
+    margin: 0.25rem 0;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #111) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor, #666) 35%, transparent);
+    border-radius: 6px;
+    font-size: 0.88em;
+}
+
+.solo-tray-empty {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+.solo-thread-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor, #666) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor, #666) 40%, transparent);
+    cursor: pointer;
+}
+
+.solo-thread-chip.solo-thread-escalating {
+    border-color: var(--solo-accent, #c08a4a);
+}
+
+.solo-thread-chip.solo-thread-resolved {
+    opacity: 0.55;
+    text-decoration: line-through;
+}
+
+.solo-thread-retire {
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 0 0.2rem;
+    opacity: 0.6;
+}
+
+.solo-thread-retire:hover { opacity: 1; color: #d77; }
+
+.solo-thread-add {
+    background: transparent;
+    border: 1px dashed color-mix(in srgb, var(--SmartThemeBorderColor, #666) 50%, transparent);
+    border-radius: 999px;
+    padding: 0.18rem 0.55rem;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.75;
+}
+
+.solo-thread-add:hover { opacity: 1; }
+
+/* ===== v3 flat settings panel ===== */
+
+.solo-ttrpg-assistant .solo-card {
+    background: var(--solo-panel-bg);
+    border: 1px solid var(--solo-panel-border);
+    border-radius: 8px;
+    padding: 0.55rem 0.75rem;
+    margin: 0.4rem 0;
+}
+
+.solo-ttrpg-assistant .solo-card > summary {
+    cursor: pointer;
+    font-weight: 600;
+    margin: -0.55rem -0.75rem 0.5rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: 6px;
+}
+
+.solo-ttrpg-assistant .solo-card[open] > summary {
+    border-bottom: 1px solid var(--solo-panel-border);
+    margin-bottom: 0.55rem;
+}
+
+.solo-ttrpg-assistant .solo-row-spread {
+    justify-content: space-between;
+}
+
+.solo-ttrpg-assistant .solo-grow {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.solo-ttrpg-assistant .solo-muted {
+    opacity: 0.7;
+    font-size: 0.9em;
+}
+
+.solo-ttrpg-assistant .solo-mini {
+    font-size: 0.85em;
+}
+
+.solo-ttrpg-assistant .solo-h4 {
+    margin: 0.2rem 0 0.35rem;
+    font-size: 0.95em;
+    opacity: 0.85;
+}
+
+.solo-ttrpg-assistant .solo-danger {
+    color: #d77;
+}
+
+.solo-ttrpg-assistant .solo-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0.2rem 0;
+}
+
+.solo-ttrpg-assistant .solo-field label {
+    font-size: 0.88em;
+    opacity: 0.8;
+}
+
+.solo-ttrpg-assistant .solo-field input,
+.solo-ttrpg-assistant .solo-field textarea,
+.solo-ttrpg-assistant .solo-sheet-root input,
+.solo-ttrpg-assistant .solo-sheet-root textarea {
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #111) 12%, transparent);
+    border: 1px solid var(--solo-panel-border);
+    border-radius: 4px;
+    padding: 0.3rem 0.4rem;
+    color: inherit;
+    font: inherit;
+    width: 100%;
+}
+
+.solo-ttrpg-assistant .solo-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.25rem 0;
+}
+
+.solo-ttrpg-assistant .solo-list-row {
+    display: flex;
+    gap: 0.3rem;
+    align-items: center;
+    margin: 0.2rem 0;
+}
+
+.solo-ttrpg-assistant .solo-list-remove,
+.solo-ttrpg-assistant .solo-list-add {
+    background: transparent;
+    border: 1px solid var(--solo-panel-border);
+    border-radius: 4px;
+    padding: 0.18rem 0.5rem;
+    color: inherit;
+    cursor: pointer;
+}
+
+.solo-ttrpg-assistant .solo-list-remove {
+    border-color: transparent;
+    color: inherit;
+    opacity: 0.6;
+}
+
+.solo-ttrpg-assistant .solo-list-remove:hover { color: #d77; opacity: 1; }
+
+.solo-ttrpg-assistant .solo-log {
+    max-height: 260px;
+    overflow: auto;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #111) 30%, transparent);
+    padding: 0.5rem;
+    font-size: 0.85em;
+    border-radius: 4px;
+    margin: 0;
+}
+
+.solo-ttrpg-assistant .solo-empty {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+/* ===== character sheet picker + reset/import controls ===== */
+
+.solo-ttrpg-assistant .solo-list-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    margin-top: 0.25rem;
+}
+
+.solo-ttrpg-assistant .solo-vocab-picker {
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #111) 14%, transparent);
+    border: 1px solid var(--solo-panel-border);
+    border-radius: 4px;
+    padding: 0.22rem 0.4rem;
+    color: inherit;
+    font: inherit;
+    max-width: 100%;
+}

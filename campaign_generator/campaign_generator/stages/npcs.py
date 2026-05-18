@@ -48,7 +48,8 @@ def _extract_required_npc_names(plot: PlotSkeleton) -> list[str]:
     ]
     for act in plot.acts:
         text_blobs.extend([act.title, act.goal])
-        text_blobs.extend(beat.text for beat in act.beats)
+    # v2: acts no longer carry beats; thematic spine is the closest spine analogue.
+    text_blobs.extend(plot.thematic_spine)
 
     for blob in text_blobs:
         for match in TITLE_NAME_PATTERN.findall(blob):
@@ -107,8 +108,13 @@ def _initial_npc_errors(
     existing_names: set[str],
     must_use_names: set[str],
     faction_names: set[str],
-    ability_names: set[str],
 ) -> list[str]:
+    """Semantic validation that doesn't depend on retired pack fields.
+
+    v1 also checked NPC abilities against a pack-wide ability catalog;
+    in v2 NPCs carry free-form `advantages` instead of a closed
+    `abilities` list, so there is no catalog to validate against.
+    """
     errors: list[str] = []
     if npc.name in existing_names:
         errors.append(f"duplicate NPC name {npc.name!r}")
@@ -117,13 +123,6 @@ def _initial_npc_errors(
     _, faction_error = _normalize_faction_affiliation(npc.faction_affiliation, faction_names)
     if faction_error:
         errors.append(f"NPC {npc.name} {faction_error}")
-    invalid_abilities = [ability for ability in npc.abilities if ability not in ability_names]
-    if invalid_abilities:
-        errors.append(
-            f"NPC {npc.name} references unknown abilities {invalid_abilities!r}. "
-            f"Drop these and replace them with names copied verbatim from `ability_catalog`: "
-            f"{sorted(ability_names)!r}. Do not invent new ability names."
-        )
     return errors
 
 
@@ -179,7 +178,6 @@ def run(
                 "outstanding_required_npc_names": outstanding_required,
                 "outstanding_required_cast_briefs": outstanding_briefs,
                 "must_use_one_of_names": sorted(must_use_names),
-                "ability_catalog": sorted(pack.ability_names),
                 "genre": {
                     "name": pack.metadata.display_name,
                     "tone": pack.tone,
@@ -207,7 +205,6 @@ def run(
                 existing_names=existing_names,
                 must_use_names=must_use_names,
                 faction_names=faction_name_set,
-                ability_names=pack.ability_names,
             )
             if not errors:
                 canonical_faction, _ = _normalize_faction_affiliation(
@@ -251,7 +248,6 @@ def run(
                             [cast_brief_by_name[current_npc.name]] if current_npc.name in cast_brief_by_name else []
                         ),
                         "must_use_one_of_names": [current_npc.name],
-                        "ability_catalog": sorted(pack.ability_names),
                         "genre": {
                             "name": pack.metadata.display_name,
                             "tone": pack.tone,
@@ -278,7 +274,6 @@ def run(
                 existing_names={npc.name for i, npc in enumerate(roster) if i != index},
                 must_use_names={current_npc.name},
                 faction_names={faction.name for faction in factions.factions},
-                ability_names=pack.ability_names,
             ) + _relationship_errors(repaired, roster_names)
             if repair_errors:
                 raise LLMError(

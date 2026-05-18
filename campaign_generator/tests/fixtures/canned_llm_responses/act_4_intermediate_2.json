@@ -1,8 +1,0 @@
-{
-  "kind": "npc_encounter",
-  "description": "Archivist Serel asks {{user}} for a binding promise: the names must survive even if the bearers do not. The price is a confession {{user}} has not yet made.",
-  "relevant_npcs": [
-    "Archivist Serel"
-  ],
-  "relevant_location": "Root-Glass Chapel"
-}

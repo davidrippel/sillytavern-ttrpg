@@ -4,6 +4,7 @@ import json
 
 from common.llm import LLMClient, LLMError, generate_structured
 from common.pack import GenrePack
+
 from ..schemas import (
     FactionSet,
     LocationCatalog,
@@ -16,7 +17,7 @@ from ..seed import CampaignSeed
 from ..validation import ValidationLog
 
 
-PROMPT_FILE = "12_sample_characters.md"
+PROMPT_FILE = "10_sample_characters.md"
 
 
 def run(
@@ -35,30 +36,29 @@ def run(
     validation_log: ValidationLog,
     known_npc_names: set[str] | None = None,
 ) -> SampleCharacterSet:
-    pack_attribute_keys = list(pack.attribute_keys)
-    ability_names = sorted(pack.ability_names)
+    """Generate story-mode sample characters.
 
-    count = seed.num_sample_characters or 5
+    v1 packs carried attribute scores and ability lists; samples had to
+    validate against both. v2 packs are story-mode only, so each sample
+    is just the v2 character template shape (name, concept, advantages,
+    disadvantages, belongings, relationships) plus a hook into the
+    campaign. The pack's ``advantages_disadvantages.md`` reference is
+    passed in as a vocabulary hint.
+    """
+
+    count = seed.num_sample_characters or 4
 
     known_set = set(known_npc_names or ())
     known_npcs = [n for n in npcs.npcs if n.name in known_set]
     if not known_npcs:
-        validation_log.write(
-            "[sample-characters] no vetted known NPCs; falling back to full roster for hooks"
-        )
         known_npcs = list(npcs.npcs)
 
     base_context = {
         "pack": {
             "pack_name": pack.metadata.pack_name,
             "display_name": pack.metadata.display_name,
-            "attributes": [
-                {"key": attr.key, "display": attr.display, "description": attr.description}
-                for attr in pack.attributes.attributes
-            ],
-            "attribute_keys": pack_attribute_keys,
-            "abilities": ability_names,
-            "character_template": pack.character_template,
+            "advantages_disadvantages": pack.advantages_disadvantages[:4000],
+            "character_template": pack.character_template.model_dump(),
         },
         "num_sample_characters": count,
         "protagonist": {
@@ -72,8 +72,6 @@ def run(
         "locations": [{"name": loc.name} for loc in locations.locations],
     }
 
-    valid_keys = set(pack_attribute_keys)
-    valid_abilities = set(ability_names)
     known_names = (
         {f.name for f in factions.factions}
         | {n.name for n in known_npcs}
@@ -100,29 +98,18 @@ def run(
 
         errors: list[str] = []
         if len(result.characters) != count:
-            errors.append(
-                f"expected exactly {count} characters, got {len(result.characters)}"
-            )
+            errors.append(f"expected exactly {count} characters, got {len(result.characters)}")
         for sample in result.characters:
-            bad_attrs = [key for key in sample.pack.attributes if key not in valid_keys]
-            if bad_attrs:
-                errors.append(
-                    f"{sample.archetype!r} pack.attributes contains unknown keys {bad_attrs}; "
-                    f"valid attribute_keys are {pack_attribute_keys}"
-                )
-            bad_abilities = [name for name in sample.pack.abilities if name not in valid_abilities]
-            if bad_abilities:
-                errors.append(
-                    f"{sample.archetype!r} pack.abilities contains entries {bad_abilities} that are NOT in the pack ability catalog. "
-                    f"Each entry of pack.abilities must be one of the canonical ability names from the input `pack.abilities` list. "
-                    f"Attribute keys (like {pack_attribute_keys}) are NOT abilities."
-                )
+            if len(sample.advantages) < 2:
+                errors.append(f"{sample.name!r} needs at least 2 advantages")
+            if not sample.disadvantages:
+                errors.append(f"{sample.name!r} needs at least 1 disadvantage")
 
         if not errors:
             for sample in result.characters:
                 if known_names and not any(name in sample.hook_into_campaign for name in known_names):
                     validation_log.write(
-                        f"[sample-characters] {sample.archetype!r} hook does not reference any known-at-start faction/NPC/location"
+                        f"[sample-characters] {sample.name!r} hook does not reference any known-at-start faction/NPC/location"
                     )
             return result
 

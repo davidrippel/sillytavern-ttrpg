@@ -4,14 +4,7 @@ from common.llm import LLMClient
 from common.validation import ValidationLog
 
 from ..brief import GenreBrief
-from ..schemas import (
-    AbilityCategoriesDraft,
-    AttributesDraft,
-    GeneratorSeedDraft,
-    GMOverlay,
-    ResourcesDraft,
-    ToneAndPillars,
-)
+from ..schemas import GeneratorSeedDraft, GMOverlay, ToneAndPillars
 from ._common import call_llm
 
 PROMPT_FILE = "09_generator_seed.md"
@@ -23,9 +16,6 @@ def run(
     system_prompt: str,
     brief: GenreBrief,
     tone: ToneAndPillars,
-    attributes: AttributesDraft,
-    resources: ResourcesDraft,
-    categories: AbilityCategoriesDraft,
     overlay: GMOverlay,
     model: str,
     temperature: float,
@@ -34,11 +24,8 @@ def run(
     context = {
         "brief": brief.model_dump(exclude_none=True),
         "tone_and_pillars": tone.model_dump(),
-        "attributes": [a.model_dump() for a in attributes.attributes],
-        "resources": [r.model_dump(exclude_none=True) for r in resources.resources],
-        "categories": [c.model_dump(exclude_none=True) for c in categories.categories],
-        "npc_conventions": overlay.npc_conventions,
         "setting_and_tone": overlay.setting_and_tone,
+        "npc_conventions": overlay.npc_conventions,
     }
     return call_llm(
         client=client,
