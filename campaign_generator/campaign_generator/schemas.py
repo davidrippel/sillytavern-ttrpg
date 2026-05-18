@@ -324,12 +324,51 @@ class SampleCharacterSet(BaseModel):
 # --- Opening hook + initial AN ----------------------------------------
 
 
+class PCKnownNPCs(BaseModel):
+    """The vetted partition of the NPC roster.
+
+    The NPC stage flags any tie to ``{{user}}`` — including ties that
+    only form during the campaign. The opening-hook section "What you
+    already know" needs the narrower set: NPCs the PC genuinely knew
+    *before play began* (family, longtime allies, old rivals).
+
+    An LLM stage (``stages/pc_known_npcs.py``) reads the roster's
+    ``relationships`` blurbs and partitions them. The schema is small;
+    the cross-stage validator only checks that every name on either
+    list is actually in the roster.
+    """
+
+    known_names: list[str] = Field(default_factory=list)
+    introduced_now_names: list[str] = Field(default_factory=list)
+
+
+class KnownNPCEntry(BaseModel):
+    """One line for the "People you already know" section."""
+    name: str
+    relation: str
+
+
 class OpeningHookDocument(BaseModel):
+    """Player-facing opening hook.
+
+    The v2 rebuild dropped the LLM-written "opening scene" paragraph:
+    it routinely named strangers without context (Marlowe arrives in
+    sentence one with no introduction; Anya gets the wrong family role;
+    etc.). The starting situation is now composed deterministically
+    from the campaign's canonical data — there's no LLM call between
+    the roster and the file the player reads, so role-swap and
+    phantom-NPC failures are structurally impossible.
+    """
+
     premise: str
     tone_statement: str
     character_creation_guidance: list[str] = Field(default_factory=list)
-    opening_scene: str
-    pc_prior_knowledge: str | None = None
+    starting_location: str | None = None
+    starting_location_sensory: str | None = None
+    starting_hook: str = ""
+    known_npcs: list[KnownNPCEntry] = Field(default_factory=list)
+    meeting_now_npcs: list[KnownNPCEntry] = Field(default_factory=list)
+    background_facts: list[str] = Field(default_factory=list)
 
     def render(self) -> str:
         lines = [
@@ -342,9 +381,42 @@ class OpeningHookDocument(BaseModel):
             "Character Creation Guidance",
             *(f"- {item}" for item in self.character_creation_guidance),
             "",
-            "Opening Scene",
-            self.opening_scene,
+            "Starting Situation",
         ]
-        if self.pc_prior_knowledge and self.pc_prior_knowledge.strip():
-            lines.extend(["", "What you already know", self.pc_prior_knowledge.strip()])
+        if self.starting_location:
+            location_line = f"Where you begin: {self.starting_location}."
+            if self.starting_location_sensory:
+                location_line = f"{location_line} {self.starting_location_sensory}"
+            lines.append(location_line)
+        if self.starting_hook:
+            lines.append("")
+            lines.append(f"What's happening: {self.starting_hook}")
+
+        if self.known_npcs or self.background_facts:
+            lines.extend(["", "What you already know"])
+            if self.known_npcs:
+                lines.append("People:")
+                for npc in self.known_npcs:
+                    relation = (npc.relation or "").strip()
+                    if relation:
+                        lines.append(f"- {npc.name} — {relation}")
+                    else:
+                        lines.append(f"- {npc.name}")
+            if self.background_facts:
+                if self.known_npcs:
+                    lines.append("")
+                lines.append("Background:")
+                for fact in self.background_facts:
+                    lines.append(f"- {fact}")
+
+        if self.meeting_now_npcs:
+            lines.extend(["", "People you're about to meet"])
+            lines.append("Strangers the starting situation puts in front of you — you don't know them yet, but you're about to:")
+            for npc in self.meeting_now_npcs:
+                relation = (npc.relation or "").strip()
+                if relation:
+                    lines.append(f"- {npc.name} — {relation}")
+                else:
+                    lines.append(f"- {npc.name}")
+
         return "\n".join(lines)

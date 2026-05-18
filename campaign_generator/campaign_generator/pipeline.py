@@ -48,6 +48,7 @@ from .schemas import (
     FactionSet,
     LocationCatalog,
     NPCRoster,
+    PCKnownNPCs,
     PlotSkeleton,
     PremiseDocument,
     SampleCharacterSet,
@@ -60,6 +61,7 @@ from .stages import factions as factions_stage
 from .stages import locations as locations_stage
 from .stages import npcs as npcs_stage
 from .stages import opening_hook as opening_hook_stage
+from .stages import pc_known_npcs as pc_known_npcs_stage
 from .stages import plot_skeleton as plot_stage
 from .stages import premise as premise_stage
 from .stages import sample_characters as sample_characters_stage
@@ -80,6 +82,8 @@ STAGE_ALIASES = {
     "branches": "branches",
     "samples": "sample_characters",
     "sample_characters": "sample_characters",
+    "pc_known_npcs": "pc_known_npcs",
+    "known_npcs": "pc_known_npcs",
     "all": "all",
 }
 
@@ -93,6 +97,7 @@ STAGE_MODELS: dict[str, type[BaseModel]] = {
     "complications": ComplicationSet,
     "branches": BranchPlan,
     "sample_characters": SampleCharacterSet,
+    "pc_known_npcs": PCKnownNPCs,
 }
 
 
@@ -504,7 +509,44 @@ def run_pipeline(
     if progress_callback is not None:
         progress_callback("Cross-stage validation passed")
 
-    # ---- 10. opening hook ---------------------------------------------
+    # ---- 10. pc_known_npcs ---------------------------------------------
+    # The NPC stage flags relationships to {{user}} that include future
+    # ties not yet formed in fiction. Vet that list down to the NPCs
+    # the PC actually knew before play began. Cached so opening-hook
+    # regenerations don't pay for it on every `--resume`.
+    pc_known_npcs: PCKnownNPCs = _run_or_load(
+        name="pc_known_npcs",
+        selected=selected,
+        stages_dir=stages_dir,
+        model_cls=PCKnownNPCs,
+        client=client,
+        progress_callback=progress_callback,
+        resume=resume,
+        runner=lambda: pc_known_npcs_stage.run(
+            client=client,
+            system_prompt=_load_prompt(pc_known_npcs_stage.PROMPT_FILE),
+            premise=premise,
+            plot=plot,
+            npcs=npcs,
+            seed=loaded_seed.resolved,
+            model=resolved_model,
+            temperature=temperature,
+            validation_log=validation_log,
+        ),
+    )
+
+    known_npc_names = set(pc_known_npcs.known_names)
+    start_location_name = _pick_start_location(plot, locations)
+    if progress_callback is not None:
+        if known_npc_names:
+            progress_callback(
+                f"PC prior knowledge: {len(known_npc_names)} known NPC(s) "
+                f"({', '.join(sorted(known_npc_names))[:140]})"
+            )
+        else:
+            progress_callback("PC prior knowledge: no pre-existing NPC ties (everyone is met in-scene)")
+
+    # ---- 11. opening hook ---------------------------------------------
     opening_hook = opening_hook_stage.render(
         pack,
         premise,
@@ -512,6 +554,8 @@ def run_pipeline(
         loaded_seed.resolved,
         npcs=npcs,
         locations=locations,
+        known_npc_names=known_npc_names,
+        start_location_name=start_location_name,
         client=client,
         system_prompt=_load_prompt(opening_hook_stage.PROMPT_FILE),
         prior_knowledge_system_prompt=_load_prompt(opening_hook_stage.PRIOR_KNOWLEDGE_PROMPT_FILE),
@@ -560,6 +604,38 @@ def run_pipeline(
         )
 
     return PipelineResult(output_dir=output_dir, pack=pack, seed=loaded_seed)
+
+
+def _pick_start_location(plot: PlotSkeleton, locations: LocationCatalog) -> str | None:
+    """Deterministic best-guess for where the opening scene happens.
+
+    v1 used the act-1 start node's `relevant_location`. v3 has no nodes,
+    so we fall back to (in order):
+
+      1. The first location named anywhere in the plot's hook.
+      2. The first location named in `escalation_arc` or the antagonist
+         blocks (a weaker signal — the campaign anchors there).
+      3. The first location in the catalog. Locations are emitted in a
+         meaningful order — earliest-act material first — so this is a
+         reasonable default.
+    """
+    if not locations.locations:
+        return None
+    location_names = [loc.name for loc in locations.locations]
+    haystacks = [plot.hook or ""]
+    for name in location_names:
+        if name and name in haystacks[0]:
+            return name
+    haystacks.append(plot.escalation_arc or "")
+    haystacks.append(plot.driving_mystery or "")
+    haystacks.append(plot.main_antagonist.motivation or "")
+    for name in location_names:
+        if not name:
+            continue
+        for hay in haystacks[1:]:
+            if name in hay:
+                return name
+    return location_names[0]
 
 
 def _starter_authors_note(premise: PremiseDocument, plot: PlotSkeleton) -> str:
