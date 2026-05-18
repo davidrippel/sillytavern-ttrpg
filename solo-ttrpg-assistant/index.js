@@ -157,18 +157,14 @@ context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, async (arg) => {
 
 async function runTurnPipeline(assistantProse) {
     const settings = getSettings();
-    const stateBefore = ensureStoryStateShape(readStoryState() ?? {});
+    const cooldown = Math.max(0, Number(settings.factExtractor?.autoCommitAfterTurns ?? 0));
 
-    // 1. Auto-commit provisional facts older than the cooldown.
-    const cooldown = Math.max(1, Number(settings.factExtractor?.autoCommitAfterTurns ?? 1));
-    await autoCommitStaleProvisional(stateBefore.turn, cooldown);
-
-    // 2. Bump turn.
+    // 1. Bump turn.
     const state = ensureStoryStateShape(readStoryState() ?? {});
     state.turn = Number(state.turn || 0) + 1;
     await writeStoryState(state);
 
-    // 3. Extractor.
+    // 2. Extractor.
     const recentFactsLines = state.facts
         .filter((f) => f.status === FACT_STATUS.accepted)
         .slice(-Number(settings.authorsNote?.recentFactsInAN ?? 8))
@@ -197,10 +193,16 @@ async function runTurnPipeline(assistantProse) {
         truthsForExtractor,
     });
 
-    // 4. Apply the diff.
+    // 3. Apply the diff.
     if (extracted.newFacts.length > 0) {
         await appendProvisionalFacts(state.turn, extracted.newFacts);
     }
+
+    // 4. Auto-commit provisional facts whose age ≥ cooldown.
+    //    Runs after the extractor so cooldown=0 lands this turn's facts
+    //    in the AN immediately. The chip strip is sourced separately
+    //    (`listFactsForReview`) so the user still gets a veto/edit pass.
+    await autoCommitStaleProvisional(state.turn, cooldown);
 
     for (const update of extracted.threadUpdates) {
         await advanceThread(update.threadId, { status: update.status, why: update.why, turn: state.turn });

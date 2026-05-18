@@ -282,19 +282,19 @@
 
 .solo-fact-chips {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
+    flex-direction: column;
+    gap: 0.3rem;
     margin-top: 0.4rem;
     padding-top: 0.4rem;
     border-top: 1px dashed color-mix(in srgb, var(--SmartThemeBorderColor, #666) 30%, transparent);
 }
 
 .solo-fact-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.18rem 0.55rem;
-    border-radius: 999px;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 12px;
     background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #111) 22%, transparent);
     border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor, #666) 40%, transparent);
     font-size: 0.85em;
@@ -315,15 +315,18 @@
 }
 
 .solo-fact-text {
-    white-space: nowrap;
-    max-width: 36ch;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    flex: 1 1 auto;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .solo-fact-actions {
     display: inline-flex;
     gap: 0.2rem;
+    flex: 0 0 auto;
+    align-self: flex-start;
+    margin-top: 0.05rem;
 }
 
 .solo-fact-btn {

@@ -59,7 +59,7 @@ export const PACK_LOREBOOK_ENTRIES = Object.freeze({
 export const FACT_LIMITS = Object.freeze({
     recentFactsInAN: 8,
     maxFactsPerExtraction: 5,
-    factsAutoCommitAfterTurns: 1,
+    factsAutoCommitAfterTurns: 0,
 });
 
 export const THREAD_LIMITS = Object.freeze({

@@ -14,9 +14,12 @@
 //                  AN, kept in the ledger for audit.
 //
 // The auto-commit policy promotes provisional → accepted after
-// `factExtractor.autoCommitAfterTurns` turns of silence (default 1).
-// That way zero-click play accepts the extractor's reading; only
-// disagreements require action.
+// `factExtractor.autoCommitAfterTurns` turns of silence (default 0 —
+// commit immediately at the end of the same turn so the AN is fresh
+// before the next GM message). The chip strip still renders for the
+// just-extracted facts via `listFactsForReview`, so the user can veto
+// or edit even though commit already happened; chip clicks re-render
+// the AN to reflect the change.
 
 import { FACT_LIMITS } from './constants.js';
 import { ensureStoryStateShape, newFactId, readStoryState, writeStoryState } from './util.js';
@@ -127,6 +130,20 @@ export function listRecentAcceptedFacts(state, limit = FACT_LIMITS.recentFactsIn
  */
 export function listProvisionalFacts(state) {
     return state.facts.filter((f) => f.status === FACT_STATUS.provisional);
+}
+
+/**
+ * Facts extracted during the current turn that still warrant a chip in
+ * the inline review strip. With auto-commit at cooldown 0, freshly
+ * extracted facts flip to `accepted` before the chips render — so we
+ * include any non-rejected fact tagged with the current turn, giving
+ * the user a veto/edit window even though commit already happened.
+ */
+export function listFactsForReview(state) {
+    const turn = Number(state.turn);
+    return state.facts.filter(
+        (f) => Number(f.turn) === turn && f.status !== FACT_STATUS.rejected,
+    );
 }
 
 /**

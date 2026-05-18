@@ -17,10 +17,11 @@
 // data attribute. We attach our chip strip as a sibling block below
 // the `.mes_block` so it sits flush against the message body.
 
-import { acceptFact, editFact, FACT_STATUS, listProvisionalFacts, rejectFact } from './facts.js';
+import { acceptFact, editFact, listFactsForReview, rejectFact } from './facts.js';
+import { renderAuthorsNoteFromState } from './authors_note.js';
 import { listAllActiveThreads, openThread, retireThread, renameThread, THREAD_STATUS } from './threads.js';
 import { log } from './logger.js';
-import { ensureStoryStateShape, escapeHtml, getSettings, readStoryState } from './util.js';
+import { ensureStoryStateShape, getSettings, readStoryState } from './util.js';
 
 const CHIP_STRIP_CLASS = 'solo-fact-chips';
 const TRAY_ID = 'solo-threads-tray';
@@ -38,8 +39,8 @@ export function renderFactChipsForLatestMessage() {
     const $mes = $('#chat .mes').last();
     if ($mes.length === 0) return;
     const state = ensureStoryStateShape(readStoryState() ?? {});
-    const provisional = listProvisionalFacts(state);
-    renderChipsInto($mes, provisional);
+    const facts = listFactsForReview(state);
+    renderChipsInto($mes, facts);
 }
 
 /**
@@ -53,29 +54,15 @@ export function refreshAllFactChips() {
         return;
     }
     const state = ensureStoryStateShape(readStoryState() ?? {});
-    const provisional = listProvisionalFacts(state);
+    const facts = listFactsForReview(state);
 
-    // Group provisional facts by the turn they were extracted on. The
-    // turn is monotonically aligned with assistant message order, so we
-    // walk assistant `.mes` elements in order and slice.
-    const byTurn = new Map();
-    for (const fact of provisional) {
-        const key = Number(fact.turn);
-        if (!byTurn.has(key)) byTurn.set(key, []);
-        byTurn.get(key).push(fact);
-    }
-
-    // Strip everything first; re-render targeted strips.
     $(`.${CHIP_STRIP_CLASS}`).remove();
 
-    if (byTurn.size === 0) return;
+    if (facts.length === 0) return;
 
-    // We don't have a perfect mapping from turn → mes element, so just
-    // attach all current provisional facts to the latest message. The
-    // common case (single most-recent extraction) is what users see.
     const $latest = $('#chat .mes').last();
     if ($latest.length > 0) {
-        renderChipsInto($latest, provisional);
+        renderChipsInto($latest, facts);
     }
 }
 
@@ -127,12 +114,14 @@ async function handleAccept(factId, $chip) {
     await acceptFact(factId);
     $chip.addClass('solo-fact-accepted').css('opacity', 0.55);
     setTimeout(() => $chip.remove(), 600);
+    await safeRenderAuthorsNote();
 }
 
 async function handleReject(factId, $chip) {
     await rejectFact(factId);
     $chip.addClass('solo-fact-rejected').css('opacity', 0.4);
     setTimeout(() => $chip.remove(), 400);
+    await safeRenderAuthorsNote();
 }
 
 async function handleEdit(factId, currentText, $chip) {
@@ -143,6 +132,15 @@ async function handleEdit(factId, currentText, $chip) {
     await editFact(factId, next);
     $chip.find('.solo-fact-text').text(next.trim() || currentText);
     $chip.addClass('solo-fact-edited');
+    await safeRenderAuthorsNote();
+}
+
+async function safeRenderAuthorsNote() {
+    try {
+        await renderAuthorsNoteFromState();
+    } catch (error) {
+        log('AN re-render after chip action failed.', 'warn', error?.message ?? String(error));
+    }
 }
 
 // ---- Threads tray -------------------------------------------------------

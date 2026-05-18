@@ -70,7 +70,7 @@ The pack loader explicitly rejects v1 files (`attributes.yaml`, `resources.yaml`
 }
 ```
 
-Fact lifecycle: `provisional` → (auto-commit after 1 turn) `accepted`, or → (user) `rejected`. Rejected facts stay in the ledger for audit but never reach the AN.
+Fact lifecycle: `provisional` → (auto-commit at end of the same turn, default cooldown 0) `accepted`, or → (user) `rejected`. Rejected facts stay in the ledger for audit but never reach the AN. The fact chips render via `listFactsForReview` (current turn, any non-rejected status), so the user can still edit or veto after auto-commit; chip actions re-render the AN immediately.
 
 Thread lifecycle: `live` → `escalating` → `resolved`, or → `retired` (user action).
 
@@ -82,9 +82,8 @@ When the extension first sees a `chatMetadata` document with `schemaVersion` < 3
 
 On every `MESSAGE_RECEIVED` for a non-user message:
 
-1. **Auto-commit.** Provisional facts older than `factExtractor.autoCommitAfterTurns` (default 1) transition to `accepted`.
-2. **Bump turn.** `state.turn += 1`.
-3. **Fact extractor.** One LLM call (`generateRaw`) with the latest assistant prose, the previous player message (for context), recent accepted facts, live threads, scene context, and the campaign's authored truths (top 12). Returns:
+1. **Bump turn.** `state.turn += 1`.
+2. **Fact extractor.** One LLM call (`generateRaw`) with the latest assistant prose, the previous player message (for context), recent accepted facts, live threads, scene context, and the campaign's authored truths (top 12). Returns:
 
 ```
 {
@@ -100,7 +99,8 @@ On every `MESSAGE_RECEIVED` for a non-user message:
 
 Each `source_quote` must appear verbatim in the prose (after smart-punct + whitespace normalisation). Facts that fail the check are dropped and logged.
 
-4. **Apply diff.** New facts become provisional. Threads open / advance. Scene and NPC state update. Truths the prose touched are recorded if they match the active director's note.
+3. **Apply diff.** New facts become provisional. Threads open / advance. Scene and NPC state update. Truths the prose touched are recorded if they match the active director's note.
+4. **Auto-commit.** Provisional facts whose age (current turn − fact.turn) is ≥ `factExtractor.autoCommitAfterTurns` (default 0) transition to `accepted`. With the default, just-extracted facts land in this turn's AN immediately. The chip strip still renders them via `listFactsForReview` so the user retains a veto/edit pass — chip actions re-render the AN.
 5. **Pacing.** Compute pressure cue (`lean-in` / `let-it-breathe` / `complication` / null). Pick at most one campaign truth as the next director's note, based on adjacency to live threads and recent facts.
 6. **Secrets.** Walk every disabled-by-default lorebook entry tagged `secret`; if enough accepted facts or threads name its keywords, enable it.
 7. **AN rebuild.** Re-render the Author's Note from state.
@@ -133,7 +133,7 @@ A final `Response length cap` line is appended to remind the GM of the base prom
 
 Two pieces of UI live in the chat, not in the settings panel:
 
-- **Fact chips.** Per-message strip rendered as `.solo-fact-chip` elements beneath the GM's `.mes_block`. Each chip shows one provisional fact with three buttons: ✓ accept, ✎ edit, ✗ reject. Untouched chips auto-accept on the next turn.
+- **Fact chips.** Per-message strip rendered as `.solo-fact-chip` elements beneath the GM's `.mes_block`. Each chip shows one fact extracted from the current turn (any non-rejected status) with three buttons: ✓ accept, ✎ edit, ✗ reject. With the default cooldown of 0, facts auto-commit at the end of the same turn, so the chips function primarily as a veto/edit affordance; any chip action re-renders the AN immediately.
 - **Threads tray.** A single `#solo-threads-tray` element prepended to the chat container. Each live thread is a chip; click to rename, × to retire, `+ thread` to open a new one.
 
 Both are toggleable in the Director card.
