@@ -163,8 +163,21 @@ export function readAuthorsNote() {
 
 export async function writeAuthorsNote(text) {
     const context = getContext();
-    context.chatMetadata[AUTHORS_NOTE_KEYS.prompt] = String(text ?? '');
+    const value = String(text ?? '');
+    context.chatMetadata[AUTHORS_NOTE_KEYS.prompt] = value;
     await context.saveMetadata();
+    // ST's Author's Note drawer only re-reads `chat_metadata.note_prompt`
+    // on CHAT_CHANGED, so a sidebar opened during this write would stay
+    // stale. Sync the textarea DOM directly and fire 'input' so any
+    // listeners (and ST's own autosize/persist plumbing) stay coherent.
+    try {
+        const $textarea = globalThis.jQuery?.('#extension_floating_prompt');
+        if ($textarea?.length) {
+            $textarea.val(value).trigger('input');
+        }
+    } catch {
+        // best-effort UI sync
+    }
 }
 
 // ---- Story state (v3 story-mode) ----------------------------------------
