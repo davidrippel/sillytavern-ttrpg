@@ -93,7 +93,10 @@ export async function extractFromAssistantMessage({
 
     const json = parseJsonBlock(raw);
     if (!json || typeof json !== 'object') {
-        log('Fact extractor: response was not JSON; skipping.', 'warn');
+        log(
+            `Fact extractor: response was not JSON; skipping. Raw (first 400 chars): ${truncate(raw, 400)}`,
+            'warn',
+        );
         return { ...empty, ran: true, notes: 'extractor JSON parse failed' };
     }
 
