@@ -217,7 +217,7 @@ Retired keys (silently stripped on load): `statusUpdate`, `canonDetection`, `ana
 Per turn, the GM sees (assembled by SillyTavern from card + lorebook + AN + chat):
 
 - **System prompt** (the v3 base prompt from [`07_GM_BASE_PROMPT.md`](07_GM_BASE_PROMPT.md)).
-- **Constant lorebook entries**: `__pack_gm_overlay`, `__pack_complications`, `__pack_reference`, plus the campaign bible.
+- **Constant lorebook entries**: `__pack_gm_overlay`, `__pack_complications`, `__pack_reference`, plus the campaign bible. The campaign lorebook also ships `__pack_initial_authors_note` (disabled by default) — the **Reset campaign** button reads it by comment and writes it into the Author's Note slot so a fresh chat starts with a populated turn-0 AN.
 - **Keyword-triggered lorebook entries** that fire on the current context (NPCs, locations, factions, secrets that have been unlocked).
 - The injected **character sheet** block (from `sheet.js → formatCharacterSheetForPrompt`).
 - The **Author's Note** (the v3 sections above + a length-cap reminder).

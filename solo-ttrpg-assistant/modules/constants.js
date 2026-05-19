@@ -54,6 +54,7 @@ export const PACK_LOREBOOK_ENTRIES = Object.freeze({
     complications: '__pack_complications',
     reference: '__pack_reference',
     bible: '__campaign_bible',
+    initialAuthorsNote: '__pack_initial_authors_note',
 });
 
 export const FACT_LIMITS = Object.freeze({

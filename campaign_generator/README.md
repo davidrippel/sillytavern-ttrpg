@@ -37,7 +37,7 @@ python -m campaign_generator \
     --output ./campaigns/my_first_campaign/
 ```
 
-6. Read `opening_hook.txt`; import `campaign_lorebook.json` into the SillyTavern chat that runs the GM. The runtime extension regenerates the Author's Note from per-turn state, so `initial_authors_note.txt` is a turn-0 placeholder.
+6. Read `opening_hook.txt`; import `campaign_lorebook.json` into the SillyTavern chat that runs the GM. The runtime extension regenerates the Author's Note from per-turn state on each turn; the turn-0 seed lives in the lorebook as the disabled `__pack_initial_authors_note` entry and is written into the AN slot when the player clicks **Reset campaign**.
 
 If `CAMPAIGN_GENERATOR_GENRES_BASE_DIR` is set in `.env`, `--genre` can also be just the pack name.
 
@@ -56,13 +56,13 @@ python -m campaign_generator \
 A successful run writes:
 
 - `opening_hook.txt` — player-facing premise, tone, character-creation guidance pointing at the pack's `advantages_disadvantages` reference, and the opening scene.
-- `initial_authors_note.txt` — minimal turn-0 AN. The runtime extension overwrites this with a deterministic, state-derived AN on every turn.
 - `<campaign_title_slug>.json` — the campaign lorebook. Constant entries the runtime reads:
   - `__pack_gm_overlay` (embedded pack overlay)
   - `__pack_complications` (pack universal + campaign-specific complications)
   - `__pack_reference` (pack vocabulary + a JSON header for the compatibility check)
   - `__campaign_bible` (premise / conflict / tone / thematic spine / antagonist)
   - `__campaign_truths` (JSON array of authored truths; `disable: true` so the GM never sees them — the extension picks one at a time as a director's note)
+  - `__pack_initial_authors_note` (turn-0 Author's Note seed; `disable: true` so the GM never sees it — the extension reads it on **Reset campaign** and writes it into the AN slot)
 - `stages/*.json` — per-stage cache for resume / re-run: `premise`, `plot_skeleton`, `factions`, `npcs`, `locations`, `truths`, `complications`, `branches`, `sample_characters`.
 - `stages/calls.jsonl` — every LLM call (request + response + usage).
 - `stages/validation_log.txt` — schema retries, cross-stage warnings.

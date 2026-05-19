@@ -570,13 +570,11 @@ def run_pipeline(
 
     # ---- 11. starter Author's Note ------------------------------------
     # In v3 the extension assembles the AN deterministically from state on
-    # every turn. The campaign generator only ships a small starter file
-    # that holds the scene context for turn 0; everything else fills in
-    # as play begins.
+    # every turn. The generator ships a turn-0 seed embedded in the
+    # lorebook as the disabled `__pack_initial_authors_note` entry; the
+    # extension's reset button reads it by comment lookup and writes it
+    # into the AN slot. We keep one source of truth in the lorebook.
     initial_an = _starter_authors_note(premise, plot)
-    _write_text(output_dir / "initial_authors_note.txt", initial_an)
-    if progress_callback is not None:
-        progress_callback("Wrote initial_authors_note.txt")
 
     # ---- 12. lorebook --------------------------------------------------
     lorebook = assemble_lorebook(
@@ -590,6 +588,7 @@ def run_pipeline(
         complications=complications,
         branches=branches,
         sample_characters=sample_characters,
+        initial_authors_note=initial_an,
     )
     lorebook_filename = _slugify_title(premise.title) + ".json"
     _write_json(output_dir / lorebook_filename, lorebook)

@@ -98,8 +98,7 @@ Retired v1 models: `Beat`, `ActOutline.beats`, `Node`, `NodeGraph`, `Clue`, `Clu
 ```
 <output>/
 ├── opening_hook.txt
-├── initial_authors_note.txt
-├── <campaign_title_slug>.json    # the campaign lorebook
+├── <campaign_title_slug>.json    # the campaign lorebook (includes the turn-0 AN seed as a disabled entry)
 ├── stages/
 │   ├── premise.json
 │   ├── plot_skeleton.json
@@ -130,6 +129,7 @@ The campaign lorebook JSON is the seam between the generator and the v3 extensio
 | `__pack_reference` | ✓ | | JSON header (pack_name, version) + `advantages_disadvantages.md` |
 | `__campaign_bible` | ✓ | | premise + central conflict + tone + thematic spine + antagonist |
 | `__campaign_truths` | | ✓ | JSON array of authored truths (GM never sees) |
+| `__pack_initial_authors_note` | | ✓ | turn-0 Author's Note seed (GM never sees; extension writes it into the AN on **Reset campaign**) |
 
 Plus keyword-triggered entries:
 

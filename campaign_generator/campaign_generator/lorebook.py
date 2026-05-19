@@ -14,6 +14,12 @@ to wire up its runtime:
   __campaign_truths     ← JSON array of authored truths. Disabled so
                           the GM never sees the entry directly; the
                           extension reads it by comment lookup.
+  __pack_initial_authors_note
+                        ← turn-0 Author's Note seed. Disabled so the
+                          GM never sees the entry directly; the
+                          extension reads it by comment lookup on
+                          campaign reset and writes it into the AN
+                          slot.
 
 Everything else (NPCs, locations, factions) is a normal keyword-
 triggered entry. NPCs and locations also get a `(secret)` tier-2
@@ -243,6 +249,7 @@ def assemble_lorebook(
     complications: ComplicationSet,
     branches: BranchPlan,
     sample_characters: SampleCharacterSet | None = None,
+    initial_authors_note: str | None = None,
 ) -> dict[str, Any]:
     entries: dict[str, dict[str, Any]] = {}
     uid = 0
@@ -306,6 +313,21 @@ def assemble_lorebook(
         disable=True,
         order=0,
     ))
+
+    # __pack_initial_authors_note is the turn-0 AN seed. The extension's
+    # "Reset campaign" button reads this by comment lookup and writes it
+    # straight into the Author's Note slot. Disabled so the GM never
+    # sees it via keyword firing.
+    if initial_authors_note:
+        uid += 1
+        add(_entry(
+            uid,
+            comment="__pack_initial_authors_note",
+            content=initial_authors_note,
+            constant=False,
+            disable=True,
+            order=0,
+        ))
 
     # ---- Faction tier --------------------------------------------------
 

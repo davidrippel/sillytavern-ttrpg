@@ -29,7 +29,8 @@ import { renderAuthorsNoteFromState } from './modules/authors_note.js';
 import { rewindToTurn, appendProvisionalFacts, acceptFact } from './modules/facts.js';
 import { openThread, retireThread, listAllActiveThreads } from './modules/threads.js';
 import { refreshAllFactChips, renderThreadsTray } from './modules/inline_ui.js';
-import { getExtensionPath } from './modules/constants.js';
+import { getExtensionPath, PACK_LOREBOOK_ENTRIES } from './modules/constants.js';
+import { findLorebookEntryByComment } from './modules/lorebook_v2.js';
 import {
     ensureStoryStateShape,
     escapeHtml,
@@ -40,6 +41,7 @@ import {
     newCharacterId,
     readStoryState,
     saveSettings,
+    writeAuthorsNote,
     writeStoryState,
 } from './modules/util.js';
 
@@ -398,7 +400,13 @@ function wireStoryCard() {
         );
         if (!confirmed) return;
         await writeStoryState(freshStoryState());
-        await renderAuthorsNoteFromState();
+        const seedEntry = await findLorebookEntryByComment(PACK_LOREBOOK_ENTRIES.initialAuthorsNote);
+        if (seedEntry?.content) {
+            await writeAuthorsNote(seedEntry.content);
+            log('Seeded Author\'s Note from __pack_initial_authors_note.', 'info');
+        } else {
+            await renderAuthorsNoteFromState();
+        }
         refreshAllFactChips();
         renderThreadsTray();
         refreshStoryCard();
