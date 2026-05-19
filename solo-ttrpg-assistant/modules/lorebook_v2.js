@@ -17,40 +17,139 @@
 
 import { PACK_LOREBOOK_ENTRIES } from './constants.js';
 import { getContext, safeJsonParse } from './util.js';
+import { log } from './logger.js';
 
 const TRUTHS_ENTRY_COMMENT = '__campaign_truths';
 
+function _collectChatLorebookName(context) {
+    const metadata = context.chatMetadata ?? {};
+    const candidates = [
+        metadata.world_info,
+        metadata.world,
+        metadata.chat_world,
+        metadata.chat_lore,
+        metadata.worldInfo,
+    ];
+    for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) return candidate;
+        if (candidate && typeof candidate === 'object') {
+            for (const key of ['name', 'world', 'selected']) {
+                if (typeof candidate[key] === 'string' && candidate[key].trim()) return candidate[key];
+            }
+        }
+    }
+    return null;
+}
+
+function _collectCharacterLorebookName(context) {
+    try {
+        const id = context.characterId;
+        if (id == null) return null;
+        const character = context.characters?.[id];
+        if (!character) return null;
+        const candidates = [
+            character.data?.extensions?.world,
+            character.data?.character_book?.name,
+            character.character_book?.name,
+            character.world,
+        ];
+        for (const candidate of candidates) {
+            if (typeof candidate === 'string' && candidate.trim()) return candidate;
+        }
+    } catch {
+        // best-effort
+    }
+    return null;
+}
+
+function _collectGlobalLorebookNames() {
+    const names = new Set();
+    // `selected_world_info` is the runtime array of currently-active book
+    // names. `world_names` is the master list of every world-info file
+    // SillyTavern knows about — we include it so the lookup works even
+    // when the user has only opened the book in the editor without
+    // marking it active.
+    const sources = [
+        globalThis.selected_world_info,
+        globalThis.world_names,
+        globalThis.world_info?.globalSelect,
+        globalThis.world_info?.charLore,
+    ];
+    for (const source of sources) {
+        if (Array.isArray(source)) {
+            for (const name of source) {
+                if (typeof name === 'string' && name.trim()) names.add(name);
+            }
+        }
+    }
+    return [...names];
+}
+
 /**
- * Load every entry from every world-info book attached to the current chat.
- * Returns `[]` if SillyTavern's world-info API isn't available yet.
+ * Load every entry from every world-info book reachable from the current
+ * chat. Checks (in order, de-duplicated by name):
+ *
+ *   1. `context.getCharaLoreBooks()` — character-bound books.
+ *   2. The chat-bound book name (chatMetadata.world_info etc).
+ *   3. The character card's `character_book.name` / `data.extensions.world`.
+ *   4. SillyTavern globals: `selected_world_info` (active set),
+ *      `world_names` (master list), and `world_info.globalSelect` /
+ *      `world_info.charLore`.
+ *
+ * Walking the master list (`world_names`) means the lookup succeeds as
+ * long as the user has the lorebook loaded anywhere in SillyTavern —
+ * they don't have to bind it to character or chat first. Returns `[]`
+ * if SillyTavern's world-info API isn't available yet.
  */
 export async function loadAllLorebookEntries() {
     const context = getContext();
-    const wi = context.worldInfo ?? globalThis.worldInfoData ?? null;
-    if (!wi) return [];
+    if (typeof context.loadWorldInfo !== 'function') return [];
 
+    const names = new Set();
     try {
-        // SillyTavern exposes a `getCharaLoreBooks()` + `loadWorldInfo()`
-        // pair on context. We accept either shape and fall back to a
-        // global if neither is available.
-        if (typeof context.getCharaLoreBooks === 'function' && typeof context.loadWorldInfo === 'function') {
-            const books = (await context.getCharaLoreBooks?.()) ?? [];
-            const all = [];
+        if (typeof context.getCharaLoreBooks === 'function') {
+            const books = (await context.getCharaLoreBooks()) ?? [];
             for (const name of books) {
-                const data = await context.loadWorldInfo(name);
-                if (data?.entries) {
-                    for (const id of Object.keys(data.entries)) {
-                        all.push({ ...data.entries[id], _book: name });
-                    }
-                }
+                if (typeof name === 'string' && name.trim()) names.add(name);
             }
-            return all;
         }
     } catch {
-        // Fall through.
+        // best-effort
     }
 
-    return [];
+    const chatName = _collectChatLorebookName(context);
+    if (chatName) names.add(chatName);
+
+    const charName = _collectCharacterLorebookName(context);
+    if (charName) names.add(charName);
+
+    for (const name of _collectGlobalLorebookNames()) {
+        names.add(name);
+    }
+
+    console.debug('[solo-ttrpg] loadAllLorebookEntries — candidate books:', [...names]);
+    if (names.size === 0) {
+        console.warn('[solo-ttrpg] No lorebook book names discoverable from context/globals.');
+        return [];
+    }
+
+    const all = [];
+    for (const name of names) {
+        try {
+            const data = await context.loadWorldInfo(name);
+            const count = data?.entries ? Object.keys(data.entries).length : 0;
+            console.debug(`[solo-ttrpg] Loaded "${name}" — ${count} entries.`);
+            if (data?.entries) {
+                for (const id of Object.keys(data.entries)) {
+                    all.push({ ...data.entries[id], _book: name });
+                }
+            }
+        } catch (error) {
+            console.warn(`[solo-ttrpg] Failed to load world info "${name}":`, error);
+            log(`Failed to load world info "${name}".`, 'warn', error?.message);
+        }
+    }
+    return all;
 }
 
 /**

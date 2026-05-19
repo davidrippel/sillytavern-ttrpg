@@ -399,13 +399,26 @@ function wireStoryCard() {
             + 'It does NOT touch the chat itself, the character sheet, or the lorebook. Continue?'
         );
         if (!confirmed) return;
+        console.debug('[solo-ttrpg] Reset campaign clicked — starting.');
         await writeStoryState(freshStoryState());
-        const seedEntry = await findLorebookEntryByComment(PACK_LOREBOOK_ENTRIES.initialAuthorsNote);
+        let seedEntry = null;
+        try {
+            seedEntry = await findLorebookEntryByComment(PACK_LOREBOOK_ENTRIES.initialAuthorsNote);
+            console.debug('[solo-ttrpg] Seed lookup result:', seedEntry);
+        } catch (error) {
+            console.error('[solo-ttrpg] Seed lookup threw:', error);
+            log(`Seed lookup threw: ${error?.message ?? error}`, 'error');
+        }
         if (seedEntry?.content) {
             await writeAuthorsNote(seedEntry.content);
-            log('Seeded Author\'s Note from __pack_initial_authors_note.', 'info');
+            const msg = `Seeded Author's Note from __pack_initial_authors_note (book: ${seedEntry._book ?? 'unknown'}).`;
+            console.debug('[solo-ttrpg] ' + msg);
+            log(msg, 'info');
         } else {
             await renderAuthorsNoteFromState();
+            const msg = 'No __pack_initial_authors_note entry found in any attached lorebook — AN rebuilt from empty state.';
+            console.warn('[solo-ttrpg] ' + msg);
+            log(msg, 'warn');
         }
         refreshAllFactChips();
         renderThreadsTray();
