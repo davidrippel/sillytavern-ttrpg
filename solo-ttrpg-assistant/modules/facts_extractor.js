@@ -230,7 +230,7 @@ function buildPrompt({
         '- Update `npc_state` only when the prose shows an attitude shift or status change.',
         '- `scene_delta` is optional. Use it when location/present-NPCs/tension visibly changed.',
         '',
-        'Output schema (STRICT JSON, no markdown, no prose):',
+        'Output schema (STRICT JSON, no markdown, no prose, no code fences). Your response MUST be a single JSON object beginning with { and ending with }:',
         '{',
         '  "new_facts": [ { "text": "...", "source_quote": "...", "entities": ["..."] } ],',
         '  "thread_updates": [ { "thread_id": "...", "status": "live|escalating|resolved", "why": "..." } ],',
@@ -240,10 +240,109 @@ function buildPrompt({
         '  "npc_state": [ { "id": "...", "attitude": "...", "status": "..." } ],',
         '  "notes": "one short line of reasoning"',
         '}',
+        '',
+        'Begin your response with the opening { of the JSON object. Output nothing before or after the JSON.',
     ].join('\n');
 }
 
+// Budget covers both reasoning tokens (some backends, like DeepSeek
+// v3.2's reasoning variant, consume thousands of tokens "thinking"
+// before the JSON answer) and the JSON answer itself. Keep generous —
+// running out leaves the response with `content: null` and we get
+// nothing useful.
+const EXTRACTOR_RESPONSE_TOKENS = 6000;
+
+// JSON Schema for native structured-output mode. Backends that support
+// it (OpenAI, DeepSeek, Anthropic, etc. via SillyTavern's generateRaw)
+// will be forced to return a payload that conforms to this shape, so
+// the parser path becomes a JSON.parse rather than a heuristic salvage.
+const EXTRACTOR_JSON_SCHEMA = {
+    name: 'fact_extractor_payload',
+    strict: false,
+    schema: {
+        type: 'object',
+        properties: {
+            new_facts: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    properties: {
+                        text: { type: 'string' },
+                        source_quote: { type: 'string' },
+                        entities: { type: 'array', items: { type: 'string' } },
+                    },
+                    required: ['text', 'source_quote'],
+                },
+            },
+            thread_updates: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    properties: {
+                        thread_id: { type: 'string' },
+                        status: { type: 'string' },
+                        why: { type: 'string' },
+                    },
+                },
+            },
+            new_threads: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    properties: {
+                        question: { type: 'string' },
+                        why: { type: 'string' },
+                    },
+                },
+            },
+            truths_touched: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    properties: {
+                        truth_id: { type: 'string' },
+                        how: { type: 'string' },
+                    },
+                },
+            },
+            scene_delta: {
+                type: ['object', 'null'],
+                properties: {
+                    location: { type: 'string' },
+                    present_npc_ids: { type: 'array', items: { type: 'string' } },
+                    tension: { type: 'string' },
+                },
+            },
+            npc_state: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string' },
+                        attitude: { type: 'string' },
+                        status: { type: 'string' },
+                    },
+                },
+            },
+            notes: { type: 'string' },
+        },
+    },
+};
+
 async function runExtractorLLM(prompt) {
+    // Preferred path: direct browser → OpenRouter call with reasoning
+    // disabled at the API level. SillyTavern's generateRaw pipeline goes
+    // through the ST server (and any CDN in front of it — Cloudflare's
+    // 100s timeout kills calls to reasoning models), and it does not
+    // pass OpenRouter's `reasoning: { enabled: false }` parameter, so
+    // reasoning models still think for 60+ seconds even with
+    // reasoning_effort=min. Direct fetch sidesteps both problems.
+    const direct = await runExtractorDirectOpenRouter(prompt);
+    if (direct !== null) return direct;
+
+    // Fallback: route through SillyTavern's generateRaw. Used when the
+    // active connection isn't OpenRouter, or the API key isn't reachable
+    // via the secret store (allowKeysExposure off in config.yaml).
     const context = getContext();
     const generate = context.generateRaw;
     if (typeof generate !== 'function') {
@@ -255,11 +354,112 @@ async function runExtractorLLM(prompt) {
             prompt,
             systemPrompt: SYSTEM_PROMPT,
             instructOverride: true,
+            responseLength: EXTRACTOR_RESPONSE_TOKENS,
+            jsonSchema: EXTRACTOR_JSON_SCHEMA,
         });
         return String(result ?? '');
     } catch (error) {
         log('Fact extractor LLM call failed.', 'warn', error?.message ?? String(error));
         return '';
+    }
+}
+
+/**
+ * Direct browser → OpenRouter chat-completions call. Returns the
+ * assistant message content on success, an empty string on a recognized
+ * error (so the extractor logs a clear warning), or null when this path
+ * isn't applicable (key unavailable, non-OpenRouter connection) — the
+ * caller then falls back to generateRaw.
+ */
+async function runExtractorDirectOpenRouter(prompt) {
+    const context = getContext();
+    const model = resolveOpenRouterModel(context);
+    if (!model) return null;
+
+    const apiKey = await fetchOpenRouterKey();
+    if (!apiKey) return null;
+
+    const payload = {
+        model,
+        messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: prompt },
+        ],
+        max_tokens: EXTRACTOR_RESPONSE_TOKENS,
+        temperature: 0,
+        response_format: {
+            type: 'json_schema',
+            json_schema: EXTRACTOR_JSON_SCHEMA,
+        },
+        // OpenRouter-specific: disable chain-of-thought entirely so
+        // reasoning models (DeepSeek v3.2, Claude thinking, etc.) skip
+        // the long internal monologue and emit JSON immediately.
+        reasoning: { enabled: false },
+    };
+
+    try {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiKey}`,
+                'HTTP-Referer': globalThis.location?.origin ?? 'https://sillytavern.app',
+                'X-Title': 'Solo TTRPG Assistant',
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.text().catch(() => '');
+            log(
+                `Fact extractor (direct OpenRouter) HTTP ${response.status}: ${truncate(errorBody, 300)}`,
+                'warn',
+            );
+            return '';
+        }
+
+        const data = await response.json();
+        const content = data?.choices?.[0]?.message?.content;
+        return typeof content === 'string' ? content : '';
+    } catch (error) {
+        log(
+            'Fact extractor (direct OpenRouter) call failed.',
+            'warn',
+            error?.message ?? String(error),
+        );
+        return '';
+    }
+}
+
+function resolveOpenRouterModel(context) {
+    // The extractor only makes sense to route through OpenRouter when
+    // the active chat connection is OpenRouter — otherwise we'd be
+    // billing a model the user didn't choose. Read the model from
+    // ST's chat-completion settings.
+    const oai = context?.chatCompletionSettings;
+    if (!oai) return null;
+    const source = String(oai.chat_completion_source ?? '').toLowerCase();
+    if (source !== 'openrouter') return null;
+    const model = String(oai.openrouter_model ?? '').trim();
+    return model && model !== 'OR_Website' ? model : null;
+}
+
+let cachedOpenRouterKey = null;
+async function fetchOpenRouterKey() {
+    if (cachedOpenRouterKey) return cachedOpenRouterKey;
+    try {
+        const response = await fetch('/api/secrets/find', {
+            method: 'POST',
+            headers: getContext().getRequestHeaders?.() ?? { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: 'api_key_openrouter' }),
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        const value = typeof data?.value === 'string' ? data.value : null;
+        if (value) cachedOpenRouterKey = value;
+        return value;
+    } catch {
+        return null;
     }
 }
 
