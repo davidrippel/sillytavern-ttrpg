@@ -236,11 +236,41 @@ async function readThematicSpineFromBible() {
     const bible = await findLorebookEntryByComment(PACK_LOREBOOK_ENTRIES.bible);
     if (!bible?.content) return '';
     const text = String(bible.content);
-    const match = text.match(/(?:thematic\s+spine|escalation\s+themes)\s*:?\s*([^\n]+(?:\n\s+[^\n]+)*)/i);
-    if (!match) return '';
-    const block = match[1].trim();
-    // Compress to the first 2 lines or 220 chars.
-    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 2);
-    const compact = lines.join(' ');
-    return compact.length > 240 ? `${compact.slice(0, 239)}…` : compact;
+    const headerRe = /^[#\s>*-]*thematic\s+spine\b[^\n]*$/im;
+    const headerMatch = headerRe.exec(text);
+    if (!headerMatch) return '';
+
+    // Collect the spine body: any inline content on the header line (minus a
+    // bare "(escalation themes):" parenthetical), then following bullet or
+    // continuation lines, stopping at a blank line or the next heading.
+    const headerLine = headerMatch[0];
+    const inline = headerLine
+        .replace(/^[#\s>*-]*thematic\s+spine\b\s*:?\s*/i, '')
+        .replace(/^\(\s*escalation\s+themes\s*\)\s*:?\s*/i, '')
+        .trim();
+
+    const rest = text.slice(headerMatch.index + headerLine.length).split('\n');
+    const items = [];
+    if (inline) items.push(inline);
+    for (const raw of rest) {
+        const line = raw.trim();
+        if (!line) {
+            if (items.length > 0) break;
+            continue;
+        }
+        if (/^#{1,6}\s/.test(line)) break;
+        if (/^[-*•]\s+/.test(line)) {
+            items.push(line.replace(/^[-*•]\s+/, '').trim());
+        } else if (items.length > 0 && /^\s/.test(raw)) {
+            // Indented continuation of the previous bullet.
+            items[items.length - 1] = `${items[items.length - 1]} ${line}`;
+        } else {
+            break;
+        }
+    }
+    if (items.length === 0) return '';
+
+    // Keep the first 3 themes, joined with " | " — matches the initial AN seed style.
+    const compact = items.slice(0, 3).join(' | ');
+    return compact.length > 320 ? `${compact.slice(0, 319)}…` : compact;
 }
