@@ -45,7 +45,7 @@ import { advanceThread, listLiveThreads, openThread } from './modules/threads.js
 import { computePressureCue, selectDirectorsNote } from './modules/pacing.js';
 import { loadCampaignTruths } from './modules/lorebook_v2.js';
 import { reevaluateSecretUnlocks } from './modules/secrets.js';
-import { refreshAllFactChips, renderFactChipsForLatestMessage, renderThreadsTray } from './modules/inline_ui.js';
+import { clearExtractorPending, refreshAllFactChips, renderFactChipsForLatestMessage, renderThreadsTray, showExtractorPending } from './modules/inline_ui.js';
 import { log } from './modules/logger.js';
 import {
     ensureStoryStateShape,
@@ -182,16 +182,22 @@ async function runTurnPipeline(assistantProse) {
     const truths = await loadCampaignTruths();
     const truthsForExtractor = truths.slice(0, 12);
 
-    const extracted = await extractFromAssistantMessage({
-        assistantMessageText: assistantProse,
-        userMessageText: previousUserMessage(),
-        state,
-        recentFactsLines,
-        liveThreadsLines,
-        sceneContextLine,
-        onScreenNpcsLine,
-        truthsForExtractor,
-    });
+    showExtractorPending();
+    let extracted;
+    try {
+        extracted = await extractFromAssistantMessage({
+            assistantMessageText: assistantProse,
+            userMessageText: previousUserMessage(),
+            state,
+            recentFactsLines,
+            liveThreadsLines,
+            sceneContextLine,
+            onScreenNpcsLine,
+            truthsForExtractor,
+        });
+    } finally {
+        clearExtractorPending();
+    }
 
     // 3. Apply the diff.
     if (extracted.newFacts.length > 0) {

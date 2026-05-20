@@ -24,7 +24,36 @@ import { log } from './logger.js';
 import { ensureStoryStateShape, getSettings, readStoryState } from './util.js';
 
 const CHIP_STRIP_CLASS = 'solo-fact-chips';
+const PENDING_CLASS = 'solo-fact-pending';
 const TRAY_ID = 'solo-threads-tray';
+
+/**
+ * Insert a "analyzing the scene…" placeholder under the latest message
+ * so the player knows the silent extractor LLM call is in flight. The
+ * call can take several seconds; without feedback the chat looks frozen.
+ */
+export function showExtractorPending() {
+    const settings = getSettings();
+    if (settings.ui?.inlineFactChips === false) return;
+    const $mes = $('#chat .mes').last();
+    if ($mes.length === 0) return;
+    $mes.find(`.${PENDING_CLASS}`).remove();
+    $mes.find(`.${CHIP_STRIP_CLASS}`).remove();
+    const $note = $('<div></div>')
+        .addClass(PENDING_CLASS)
+        .attr('role', 'status')
+        .text('Analyzing the scene for new facts…');
+    const $target = $mes.find('.mes_block').first();
+    if ($target.length > 0) {
+        $target.append($note);
+    } else {
+        $mes.append($note);
+    }
+}
+
+export function clearExtractorPending() {
+    $(`.${PENDING_CLASS}`).remove();
+}
 
 /**
  * Render or refresh the fact chip strip under one specific message.
@@ -68,11 +97,18 @@ export function refreshAllFactChips() {
 
 function renderChipsInto($mes, facts) {
     $mes.find(`.${CHIP_STRIP_CLASS}`).remove();
+    $mes.find(`.${PENDING_CLASS}`).remove();
     if (!facts || facts.length === 0) return;
 
     const $strip = $('<div></div>')
         .addClass(CHIP_STRIP_CLASS)
         .attr('aria-label', 'Provisional facts extracted from this scene');
+
+    $strip.append(
+        $('<div></div>')
+            .addClass('solo-fact-note')
+            .text('These facts have been added to canon. Reject any that should not stick.'),
+    );
 
     for (const fact of facts) {
         const $chip = $('<span></span>').addClass('solo-fact-chip').attr('data-fact-id', fact.id);

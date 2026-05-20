@@ -133,7 +133,7 @@ A final `Response length cap` line is appended to remind the GM of the base prom
 
 Two pieces of UI live in the chat, not in the settings panel:
 
-- **Fact chips.** Per-message strip rendered as `.solo-fact-chip` elements beneath the GM's `.mes_block`. Each chip shows one fact extracted from the current turn (any non-rejected status) with three buttons: ✓ accept, ✎ edit, ✗ reject. With the default cooldown of 0, facts auto-commit at the end of the same turn, so the chips function primarily as a veto/edit affordance; any chip action re-renders the AN immediately.
+- **Fact chips.** Per-message strip rendered as `.solo-fact-chip` elements beneath the GM's `.mes_block`. Each chip shows one fact extracted from the current turn (any non-rejected status) with three buttons: ✓ accept, ✎ edit, ✗ reject. With the default cooldown of 0, facts auto-commit at the end of the same turn, so the chips function primarily as a veto/edit affordance; any chip action re-renders the AN immediately. While the extractor LLM call is in flight, a `.solo-fact-pending` placeholder ("Analyzing the scene for new facts…") replaces the chip area; it clears whether the call succeeds, fails, or returns zero facts. When chips render, a one-line `.solo-fact-note` above them reminds the player that facts are already in canon and only need attention to reject.
 - **Threads tray.** A single `#solo-threads-tray` element prepended to the chat container. Each live thread is a chip; click to rename, × to retire, `+ thread` to open a new one.
 
 Both are toggleable in the Director card.

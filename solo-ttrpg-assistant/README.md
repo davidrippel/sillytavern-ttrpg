@@ -38,7 +38,7 @@ One flat panel, no submenus, five collapsible cards:
 
 Two pieces of UI live *in the chat* rather than in the settings panel — so normal play is zero-click:
 
-- **Fact chips.** After every assistant message, the extractor's proposed facts render as a chip strip below the message. Each chip has ✓ accept / ✎ edit / ✗ reject. With the default cooldown of 0, facts auto-commit at the end of the same turn — chips act as a veto/edit pass, and any chip action re-renders the Author's Note immediately.
+- **Fact chips.** After every assistant message, the extractor's proposed facts render as a chip strip below the message. Each chip has ✓ accept / ✎ edit / ✗ reject. While the extractor LLM call is in flight, a "Analyzing the scene for new facts…" placeholder sits where the chips will land; it clears when the call returns (showing chips if there are new facts, nothing if there aren't). With the default cooldown of 0, facts auto-commit at the end of the same turn — chips act as a veto/edit pass, and a one-line note above the strip reminds the player that facts are already in canon. Any chip action re-renders the Author's Note immediately.
 - **Threads tray.** A single docked row above the chat shows live threads. Click to rename, × to retire, `+ thread` to open a new one manually.
 
 Both are toggleable from the Director card.

@@ -344,6 +344,38 @@
 .solo-fact-reject:hover { color: #d77; }
 .solo-fact-edit:hover { color: var(--solo-accent, #c08a4a); }
 
+.solo-fact-pending {
+    margin-top: 0.4rem;
+    padding: 0.35rem 0.6rem;
+    border-top: 1px dashed color-mix(in srgb, var(--SmartThemeBorderColor, #666) 30%, transparent);
+    font-size: 0.82em;
+    font-style: italic;
+    opacity: 0.75;
+}
+
+.solo-fact-pending::before {
+    content: '';
+    display: inline-block;
+    width: 0.7em;
+    height: 0.7em;
+    margin-right: 0.45em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    vertical-align: -0.1em;
+    animation: solo-fact-spin 0.9s linear infinite;
+}
+
+@keyframes solo-fact-spin {
+    to { transform: rotate(360deg); }
+}
+
+.solo-fact-note {
+    font-size: 0.78em;
+    opacity: 0.7;
+    margin-bottom: 0.15rem;
+}
+
 .solo-threads-tray {
     display: flex;
     flex-wrap: wrap;
