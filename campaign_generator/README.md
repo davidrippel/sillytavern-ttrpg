@@ -41,6 +41,8 @@ python -m campaign_generator \
 
 If `CAMPAIGN_GENERATOR_GENRES_BASE_DIR` is set in `.env`, `--genre` can also be just the pack name.
 
+`--genre` is optional for generation. When omitted, the genre is taken from the seed file's `genre` field. When provided, it overrides the seed's `genre` (a warning is logged to the validation log).
+
 ## Seed Template
 
 Generate a blank annotated seed file:

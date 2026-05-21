@@ -105,7 +105,12 @@ def _merge_seed_defaults(defaults: dict[str, Any], overrides: dict[str, Any]) ->
     return merged
 
 
-def load_seed(path: str | Path, pack: GenrePack) -> LoadedSeed:
+def load_seed(
+    path: str | Path,
+    pack: GenrePack,
+    *,
+    genre_override: bool = False,
+) -> LoadedSeed:
     seed_path = Path(path).resolve()
     raw = _read_seed_file(seed_path)
     warnings: list[str] = []
@@ -122,9 +127,14 @@ def load_seed(path: str | Path, pack: GenrePack) -> LoadedSeed:
         )
 
     if raw.get("genre") != pack.metadata.pack_name:
-        raise SeedValidationError(
-            f"seed genre mismatch: expected {pack.metadata.pack_name}, got {raw.get('genre')!r}"
+        if not genre_override:
+            raise SeedValidationError(
+                f"seed genre mismatch: expected {pack.metadata.pack_name}, got {raw.get('genre')!r}"
+            )
+        warnings.append(
+            f"--genre overrides seed genre {raw.get('genre')!r} with {pack.metadata.pack_name!r}"
         )
+        raw["genre"] = pack.metadata.pack_name
 
     # Strip retired fields before merging so they don't end up in the
     # pack defaults' carry-forward.

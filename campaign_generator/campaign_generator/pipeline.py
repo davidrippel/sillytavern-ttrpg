@@ -207,6 +207,7 @@ def run_pipeline(
     llm_client: LLMClient | None = None,
     progress_callback: ProgressCallback | None = None,
     resume: bool = False,
+    genre_override: bool = False,
 ) -> PipelineResult:
     started_at = time.monotonic()
     output_dir = Path(output_path).resolve()
@@ -219,7 +220,7 @@ def run_pipeline(
     (stages_dir / "validation_log.txt").touch(exist_ok=True)
 
     pack = load_pack(genre_path)
-    loaded_seed = load_seed(seed_path, pack)
+    loaded_seed = load_seed(seed_path, pack, genre_override=genre_override)
     if random_seed is not None:
         loaded_seed.resolved.random_seed = random_seed
 

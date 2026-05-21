@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 import typer
+import yaml
 from rich.console import Console
 
 from common.env import load_project_dotenv
@@ -50,8 +51,19 @@ def main(
         console.print(f"Wrote seed template to {destination}")
         return
 
-    if genre is None or seed is None:
-        raise typer.BadParameter("--genre and --seed are required for generation")
+    if seed is None:
+        raise typer.BadParameter("--seed is required for generation")
+
+    genre_override = genre is not None
+    if genre is None:
+        with seed.open("r", encoding="utf-8") as handle:
+            seed_data = yaml.safe_load(handle) or {}
+        seed_genre = seed_data.get("genre") if isinstance(seed_data, dict) else None
+        if not seed_genre:
+            raise typer.BadParameter(
+                "--genre was not provided and the seed file has no 'genre' field"
+            )
+        genre = seed_genre
 
     resolved_genre = resolve_genre_input(genre)
     pack = load_pack(resolved_genre)
@@ -72,6 +84,7 @@ def main(
         stages=stages,
         progress_callback=_progress,
         resume=resume,
+        genre_override=genre_override,
     )
     console.print(f"Campaign written to {result.output_dir}")
 

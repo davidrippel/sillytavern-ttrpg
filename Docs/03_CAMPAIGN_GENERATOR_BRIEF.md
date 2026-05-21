@@ -39,7 +39,7 @@ python -m campaign_generator \
 
 Flags:
 
-- `--genre PATH` — pack directory (or pack name when `CAMPAIGN_GENERATOR_GENRES_BASE_DIR` is set).
+- `--genre PATH` — pack directory (or pack name when `CAMPAIGN_GENERATOR_GENRES_BASE_DIR` is set). Optional for generation: when omitted, the seed's `genre` field is used; when supplied, it overrides the seed's `genre`. Required with `--init-seed`.
 - `--seed PATH` — campaign seed YAML.
 - `--output PATH` — campaign directory to create.
 - `--model STR` — OpenRouter model slug override.
