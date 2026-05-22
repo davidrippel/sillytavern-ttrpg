@@ -134,15 +134,16 @@ export function listProvisionalFacts(state) {
 
 /**
  * Facts extracted during the current turn that still warrant a chip in
- * the inline review strip. With auto-commit at cooldown 0, freshly
- * extracted facts flip to `accepted` before the chips render — so we
- * include any non-rejected fact tagged with the current turn, giving
- * the user a veto/edit window even though commit already happened.
+ * the inline review strip. The chip strip's blurb tells the user these
+ * facts are in canon, so we only surface facts that have actually been
+ * accepted — a still-provisional fact (e.g. cooldown > 0) isn't in canon
+ * yet and would make that promise a lie. Provisional facts will get
+ * their chip once `autoCommitStaleProvisional` promotes them.
  */
 export function listFactsForReview(state) {
     const turn = Number(state.turn);
     return state.facts.filter(
-        (f) => Number(f.turn) === turn && f.status !== FACT_STATUS.rejected,
+        (f) => Number(f.turn) === turn && f.status === FACT_STATUS.accepted,
     );
 }
 

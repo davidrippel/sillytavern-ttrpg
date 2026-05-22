@@ -29,6 +29,19 @@ export function getSettings() {
     target.backup ??= structuredClone(DEFAULT_SETTINGS.backup);
     target.authorsNote ??= structuredClone(DEFAULT_SETTINGS.authorsNote);
     target.factExtractor ??= structuredClone(DEFAULT_SETTINGS.factExtractor);
+    // Backfill any keys that were added to DEFAULT_SETTINGS.factExtractor
+    // after this user's settings document was first persisted.
+    for (const [key, value] of Object.entries(DEFAULT_SETTINGS.factExtractor)) {
+        if (!(key in target.factExtractor)) target.factExtractor[key] = value;
+    }
+    // One-time migration: the cooldown default was 1 in early v3 builds,
+    // then changed to 0. The chip strip's "added to canon" message and
+    // the AN's immediate-freshness contract both assume same-turn commit,
+    // so reset the stale value to the current default. There is no UI
+    // for this setting, so a value of 1 cannot reflect user intent.
+    if (target.factExtractor.autoCommitAfterTurns === 1) {
+        target.factExtractor.autoCommitAfterTurns = DEFAULT_SETTINGS.factExtractor.autoCommitAfterTurns;
+    }
     target.ui ??= structuredClone(DEFAULT_SETTINGS.ui);
     target.characters ??= {};
     if (!('activeCharacterId' in target)) {
