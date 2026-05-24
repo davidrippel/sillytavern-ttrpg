@@ -98,6 +98,7 @@ Retired v1 models: `Beat`, `ActOutline.beats`, `Node`, `NodeGraph`, `Clue`, `Clu
 ```
 <output>/
 ├── opening_hook.txt
+├── sample_characters.json        # copy of stages/sample_characters.json for easy extension import
 ├── <campaign_title_slug>.json    # the campaign lorebook (includes the turn-0 AN seed as a disabled entry)
 ├── stages/
 │   ├── premise.json

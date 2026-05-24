@@ -540,6 +540,9 @@ def run_pipeline(
         _stage_cache_path(stages_dir, "sample_characters"),
         sample_characters.model_dump(),
     )
+    _write_json(output_dir / "sample_characters.json", sample_characters.model_dump())
+    if progress_callback is not None:
+        progress_callback("Wrote sample_characters.json")
 
     # ---- Cross-stage sanity -------------------------------------------
     validate_cross_stage(

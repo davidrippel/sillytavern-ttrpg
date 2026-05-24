@@ -58,6 +58,7 @@ python -m campaign_generator \
 A successful run writes:
 
 - `opening_hook.txt` — player-facing premise, tone, character-creation guidance pointing at the pack's `advantages_disadvantages` reference, and the opening scene.
+- `sample_characters.json` — story-mode sample protagonists (same data also embedded in the lorebook); convenient for importing into the extension.
 - `<campaign_title_slug>.json` — the campaign lorebook. Constant entries the runtime reads:
   - `__pack_gm_overlay` (embedded pack overlay)
   - `__pack_complications` (pack universal + campaign-specific complications)
