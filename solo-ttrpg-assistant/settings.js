@@ -252,10 +252,18 @@ async function handleSampleCharactersImport(event) {
             toastr.warning('No characters found in that file. Expected a sample_characters.json from the campaign generator.');
             return;
         }
-        const picked = await promptSampleCharacterChoice(characters);
-        if (!picked) return;
-        const created = createCharacterFromSample(picked);
-        toastr.success(`Imported "${created.name || 'unnamed'}" from campaign pregens.`);
+        const picks = await promptSampleCharacterPicks(characters);
+        if (picks === null) return;
+        if (picks.length === 0) {
+            toastr.info('No characters selected.');
+            return;
+        }
+        let imported = 0;
+        for (const sample of picks) {
+            createCharacterFromSample(sample);
+            imported += 1;
+        }
+        toastr.success(`Imported ${imported} character${imported === 1 ? '' : 's'} from campaign pregens.`);
     } catch (error) {
         toastr.error(`Sample-characters import failed: ${error.message}`);
         log(`Sample-characters import failed: ${error.message}`, 'warn');
@@ -280,32 +288,102 @@ function extractSampleCharacters(payload) {
     return [];
 }
 
-async function promptSampleCharacterChoice(characters) {
+async function promptSampleCharacterPicks(characters) {
     const context = getContext();
-    const choices = characters.map((c, idx) => ({ value: String(idx), label: c.name || `(unnamed #${idx + 1})` }));
 
-    // SillyTavern's Popup API supports a simple select-popup. Fall back to
-    // a plain prompt if it isn't available (very old client builds).
-    try {
-        if (context.Popup?.show?.input) {
-            const labels = choices.map((c) => `${c.value}: ${c.label}`).join('\n');
-            const raw = await context.Popup.show.input(
-                'Import pregenerated character',
-                `Type the number of the character to import:\n\n${labels}`,
-                '0',
-            );
-            if (raw === null || raw === undefined || raw === '') return null;
-            const idx = Number(raw);
-            return Number.isFinite(idx) && idx >= 0 && idx < characters.length ? characters[idx] : null;
-        }
-    } catch {
-        // Fall through to native prompt.
+    if (context?.Popup && context?.POPUP_TYPE && context?.POPUP_RESULT) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'solo-ttrpg-assistant solo-stack';
+
+        const heading = document.createElement('h4');
+        heading.textContent = 'Select characters to import';
+        wrapper.append(heading);
+
+        const hint = document.createElement('p');
+        hint.textContent = `${characters.length} sample character${characters.length === 1 ? '' : 's'} found. Choose which to import.`;
+        wrapper.append(hint);
+
+        const list = document.createElement('div');
+        list.className = 'solo-stack';
+        list.style.maxHeight = '60vh';
+        list.style.overflowY = 'auto';
+        list.style.paddingRight = '8px';
+
+        const checkboxes = characters.map((sample, idx) => {
+            const label = sample?.name || `(unnamed #${idx + 1})`;
+
+            const row = document.createElement('div');
+            row.className = 'solo-stack';
+            row.style.padding = '6px 0';
+            row.style.borderBottom = '1px solid var(--SmartThemeBorderColor, rgba(255,255,255,0.1))';
+
+            const top = document.createElement('div');
+            top.style.display = 'flex';
+            top.style.alignItems = 'center';
+            top.style.gap = '8px';
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = true;
+            cb.dataset.idx = String(idx);
+
+            const title = document.createElement('strong');
+            title.textContent = label;
+            title.style.cursor = 'pointer';
+            title.addEventListener('click', (e) => {
+                e.preventDefault();
+                cb.checked = !cb.checked;
+            });
+
+            top.append(cb, title);
+            row.append(top);
+
+            const concept = String(sample?.concept ?? '').trim();
+            if (concept) {
+                const conceptEl = document.createElement('div');
+                conceptEl.textContent = concept;
+                conceptEl.style.marginLeft = '24px';
+                conceptEl.style.fontSize = '0.9em';
+                row.append(conceptEl);
+            }
+
+            const hook = String(sample?.hook_into_campaign ?? sample?.hook ?? '').trim();
+            if (hook) {
+                const hookEl = document.createElement('div');
+                hookEl.textContent = hook;
+                hookEl.style.opacity = '0.7';
+                hookEl.style.marginLeft = '24px';
+                hookEl.style.fontSize = '0.85em';
+                hookEl.style.fontStyle = 'italic';
+                row.append(hookEl);
+            }
+
+            list.append(row);
+            return cb;
+        });
+
+        wrapper.append(list);
+
+        const popup = new context.Popup(wrapper, context.POPUP_TYPE.CONFIRM, '', {
+            okButton: 'Import',
+            cancelButton: 'Cancel',
+        });
+        const result = await popup.show();
+        if (result !== context.POPUP_RESULT.AFFIRMATIVE) return null;
+        return checkboxes
+            .filter((cb) => cb.checked)
+            .map((cb) => characters[Number(cb.dataset.idx)]);
     }
-    const labels = choices.map((c) => `${c.value}: ${c.label}`).join('\n');
+
+    // Fallback for very old SillyTavern builds without the Popup API.
+    const labels = characters
+        .map((c, idx) => `${idx}: ${c?.name || `(unnamed #${idx + 1})`}`)
+        .join('\n');
     const raw = globalThis.prompt(`Pick a character (0–${characters.length - 1}):\n\n${labels}`, '0');
     if (raw === null) return null;
     const idx = Number(raw);
-    return Number.isFinite(idx) && idx >= 0 && idx < characters.length ? characters[idx] : null;
+    if (!Number.isFinite(idx) || idx < 0 || idx >= characters.length) return [];
+    return [characters[idx]];
 }
 
 function createCharacterFromSample(sample) {

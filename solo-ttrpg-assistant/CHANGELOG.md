@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Pregen character import now opens a multi-select dialog listing every sample character with name, concept, and campaign hook (all pre-checked). Imports the picked subset in one pass, restoring the pre-V2 UX. The earlier "type a number" prompt is kept as a fallback for SillyTavern builds without the Popup API.
+
 ## 2.0.0 — Story-mode rebuild
 
 The runtime is reworked around the v3 design described in [`Docs/04_EXTENSION_BRIEF.md`](../Docs/04_EXTENSION_BRIEF.md). Stat-mode, beat-mode, and node-mode are all retired; the system runs story-mode only.
