@@ -142,12 +142,13 @@ Both are toggleable in the Director card.
 
 ## Settings panel
 
-One flat panel; no nested submenus. Mounted into `#extensions_settings2`. Five collapsible `<details>` cards:
+One flat panel; no nested submenus. Mounted into `#extensions_settings2`. Six collapsible `<details>` cards:
 
 - **Campaign & Pack** — pack picker, load-pack directory input, backup export/import.
 - **Character** — character CRUD, persona link, the in-panel sheet.
 - **Story** — turn counter, live threads list, recent accepted facts, truths revealed, scene context, rewind-to-turn.
 - **Director** — extractor toggle, inline-UI toggles, manual-fact entry, active director's note + pressure cue display, AN rebuild button.
+- **Portrait Prompts** — NPC picker + read-only textarea showing the image-gen prompt for the selected NPC, with a copy-to-clipboard button. Reads disabled `NPC Image Prompt: <name>` entries from the active lorebook (written by [`image_generator`](../image_generator/README.md#lorebook-patching)).
 - **Debug** — activity log and a state-dump button.
 
 Nothing in the panel references attributes, abilities, resources, dice, or STATUS_UPDATE — those concepts are gone.
@@ -176,6 +177,7 @@ solo-ttrpg-assistant/
 │   ├── sheet.js           — v3 character-sheet UI + prompt-side rendering
 │   ├── characters.js      — character CRUD (no mode field)
 │   ├── pack.js            — v2 pack loader + lorebook helpers
+│   ├── portrait_prompts.js — Portrait Prompts card: NPC picker + prompt copy
 │   ├── persona_link.js    — persona-to-character binding
 │   ├── backup.js          — ZIP export/import
 │   └── logger.js          — bounded activity log

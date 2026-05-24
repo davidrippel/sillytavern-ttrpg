@@ -31,6 +31,7 @@ import { openThread, retireThread, listAllActiveThreads } from './modules/thread
 import { refreshAllFactChips, renderThreadsTray } from './modules/inline_ui.js';
 import { getExtensionPath, PACK_LOREBOOK_ENTRIES } from './modules/constants.js';
 import { findLorebookEntryByComment } from './modules/lorebook_v2.js';
+import { wirePortraitPromptsCard } from './modules/portrait_prompts.js';
 import {
     ensureStoryStateShape,
     escapeHtml,
@@ -68,6 +69,7 @@ export async function mountSettingsPanel() {
     wireCharacterCard();
     wireStoryCard();
     wireDirectorCard();
+    wirePortraitPromptsCard(panelRoot);
     wireDebugCard();
 
     mountSheet(panelRoot.find('#solo-sheet-root'));

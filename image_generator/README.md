@@ -38,6 +38,8 @@ Flags:
 - `--style-override TEXT` — force a single visual style for this render pass. Useful when the stored prompts mix media like sketch/comic/oil painting and you want a photorealistic re-render.
 - `--overwrite` — regenerate portraits even if the PNG file already exists. Without this, existing files are skipped, so repeated runs are cheap.
 - `--only NAME[,NAME,...]` — render only the listed NPC names (matched exactly against `name` in `npcs.json`). Useful for re-rendering a single character.
+- `--prompts-only` — resolve and record image prompts in `index.json` without calling the image API.
+- `--no-lorebook-patch` — skip embedding NPC image prompts into the campaign's lorebook (see [Lorebook patching](#lorebook-patching) below).
 
 Example: re-render an existing campaign photorealistically.
 
@@ -77,6 +79,12 @@ File names are slugified from each NPC's `name`. Collisions (rare) get `_2`, `_3
 `index.json` is updated incrementally after each successful render, so a partial run leaves a usable manifest behind. It stores the effective prompt actually sent to the model for that render pass; if you use `--style-override` or `IMAGE_GEN_STYLE_OVERRIDE`, the original source prompt still remains in `<campaign_dir>/stages/npcs.json`.
 
 `index.json` is also pre-populated by `campaign_generator` itself at the end of the npcs stage (when `IMAGE_GEN_MODEL` is set), so you can inspect or hand-edit prompts before running the renderer. Both tools use the same shared helper (`common.portrait_prompts`) so entries written by either side are interchangeable.
+
+## Lorebook patching
+
+After `index.json` is finalized, the renderer also patches the campaign's lorebook JSON file in place, adding one disabled entry per NPC whose `comment` is `NPC Image Prompt: <name>` and whose `content` is the effective prompt. The entries have empty keys, `disable: true`, and `probability: 0`, so they never inject into the LLM context — they exist purely so the SillyTavern extension can surface the prompts in its "Portrait Prompts" card (see [`solo-ttrpg-assistant`](../solo-ttrpg-assistant/)).
+
+Re-runs are idempotent: existing `NPC Image Prompt:` entries are updated in place rather than duplicated. Pass `--no-lorebook-patch` to skip this step.
 
 ## Loading into SillyTavern
 

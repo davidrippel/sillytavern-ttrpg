@@ -21,6 +21,7 @@ from common.settings import (
 )
 
 from .client import ImageGenError, OpenRouterImageClient
+from .lorebook_patch import LorebookPatchError, patch_lorebook_with_prompts
 
 
 ProgressCallback = Callable[[str], None]
@@ -46,6 +47,7 @@ def render_campaign(
     overwrite: bool = False,
     only: Iterable[str] | None = None,
     prompts_only: bool = False,
+    patch_lorebook: bool = True,
     progress_callback: ProgressCallback | None = None,
     client: OpenRouterImageClient | None = None,
 ) -> Path:
@@ -141,5 +143,17 @@ def render_campaign(
         write_manifest(manifest_path, manifest)
         if progress_callback is not None:
             progress_callback(f"Wrote {out_path.relative_to(campaign_dir)}")
+
+    if patch_lorebook:
+        try:
+            lorebook_path, added, updated = patch_lorebook_with_prompts(campaign_dir)
+        except LorebookPatchError as exc:
+            if progress_callback is not None:
+                progress_callback(f"Skipped lorebook patch: {exc}")
+        else:
+            if progress_callback is not None and (added or updated):
+                progress_callback(
+                    f"Patched {lorebook_path.name}: +{added} new, {updated} updated NPC image prompt entries"
+                )
 
     return images_dir

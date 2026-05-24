@@ -49,6 +49,11 @@ def main(
         "--prompts-only",
         help="Resolve and record image prompts in index.json without calling the image API.",
     ),
+    no_lorebook_patch: bool = typer.Option(
+        False,
+        "--no-lorebook-patch",
+        help="Skip embedding NPC image prompts into the campaign's lorebook as disabled entries.",
+    ),
 ) -> None:
     only_list = [name.strip() for name in only.split(",")] if only else None
     images_dir = render_campaign(
@@ -58,6 +63,7 @@ def main(
         overwrite=overwrite,
         only=only_list,
         prompts_only=prompts_only,
+        patch_lorebook=not no_lorebook_patch,
         progress_callback=_progress,
     )
     if prompts_only:
