@@ -42,7 +42,7 @@ Flags:
 - `--genre PATH` — pack directory (or pack name when `CAMPAIGN_GENERATOR_GENRES_BASE_DIR` is set). Optional for generation: when omitted, the seed's `genre` field is used; when supplied, it overrides the seed's `genre`. Required with `--init-seed`.
 - `--seed PATH` — campaign seed YAML.
 - `--output PATH` — campaign directory to create.
-- `--model STR` — OpenRouter model slug override.
+- `--model STR` — global model override; pins every stage to this model and skips two-tier routing. Otherwise stages route via `PRIMARY_MODEL` / `CHEAP_MODEL` per the table in [`campaign_generator/README.md`](../campaign_generator/README.md). Per-stage overrides live under `stage_models:` in the seed.
 - `--stages STR` — `all` or comma-separated stage names for partial re-runs.
 - `--dry-run` — use the cheap dry-run model.
 - `--random-seed INT` — picks the naming-diversity seed.

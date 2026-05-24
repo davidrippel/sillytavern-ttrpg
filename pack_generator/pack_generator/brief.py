@@ -56,6 +56,13 @@ class GenreBrief(BaseModel):
     example_characters: str | None = None
     campaign_style_hint: str | None = None
 
+    # Optional generator-runtime knobs. ``model`` (when set) overrides the
+    # two-tier routing globally for every stage. ``stage_models`` lets the
+    # author pin specific stages to a tier ("primary" / "cheap") or a
+    # literal OpenRouter model id.
+    model: str | None = None
+    stage_models: dict[str, str] | None = None
+
     @field_validator("pack_name")
     @classmethod
     def _snake_case_pack_name(cls, value: str) -> str:

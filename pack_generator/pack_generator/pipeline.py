@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from common.llm import LLMClient, OpenRouterClient
-from common.progress import format_duration, format_usage_summary
-from common.settings import get_default_model, get_default_temperature, get_dry_run_model
+from common.model_tiers import resolve_stage_model
+from common.progress import format_duration, format_per_model_summary, format_usage_summary
+from common.settings import get_default_temperature, get_dry_run_model
 from common.validation import ValidationLog
 from pydantic import BaseModel
 
@@ -75,6 +76,13 @@ STAGE_MODELS: dict[str, type[BaseModel]] = {
 }
 
 LLM_STAGES = list(STAGE_MODELS.keys())
+
+# Every pack-generator stage defaults to the primary tier (Sonnet). Pack
+# runs are small (~50k tokens) and pack quality affects every campaign
+# generated from the pack, so the marginal cost over DeepSeek is worth
+# it. Override individual stages via brief `stage_models:` if you want
+# to tune.
+PACK_STAGE_TIERS: dict[str, str] = {name: "primary" for name in STAGE_MODELS}
 
 
 class PipelineResult(BaseModel):
@@ -145,14 +153,33 @@ def run_pipeline(
     retries_log_path.touch(exist_ok=True)
 
     selected = _normalize_stage_selection(stages)
-    resolved_model = model or (get_dry_run_model() if dry_run else get_default_model())
+    # Global override pins every stage. Otherwise each stage resolves via
+    # PACK_STAGE_TIERS with optional per-stage overrides from the brief.
+    global_model_override = model or brief.model or (get_dry_run_model() if dry_run else None)
+    stage_overrides = brief.stage_models
+
+    def model_for(stage_name: str) -> str:
+        return resolve_stage_model(
+            stage_name,
+            PACK_STAGE_TIERS,
+            overrides=stage_overrides,
+            global_override=global_model_override,
+        )
+
     temperature = get_default_temperature()
     client = llm_client or OpenRouterClient(call_log_path=calls_log)
 
     if progress_callback is not None:
-        progress_callback(
-            f"Pack generation started for brief {brief.pack_name!r} with model {resolved_model!r}"
-        )
+        if global_model_override:
+            progress_callback(
+                f"Pack generation started for brief {brief.pack_name!r} "
+                f"with global model {global_model_override!r}"
+            )
+        else:
+            progress_callback(
+                f"Pack generation started for brief {brief.pack_name!r} "
+                f"with two-tier routing (primary={model_for('tone_and_pillars')})"
+            )
 
     overall_started = time.monotonic()
 
@@ -192,7 +219,7 @@ def run_pipeline(
             client=client,
             system_prompt=_load_prompt(tone_stage.PROMPT_FILE),
             brief=brief,
-            model=resolved_model,
+            model=model_for("tone_and_pillars"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -207,7 +234,7 @@ def run_pipeline(
             system_prompt=_load_prompt(gm_overlay_stage.PROMPT_FILE),
             brief=brief,
             tone=tone,
-            model=resolved_model,
+            model=model_for("gm_prompt_overlay"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -223,7 +250,7 @@ def run_pipeline(
             brief=brief,
             tone=tone,
             overlay=overlay,
-            model=resolved_model,
+            model=model_for("advantages_disadvantages"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -239,7 +266,7 @@ def run_pipeline(
             brief=brief,
             tone=tone,
             overlay=overlay,
-            model=resolved_model,
+            model=model_for("complications"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -275,7 +302,7 @@ def run_pipeline(
             brief=brief,
             tone=tone,
             overlay=overlay,
-            model=resolved_model,
+            model=model_for("example_hooks"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -291,7 +318,7 @@ def run_pipeline(
             brief=brief,
             tone=tone,
             overlay=overlay,
-            model=resolved_model,
+            model=model_for("naming"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -307,7 +334,7 @@ def run_pipeline(
             brief=brief,
             tone=tone,
             overlay=overlay,
-            model=resolved_model,
+            model=model_for("generator_seed"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -323,7 +350,7 @@ def run_pipeline(
             brief=brief,
             tone=tone,
             overlay=overlay,
-            model=resolved_model,
+            model=model_for("pack_yaml"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -347,7 +374,7 @@ def run_pipeline(
             generator_seed=generator_seed,
             pack_description=pack_description,
             retries_log=retries_log_summary,
-            model=resolved_model,
+            model=model_for("review_checklist"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -381,8 +408,11 @@ def run_pipeline(
         total = time.monotonic() - overall_started
         usage = client.usage_snapshot()
         progress_callback(
-            f"Pack generation finished ({format_duration(total)}, {format_usage_summary(usage)}, model={resolved_model})"
+            f"Pack generation finished ({format_duration(total)}, {format_usage_summary(usage)})"
         )
+        per_model = client.usage_by_model()
+        if len(per_model) > 1 or (per_model and not global_model_override):
+            progress_callback(f"  Per-model: {format_per_model_summary(per_model)}")
 
     return PipelineResult(output_dir=output_dir, pack_name=brief.pack_name)
 

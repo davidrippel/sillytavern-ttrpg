@@ -54,6 +54,7 @@ class CampaignSeed(BaseModel):
     random_seed: int | None = None
     model: str | None = None
     temperature: float | None = None
+    stage_models: dict[str, str] | None = None
     strictness: StrictnessConfig | None = None
 
     @model_validator(mode="after")

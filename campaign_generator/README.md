@@ -98,8 +98,35 @@ These v1 outputs are retired:
 ## Environment
 
 - `OPENROUTER_API_KEY` is read from the repo-root `.env` if present.
-- `OPENROUTER_MODEL` and `OPENROUTER_DRY_RUN_MODEL` override the model picked for live and `--dry-run` runs respectively.
+- `PRIMARY_MODEL` and `CHEAP_MODEL` set the two-tier routing (see below).
+- `CAMPAIGN_GENERATOR_DRY_RUN_MODEL` overrides the model used for `--dry-run`.
 - `CAMPAIGN_GENERATOR_GENRES_BASE_DIR` and `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` let `--genre <pack_name>` and bare `--output ./campaigns/...` resolve relative paths.
+
+## Two-tier model routing
+
+Each pipeline stage is tagged with a tier: `primary` (Sonnet 4.6 by default — structural / voice-critical work) or `cheap` (DeepSeek v3.2 by default — bulk descriptive content). Defaults per stage:
+
+| Stage | Tier |
+|---|---|
+| `premise`, `plot_skeleton`, `factions` | primary |
+| `npcs` | primary (NPC naming is quality-sensitive) |
+| `locations` | cheap (descriptive bulk; no naming pressure) |
+| `truths`, `complications`, `branches` | primary |
+| `sample_characters` | primary |
+| `pc_known_npcs` | cheap |
+| `opening_hook` | primary |
+
+The looped stages (`npcs`, `locations`) use **Anthropic prompt caching** for the shared world-bible context, so calls 2..N on Sonnet pay only the cache-read rate (~10% of base input) for the cached chunk.
+
+Override per stage in the seed:
+
+```yaml
+stage_models:
+  npcs: cheap                       # use cheap tier for NPCs in this campaign
+  premise: openai/gpt-5             # or pin to a literal OpenRouter id
+```
+
+Override globally with the seed's top-level `model:` field or the `--model` CLI flag — these pin every stage to one model. Useful for A/B'ing whole runs against a single model.
 
 ## Tests
 

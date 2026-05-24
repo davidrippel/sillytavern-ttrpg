@@ -24,6 +24,16 @@ def format_usage_summary(usage: UsageStats) -> str:
     return f"{usage.calls} {call_label}, {usage.total_tokens} tokens, {usage.cost:.4f} credits"
 
 
+def format_per_model_summary(usage_by_model: dict[str, UsageStats]) -> str:
+    """One-line breakdown of usage per model id, ordered by cost desc."""
+    if not usage_by_model:
+        return "(no LLM calls)"
+    rows = sorted(usage_by_model.items(), key=lambda kv: kv[1].cost, reverse=True)
+    return "; ".join(
+        f"{model}: {format_usage_summary(stats)}" for model, stats in rows
+    )
+
+
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:

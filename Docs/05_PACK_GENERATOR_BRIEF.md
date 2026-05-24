@@ -43,7 +43,7 @@ Flags:
 
 - `--brief PATH` (required) — genre brief YAML
 - `--output PATH` (required) — pack directory to create (must not exist, or must contain only `_stages/` from a prior run)
-- `--model STR` — OpenRouter model slug
+- `--model STR` — global model override; pins every stage to this model and skips two-tier routing. Otherwise every pack stage defaults to `PRIMARY_MODEL` (Sonnet 4.6 by default); per-stage overrides live under `stage_models:` in the brief (see [`pack_generator/README.md`](../pack_generator/README.md)).
 - `--stages STR` — `all` or comma-separated list (for re-running specific stages from cache)
 - `--dry-run` — use cheap model
 

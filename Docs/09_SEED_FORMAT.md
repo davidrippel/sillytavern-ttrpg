@@ -63,8 +63,14 @@ num_sample_characters: 5
 
 # Optional generation controls.
 random_seed: 44119
-model: anthropic/claude-sonnet-4.5
+model: anthropic/claude-sonnet-4.5    # global override; pins every stage to this model
 temperature: 0.7
+
+# Optional per-stage overrides for two-tier routing. Values: "primary",
+# "cheap", or a literal OpenRouter model id.
+stage_models:
+  npcs: cheap
+  premise: openai/gpt-5
 
 # Optional strictness overrides. Merge field-by-field with pack defaults.
 strictness:
@@ -127,8 +133,9 @@ strictness:
 ### Generation controls
 
 - `random_seed` — reproducibility hint. Picks the naming-diversity seed and may inform LLM sampling on supported models.
-- `model` — OpenRouter model slug. Overrides the env default for this run.
+- `model` — global model override. When set, every stage uses this model and two-tier routing is skipped. Useful for A/B'ing a whole run against a single model.
 - `temperature` — sampling temperature. Defaults to the env value.
+- `stage_models` — per-stage map for two-tier routing. Values may be `"primary"` (resolves via `$PRIMARY_MODEL`), `"cheap"` (resolves via `$CHEAP_MODEL`), or a literal OpenRouter model id. The campaign-generator README lists each stage's default tier.
 
 ### Strictness
 

@@ -35,8 +35,10 @@ from typing import Any
 from pydantic import BaseModel
 
 from common.llm import LLMClient, OpenRouterClient, UsageStats
+from common.model_tiers import resolve_stage_model
 from common.pack import GenrePack, load_pack
-from common.settings import get_default_model, get_default_temperature, get_dry_run_model
+from common.progress import format_per_model_summary
+from common.settings import get_default_temperature, get_dry_run_model
 
 from .artifacts import serialize_location_catalog, serialize_plot_skeleton
 from .diversity import collect_recent_names, pick_diversity_seed
@@ -98,6 +100,24 @@ STAGE_MODELS: dict[str, type[BaseModel]] = {
     "branches": BranchPlan,
     "sample_characters": SampleCharacterSet,
     "pc_known_npcs": PCKnownNPCs,
+}
+
+# Default tier per stage. `primary` runs on $PRIMARY_MODEL (Sonnet 4.6 by
+# default); `cheap` runs on $CHEAP_MODEL (DeepSeek v3.2 by default).
+# Loops (npcs, locations) get prompt-caching automatically when the
+# resolved model is Anthropic.
+CAMPAIGN_STAGE_TIERS: dict[str, str] = {
+    "premise": "primary",
+    "plot_skeleton": "primary",
+    "factions": "primary",
+    "npcs": "primary",          # user flagged DeepSeek's naming as weak
+    "locations": "cheap",       # descriptive bulk; no naming pressure
+    "truths": "primary",
+    "complications": "primary",
+    "branches": "primary",
+    "sample_characters": "primary",
+    "pc_known_npcs": "cheap",
+    "opening_hook": "primary",  # rendered prose; only one LLM call
 }
 
 
@@ -231,16 +251,39 @@ def run_pipeline(
             progress_callback(f"Seed warning: {warning}")
 
     selected = _normalize_stage_selection(stages)
-    resolved_model = (
+    # Global override (seed `model:`, CLI `--model`, or dry-run model) pins
+    # every stage to the same model. Otherwise each stage resolves via its
+    # tier in CAMPAIGN_STAGE_TIERS, optionally overridden per stage by
+    # `stage_models:` in the seed.
+    global_model_override = (
         loaded_seed.resolved.model
         or (get_dry_run_model() if dry_run else model)
-        or get_default_model()
     )
+    stage_overrides = loaded_seed.resolved.stage_models
+
+    def model_for(stage_name: str) -> str:
+        return resolve_stage_model(
+            stage_name,
+            CAMPAIGN_STAGE_TIERS,
+            overrides=stage_overrides,
+            global_override=global_model_override,
+        )
+
     temperature = loaded_seed.resolved.temperature or get_default_temperature()
     if progress_callback is not None:
-        progress_callback(
-            f"Campaign generation started for pack '{pack.metadata.pack_name}' with model '{resolved_model}'"
-        )
+        if global_model_override:
+            progress_callback(
+                f"Campaign generation started for pack '{pack.metadata.pack_name}' "
+                f"with global model '{global_model_override}'"
+            )
+        else:
+            tier_summary = ", ".join(
+                f"{stage}={model_for(stage)}" for stage in ("premise", "npcs", "locations")
+            )
+            progress_callback(
+                f"Campaign generation started for pack '{pack.metadata.pack_name}' "
+                f"with two-tier routing ({tier_summary}, …)"
+            )
 
     client = llm_client or OpenRouterClient(call_log_path=stages_dir / "calls.jsonl")
 
@@ -258,7 +301,7 @@ def run_pipeline(
             system_prompt=_load_prompt("01_premise.md"),
             pack=pack,
             seed=loaded_seed.resolved,
-            model=resolved_model,
+            model=model_for("premise"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -281,7 +324,7 @@ def run_pipeline(
             pack=pack,
             premise=premise,
             seed=loaded_seed.resolved,
-            model=resolved_model,
+            model=model_for("plot_skeleton"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -305,7 +348,7 @@ def run_pipeline(
             pack=pack,
             premise=premise,
             plot=plot,
-            model=resolved_model,
+            model=model_for("factions"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -343,7 +386,7 @@ def run_pipeline(
             plot=plot,
             factions=factions,
             seed=loaded_seed.resolved,
-            model=resolved_model,
+            model=model_for("npcs"),
             temperature=temperature,
             validation_log=validation_log,
             progress_callback=progress_callback,
@@ -372,7 +415,7 @@ def run_pipeline(
             factions=factions,
             npcs=npcs,
             seed=loaded_seed.resolved,
-            model=resolved_model,
+            model=model_for("locations"),
             temperature=temperature,
             validation_log=validation_log,
             progress_callback=progress_callback,
@@ -406,7 +449,7 @@ def run_pipeline(
             npcs=npcs,
             locations=locations,
             seed=loaded_seed.resolved,
-            model=resolved_model,
+            model=model_for("truths"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -433,7 +476,7 @@ def run_pipeline(
             npcs=npcs,
             truths=truths,
             seed=loaded_seed.resolved,
-            model=resolved_model,
+            model=model_for("complications"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -460,7 +503,7 @@ def run_pipeline(
             locations=locations,
             truths=truths,
             seed=loaded_seed.resolved,
-            model=resolved_model,
+            model=model_for("branches"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -487,7 +530,7 @@ def run_pipeline(
             npcs=npcs,
             locations=locations,
             seed=loaded_seed.resolved,
-            model=resolved_model,
+            model=model_for("sample_characters"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -530,7 +573,7 @@ def run_pipeline(
             plot=plot,
             npcs=npcs,
             seed=loaded_seed.resolved,
-            model=resolved_model,
+            model=model_for("pc_known_npcs"),
             temperature=temperature,
             validation_log=validation_log,
         ),
@@ -560,7 +603,7 @@ def run_pipeline(
         client=client,
         system_prompt=_load_prompt(opening_hook_stage.PROMPT_FILE),
         prior_knowledge_system_prompt=_load_prompt(opening_hook_stage.PRIOR_KNOWLEDGE_PROMPT_FILE),
-        model=resolved_model,
+        model=model_for("opening_hook"),
         temperature=temperature,
         validation_log=validation_log,
         progress_callback=progress_callback,
@@ -602,6 +645,9 @@ def run_pipeline(
             f"Campaign generation finished ({_format_duration(total_duration)}, "
             f"{_format_usage_summary(client.usage_snapshot())})"
         )
+        per_model = client.usage_by_model()
+        if len(per_model) > 1 or (per_model and not global_model_override):
+            progress_callback(f"  Per-model: {format_per_model_summary(per_model)}")
 
     return PipelineResult(output_dir=output_dir, pack=pack, seed=loaded_seed)
 

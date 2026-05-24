@@ -26,9 +26,23 @@ python -m pack_generator \
 Flags:
 - `--brief PATH` (required) — the genre brief YAML
 - `--output PATH` (required) — the pack directory to create. Must not exist or must contain only `_stages/` from a previous run (so re-running with `--stages` works against cached output).
-- `--model STR` — override the OpenRouter model slug
+- `--model STR` — global override; pins every stage to this model and skips two-tier routing
 - `--stages STR` — `all` (default) or a comma-separated list of stage names to re-run from cache
 - `--dry-run` — use the cheap dry-run model
+
+### Two-tier model routing
+
+Every pack-generator stage defaults to the **primary tier** (`PRIMARY_MODEL`, Sonnet 4.6 by default). Pack runs are small (~50k tokens total) and pack quality affects every campaign generated from the pack, so the marginal cost over a cheap model is worth it.
+
+Override individual stages from the brief:
+
+```yaml
+stage_models:
+  pack_yaml: cheap                  # assembly-only stage; cheap is fine
+  generator_seed: openai/gpt-4o-mini
+```
+
+Override globally with the brief's top-level `model:` field or `--model`.
 
 Each stage prints a progress line with elapsed time and OpenRouter usage:
 

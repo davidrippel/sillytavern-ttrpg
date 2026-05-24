@@ -157,6 +157,29 @@ def run(
     cast_brief_by_name = {brief["name"]: brief for brief in cast_briefs}
     target_count = max(seed.num_npcs or 10, len(required_names))
     roster: list[NPC] = []
+
+    # World-bible context is identical for every NPC call in this loop, so
+    # it gets cached via cache_prefix on Anthropic models. Per-NPC context
+    # (existing roster, must-use names, repair note) varies per call and
+    # stays in user_prompt. The model receives both, concatenated.
+    stable_context = {
+        "premise": premise.model_dump(),
+        "plot": plot.model_dump(),
+        "factions": factions.model_dump(),
+        "genre": {
+            "name": pack.metadata.display_name,
+            "tone": pack.tone,
+        },
+        "image_style_hint": seed.image_style_hint,
+        "required_npc_names": required_names,
+        "avoid_names": avoid_names or [],
+        "diversity_seed": diversity_seed or {},
+        "target_count": target_count,
+    }
+    cache_prefix = (
+        "Shared campaign context (stable across this loop):\n"
+        + json.dumps(stable_context, indent=2)
+    )
     for index in range(target_count):
         if progress_callback is not None:
             progress_callback(f"Generating NPC {index + 1}/{target_count}")
@@ -169,35 +192,28 @@ def run(
             outstanding_briefs = [
                 cast_brief_by_name[name] for name in outstanding_required if name in cast_brief_by_name
             ]
-            context = {
-                "premise": premise.model_dump(),
-                "plot": plot.model_dump(),
-                "factions": factions.model_dump(),
+            varying_context = {
                 "existing_npcs": [npc.model_dump() for npc in roster],
-                "required_npc_names": required_names,
                 "outstanding_required_npc_names": outstanding_required,
                 "outstanding_required_cast_briefs": outstanding_briefs,
                 "must_use_one_of_names": sorted(must_use_names),
-                "genre": {
-                    "name": pack.metadata.display_name,
-                    "tone": pack.tone,
-                },
-                "image_style_hint": seed.image_style_hint,
-                "avoid_names": avoid_names or [],
-                "diversity_seed": diversity_seed or {},
                 "target_index": index + 1,
-                "target_count": target_count,
                 "repair_note": repair_note,
             }
+            user_prompt = (
+                "Per-NPC context (this call only):\n"
+                + json.dumps(varying_context, indent=2)
+            )
             npc = generate_structured(
                 client=client,
                 stage_name=f"npc_{index + 1}",
                 system_prompt=system_prompt,
-                user_prompt=json.dumps(context, indent=2),
+                user_prompt=user_prompt,
                 schema=NPC,
                 model=model,
                 temperature=temperature,
                 validation_log=validation_log,
+                cache_prefix=cache_prefix,
             )
             faction_name_set = {faction.name for faction in factions.factions}
             errors = _initial_npc_errors(
@@ -232,42 +248,32 @@ def run(
             current_npc = roster[index]
             errors = _relationship_errors(current_npc, roster_names)
             validation_log.write(f"[npc_{index + 1}] relationship repair attempt {attempt}: {'; '.join(errors)}")
+            repair_context = {
+                "existing_npcs": [npc.model_dump() for npc in roster if npc.name != current_npc.name],
+                "outstanding_required_npc_names": [],
+                "outstanding_required_cast_briefs": (
+                    [cast_brief_by_name[current_npc.name]] if current_npc.name in cast_brief_by_name else []
+                ),
+                "must_use_one_of_names": [current_npc.name],
+                "allowed_relationship_names": sorted(roster_names | {"{{user}}"}),
+                "target_index": index + 1,
+                "repair_note": "Repair these constraint failures: "
+                + "; ".join(errors)
+                + f". Keep the NPC name exactly {current_npc.name!r}.",
+            }
             repaired = generate_structured(
                 client=client,
                 stage_name=f"npc_{index + 1}",
                 system_prompt=system_prompt,
-                user_prompt=json.dumps(
-                    {
-                        "premise": premise.model_dump(),
-                        "plot": plot.model_dump(),
-                        "factions": factions.model_dump(),
-                        "existing_npcs": [npc.model_dump() for npc in roster if npc.name != current_npc.name],
-                        "required_npc_names": required_names,
-                        "outstanding_required_npc_names": [],
-                        "outstanding_required_cast_briefs": (
-                            [cast_brief_by_name[current_npc.name]] if current_npc.name in cast_brief_by_name else []
-                        ),
-                        "must_use_one_of_names": [current_npc.name],
-                        "genre": {
-                            "name": pack.metadata.display_name,
-                            "tone": pack.tone,
-                        },
-                        "image_style_hint": seed.image_style_hint,
-                        "allowed_relationship_names": sorted(roster_names | {"{{user}}"}),
-                        "avoid_names": avoid_names or [],
-                        "diversity_seed": diversity_seed or {},
-                        "target_index": index + 1,
-                        "target_count": target_count,
-                        "repair_note": "Repair these constraint failures: "
-                        + "; ".join(errors)
-                        + f". Keep the NPC name exactly {current_npc.name!r}.",
-                    },
-                    indent=2,
+                user_prompt=(
+                    "Per-NPC context (relationship repair):\n"
+                    + json.dumps(repair_context, indent=2)
                 ),
                 schema=NPC,
                 model=model,
                 temperature=temperature,
                 validation_log=validation_log,
+                cache_prefix=cache_prefix,
             )
             repair_errors = _initial_npc_errors(
                 npc=repaired,

@@ -11,6 +11,7 @@ import httpx
 from pydantic import BaseModel, ValidationError
 
 from .env import load_project_dotenv
+from .model_tiers import is_anthropic_model
 from .retrying import retry_call
 from .settings import (
     get_openrouter_api_url,
@@ -43,6 +44,47 @@ class UsageStats:
         )
 
 
+def _build_messages(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    cache_prefix: str | None,
+    model: str,
+) -> list[dict[str, Any]]:
+    """Build the chat-completion messages list, applying Anthropic prompt
+    caching when ``cache_prefix`` is provided and the model is Anthropic.
+
+    For Anthropic models with a ``cache_prefix``, the user message becomes
+    a list of content blocks where the prefix carries
+    ``cache_control: ephemeral`` so it can be reused across subsequent
+    calls in the same loop (e.g. NPC / location generation).
+
+    For non-Anthropic models the prefix is concatenated into the user
+    prompt; OpenRouter handles caching for other providers via different
+    mechanisms we don't try to emulate here.
+    """
+    if cache_prefix and is_anthropic_model(model):
+        return [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": cache_prefix,
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                    {"type": "text", "text": user_prompt},
+                ],
+            },
+        ]
+    combined_user = f"{cache_prefix}\n\n{user_prompt}" if cache_prefix else user_prompt
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": combined_user},
+    ]
+
+
 def _extract_json(raw: str) -> Any:
     text = raw.strip()
     if text.startswith("```"):
@@ -58,11 +100,15 @@ def _extract_json(raw: str) -> Any:
 class LLMClient:
     def __init__(self) -> None:
         self._usage_totals = UsageStats()
+        self._usage_by_model: dict[str, UsageStats] = {}
 
     def usage_snapshot(self) -> UsageStats:
         return self._usage_totals
 
-    def _record_usage(self, usage: dict[str, Any] | None) -> None:
+    def usage_by_model(self) -> dict[str, UsageStats]:
+        return dict(self._usage_by_model)
+
+    def _record_usage(self, usage: dict[str, Any] | None, model: str | None = None) -> None:
         usage = usage or {}
         prompt_tokens = int(usage.get("prompt_tokens") or 0)
         completion_tokens = int(usage.get("completion_tokens") or 0)
@@ -75,6 +121,15 @@ class LLMClient:
             total_tokens=self._usage_totals.total_tokens + total_tokens,
             cost=self._usage_totals.cost + cost,
         )
+        if model:
+            prev = self._usage_by_model.get(model, UsageStats())
+            self._usage_by_model[model] = UsageStats(
+                calls=prev.calls + 1,
+                prompt_tokens=prev.prompt_tokens + prompt_tokens,
+                completion_tokens=prev.completion_tokens + completion_tokens,
+                total_tokens=prev.total_tokens + total_tokens,
+                cost=prev.cost + cost,
+            )
 
     def complete(
         self,
@@ -84,6 +139,7 @@ class LLMClient:
         user_prompt: str,
         model: str,
         temperature: float,
+        cache_prefix: str | None = None,
     ) -> str:
         raise NotImplementedError
 
@@ -124,17 +180,21 @@ class OpenRouterClient(LLMClient):
         user_prompt: str,
         model: str,
         temperature: float,
+        cache_prefix: str | None = None,
     ) -> str:
+        messages = _build_messages(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            cache_prefix=cache_prefix,
+            model=model,
+        )
         payload = {
             "model": model,
             "temperature": temperature,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            "messages": messages,
         }
         response = self._call_api(payload)
-        self._record_usage(response.get("usage"))
+        self._record_usage(response.get("usage"), model=model)
         try:
             choice = response["choices"][0]
             content = choice["message"]["content"]
@@ -189,16 +249,17 @@ class ReplayLLMClient(LLMClient):
         user_prompt: str,
         model: str,
         temperature: float,
+        cache_prefix: str | None = None,
     ) -> str:
         queue = self.responses.get(stage_name)
         if not queue:
             raise LLMError(f"no replay response available for stage {stage_name!r}")
         next_response = queue.pop(0)
         if isinstance(next_response, dict) and "usage" in next_response and "response" in next_response:
-            self._record_usage(next_response.get("usage"))
+            self._record_usage(next_response.get("usage"), model=model)
             payload = next_response["response"]
             return json.dumps(payload) if not isinstance(payload, str) else payload
-        self._record_usage(None)
+        self._record_usage(None, model=model)
         return json.dumps(next_response) if not isinstance(next_response, str) else next_response
 
 
@@ -213,6 +274,7 @@ def generate_structured(
     temperature: float,
     validation_log: ValidationLog,
     attempts: int | None = None,
+    cache_prefix: str | None = None,
 ) -> BaseModel:
     attempts = attempts or get_stage_max_retries()
     schema_blob = json.dumps(schema.model_json_schema(), indent=2, sort_keys=True)
@@ -231,6 +293,7 @@ def generate_structured(
             user_prompt=prompt,
             model=model,
             temperature=temperature,
+            cache_prefix=cache_prefix,
         )
         try:
             payload = _extract_json(raw)

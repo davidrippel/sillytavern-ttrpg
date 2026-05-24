@@ -9,7 +9,6 @@ from rich.console import Console
 
 from common.env import load_project_dotenv
 from common.pack import load_pack
-from common.settings import get_default_model
 
 from .paths import resolve_genre_input, resolve_output_path
 from .pipeline import run_pipeline
@@ -78,7 +77,7 @@ def main(
         genre_path=resolved_genre,
         seed_path=seed,
         output_path=resolved_output,
-        model=model or get_default_model(),
+        model=model,
         dry_run=dry_run,
         random_seed=random_seed,
         stages=stages,

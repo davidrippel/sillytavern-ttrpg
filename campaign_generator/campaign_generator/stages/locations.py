@@ -54,33 +54,47 @@ def run(
     target_count = seed.num_locations or 12
     catalog: list[Location] = []
     roster_names = {npc.name for npc in npcs.npcs}
+
+    # Stable world-bible context for the location loop. Cached on Anthropic
+    # models so calls 2..N only pay cache-read on this chunk.
+    stable_context = {
+        "premise": premise.model_dump(),
+        "plot": plot.model_dump(),
+        "factions": factions.model_dump(),
+        "npcs": npcs.model_dump(),
+        "npc_name_menu": sorted(roster_names),
+        "avoid_names": avoid_names or [],
+        "diversity_seed": diversity_seed or {},
+        "target_count": target_count,
+    }
+    cache_prefix = (
+        "Shared campaign context (stable across this loop):\n"
+        + json.dumps(stable_context, indent=2)
+    )
+
     for index in range(target_count):
         if progress_callback is not None:
             progress_callback(f"Generating location {index + 1}/{target_count}")
         repair_note = ""
         for attempt in range(1, 4):
-            context = {
-                "premise": premise.model_dump(),
-                "plot": plot.model_dump(),
-                "factions": factions.model_dump(),
-                "npcs": npcs.model_dump(),
-                "npc_name_menu": sorted(roster_names),
+            varying_context = {
                 "existing_locations": [location.model_dump() for location in catalog],
-                "avoid_names": avoid_names or [],
-                "diversity_seed": diversity_seed or {},
                 "target_index": index + 1,
-                "target_count": target_count,
                 "repair_note": repair_note,
             }
             location = generate_structured(
                 client=client,
                 stage_name=f"location_{index + 1}",
                 system_prompt=system_prompt,
-                user_prompt=json.dumps(context, indent=2),
+                user_prompt=(
+                    "Per-location context (this call only):\n"
+                    + json.dumps(varying_context, indent=2)
+                ),
                 schema=Location,
                 model=model,
                 temperature=temperature,
                 validation_log=validation_log,
+                cache_prefix=cache_prefix,
             )
             existing_names = {item.name for item in catalog}
             errors = _location_errors(location, roster_names, existing_names)
