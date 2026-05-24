@@ -23,30 +23,6 @@ class ImageGenError(RuntimeError):
 _DATA_URL_RE = re.compile(r"^data:image/[a-zA-Z0-9.+-]+;base64,(?P<payload>.+)$", re.DOTALL)
 
 
-def resolve_size(dimension: int, aspect_ratio: str) -> tuple[int, int]:
-    """Resolve a long-edge dimension and W:H ratio into concrete (width, height).
-
-    The long edge maps to `dimension`; the short edge is rounded to the nearest
-    multiple of 8 to keep image models happy.
-    """
-    try:
-        w_part, h_part = aspect_ratio.split(":", 1)
-        w_ratio = float(w_part)
-        h_ratio = float(h_part)
-    except (ValueError, AttributeError) as exc:
-        raise ImageGenError(f"invalid IMAGE_GEN_ASPECT_RATIO {aspect_ratio!r}; expected W:H") from exc
-    if w_ratio <= 0 or h_ratio <= 0:
-        raise ImageGenError(f"aspect ratio components must be positive, got {aspect_ratio!r}")
-
-    if w_ratio >= h_ratio:
-        width = dimension
-        height = int(round(dimension * (h_ratio / w_ratio) / 8) * 8)
-    else:
-        height = dimension
-        width = int(round(dimension * (w_ratio / h_ratio) / 8) * 8)
-    return max(width, 8), max(height, 8)
-
-
 def _extract_image_bytes(response: dict[str, Any]) -> bytes:
     try:
         message = response["choices"][0]["message"]

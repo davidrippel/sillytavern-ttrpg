@@ -70,8 +70,9 @@ A successful run writes:
 - `stages/calls.jsonl` — every LLM call (request + response + usage).
 - `stages/validation_log.txt` — schema retries, cross-stage warnings.
 - `partials/*.partial.json` — incremental snapshots written as long stages (npcs, locations) progress; safe to delete after success.
+- `npc_images/index.json` — portrait prompt manifest written immediately after the npcs stage when `IMAGE_GEN_MODEL` is set in `.env`. One entry per NPC (`name → { file, prompt, model, width, height }`) using the current `IMAGE_GEN_*` env settings. No images are rendered here — that's [`image_generator`](../image_generator/README.md)'s job. The manifest is regenerated on each run of the npcs stage; entries whose effective prompt and filename haven't changed keep their `generated_at` timestamp so already-rendered portraits stay tagged. If `IMAGE_GEN_MODEL` isn't set, the step is skipped with a log message rather than failing the run.
 
-`stages/npcs.json` includes a per-NPC `image_generation_prompt` field — a self-contained text-to-image prompt suitable for portrait generation. See [NPC Portraits](#npc-portraits) below.
+`stages/npcs.json` includes a per-NPC `image_generation_prompt` field — a self-contained text-to-image prompt suitable for portrait generation. The manifest above is built from this field. See [NPC Portraits](#npc-portraits) below.
 
 If `--output` is omitted and `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set, the generator creates a campaign directory automatically (`<timestamp>_<pack>_<seed-stem>`).
 

@@ -112,10 +112,14 @@ Retired v1 models: `Beat`, `ActOutline.beats`, `Node`, `NodeGraph`, `Clue`, `Clu
 │   ├── sample_characters.json
 │   ├── calls.jsonl
 │   └── validation_log.txt
-└── partials/
-    ├── npcs.partial.json
-    └── locations.partial.json
+├── partials/
+│   ├── npcs.partial.json
+│   └── locations.partial.json
+└── npc_images/
+    └── index.json                # portrait prompt manifest, written after the npcs stage when IMAGE_GEN_MODEL is set
 ```
+
+`npc_images/index.json` is built by the shared `common.portrait_prompts` module and consumed by [`image_generator`](../image_generator/README.md) when it renders portraits. The same module is used by both tools so manifests written by either side are interchangeable.
 
 ---
 

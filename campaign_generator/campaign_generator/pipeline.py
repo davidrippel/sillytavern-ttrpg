@@ -37,6 +37,7 @@ from pydantic import BaseModel
 from common.llm import LLMClient, OpenRouterClient, UsageStats
 from common.model_tiers import resolve_stage_model
 from common.pack import GenrePack, load_pack
+from common.portrait_prompts import PortraitPromptError, write_portrait_index
 from common.progress import format_per_model_summary
 from common.settings import get_default_temperature, get_dry_run_model
 
@@ -397,6 +398,16 @@ def run_pipeline(
     )
     npcs = sanitize_model(npcs, protagonist_names=protagonist_names)
     _write_json(_stage_cache_path(stages_dir, "npcs"), npcs.model_dump())
+
+    try:
+        index_path = write_portrait_index(stages_dir.parent)
+        if progress_callback is not None:
+            progress_callback(f"Wrote portrait prompt index to {index_path}")
+    except PortraitPromptError as exc:
+        # IMAGE_GEN_MODEL may be unset; that's a renderer concern, not a blocker
+        # for campaign generation. Log and continue.
+        if progress_callback is not None:
+            progress_callback(f"Skipped portrait prompt index: {exc}")
 
     # ---- 5. locations ---------------------------------------------------
     locations: LocationCatalog = _run_or_load(

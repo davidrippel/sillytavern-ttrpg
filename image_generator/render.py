@@ -1,98 +1,41 @@
 from __future__ import annotations
 
-import json
-import re
 from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
+from common.portrait_prompts import (
+    PortraitPromptError,
+    filter_npcs,
+    load_npcs,
+    manifest_entry,
+    read_manifest,
+    resolve_campaign_dir as _resolve_campaign_dir,
+    resolve_image_size,
+    resolve_portrait_entries,
+    write_manifest,
+)
 from common.settings import (
-    get_campaigns_base_dir,
-    get_image_aspect_ratio,
-    get_image_dimension,
     get_image_model,
     get_image_style_override,
 )
 
-from .client import ImageGenError, OpenRouterImageClient, resolve_size
+from .client import ImageGenError, OpenRouterImageClient
 
 
 ProgressCallback = Callable[[str], None]
-_STYLE_MEDIUM_RE = re.compile(
-    r"\b(?:illustration|comic|cartoon|painting|painted|"
-    r"sketch|line drawing|anime|manga|watercolor|charcoal|oil(?:\s+painting)?|pulp|inked|vector|cel[- ]shaded|"
-    r"3d render|digital painting)\b",
-    flags=re.IGNORECASE,
-)
-
-
-def _slugify(name: str) -> str:
-    slug = re.sub(r"[^A-Za-z0-9]+", "_", name.strip()).strip("_").lower()
-    return slug or "npc"
-
-
-def _apply_style_override(prompt: str, style_override: str | None) -> str:
-    base_prompt = prompt.strip()
-    if not base_prompt or not style_override:
-        return base_prompt
-
-    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", base_prompt) if part.strip()]
-    filtered = [sentence for sentence in sentences if not _STYLE_MEDIUM_RE.search(sentence)]
-    cleaned = " ".join(filtered).strip()
-    if not cleaned:
-        cleaned = base_prompt
-
-    override = style_override.strip()
-    if override and override[-1] not in ".!?":
-        override = f"{override}."
-    guardrail = "Do not render as an illustration, painting, sketch, comic, or cartoon."
-    return f"{cleaned} {override} {guardrail}".strip()
 
 
 def resolve_campaign_dir(campaign: str | Path) -> Path:
-    """Resolve a campaign directory, falling back to CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR.
+    """Resolve a campaign directory, raising ImageGenError on failure.
 
-    If the given path exists, it is returned. Otherwise, if CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR
-    is set, the path is interpreted as a campaign name relative to that base directory.
-    Raises ImageGenError if neither resolves to an existing directory.
+    Thin wrapper that re-raises common's PortraitPromptError as ImageGenError to
+    preserve the renderer's historical exception type.
     """
-    candidate = Path(campaign)
-    if candidate.exists():
-        return candidate.resolve()
-
-    base_dir = get_campaigns_base_dir()
-    if base_dir is not None and not candidate.is_absolute():
-        base_candidate = (base_dir / candidate).resolve()
-        if base_candidate.exists():
-            return base_candidate
-
-    hint = (
-        f" (also checked under CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR={base_dir})"
-        if base_dir is not None and not candidate.is_absolute()
-        else ""
-    )
-    raise ImageGenError(f"campaign directory not found: {campaign}{hint}")
-
-
-def _load_npcs(campaign_dir: Path) -> list[dict]:
-    npcs_path = campaign_dir / "stages" / "npcs.json"
-    if not npcs_path.exists():
-        raise ImageGenError(f"no NPC roster found at {npcs_path}")
-    with npcs_path.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
-    npcs = data.get("npcs")
-    if not isinstance(npcs, list):
-        raise ImageGenError(f"unexpected npcs.json shape at {npcs_path}")
-    return npcs
-
-
-def _filter_only(npcs: list[dict], only: Iterable[str] | None) -> list[dict]:
-    if not only:
-        return npcs
-    wanted = {name.strip() for name in only if name.strip()}
-    if not wanted:
-        return npcs
-    return [npc for npc in npcs if npc.get("name") in wanted]
+    try:
+        return _resolve_campaign_dir(campaign)
+    except PortraitPromptError as exc:
+        raise ImageGenError(str(exc)) from exc
 
 
 def render_campaign(
@@ -111,22 +54,22 @@ def render_campaign(
     Returns the path to the npc_images directory.
     """
     campaign_dir = resolve_campaign_dir(campaign_dir)
-    npcs = _filter_only(_load_npcs(campaign_dir), only)
+    try:
+        npcs = filter_npcs(load_npcs(campaign_dir), only)
+    except PortraitPromptError as exc:
+        raise ImageGenError(str(exc)) from exc
 
     resolved_model = model or get_image_model()
     resolved_style_override = style_override or get_image_style_override()
-    width, height = resolve_size(get_image_dimension(), get_image_aspect_ratio())
+    try:
+        width, height = resolve_image_size()
+    except PortraitPromptError as exc:
+        raise ImageGenError(str(exc)) from exc
 
     images_dir = campaign_dir / "npc_images"
     images_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = images_dir / "index.json"
-    manifest: dict[str, dict] = {}
-    if manifest_path.exists():
-        try:
-            with manifest_path.open("r", encoding="utf-8") as handle:
-                manifest = json.load(handle)
-        except json.JSONDecodeError:
-            manifest = {}
+    manifest = read_manifest(manifest_path)
 
     image_client = None if prompts_only else (client or OpenRouterImageClient())
 
@@ -138,19 +81,15 @@ def render_campaign(
                 f"Rendering portraits for {len(npcs)} NPC(s) at {width}x{height} with {resolved_model}"
             )
 
-    used_slugs: set[str] = set()
-    for npc in npcs:
-        name = npc.get("name") or "Unnamed"
-        prompt = (npc.get("image_generation_prompt") or "").strip()
-        effective_prompt = _apply_style_override(prompt, resolved_style_override)
-        slug = _slugify(name)
-        candidate = slug
-        suffix = 2
-        while candidate in used_slugs:
-            candidate = f"{slug}_{suffix}"
-            suffix += 1
-        used_slugs.add(candidate)
-        out_path = images_dir / f"{candidate}.png"
+    entries = resolve_portrait_entries(
+        npcs,
+        model=resolved_model,
+        style_override=resolved_style_override,
+        width=width,
+        height=height,
+    )
+    for _npc, name, filename, effective_prompt in entries:
+        out_path = images_dir / filename
 
         if not effective_prompt:
             if progress_callback is not None:
@@ -158,15 +97,14 @@ def render_campaign(
             continue
 
         if prompts_only:
-            manifest[name] = {
-                "file": out_path.name,
-                "prompt": effective_prompt,
-                "model": resolved_model,
-                "width": width,
-                "height": height,
-            }
-            with manifest_path.open("w", encoding="utf-8") as handle:
-                json.dump(manifest, handle, indent=2, ensure_ascii=False)
+            manifest[name] = manifest_entry(
+                filename=filename,
+                prompt=effective_prompt,
+                model=resolved_model,
+                width=width,
+                height=height,
+            )
+            write_manifest(manifest_path, manifest)
             if progress_callback is not None:
                 progress_callback(f"Recorded prompt for {name}")
             continue
@@ -191,16 +129,16 @@ def render_campaign(
             continue
 
         out_path.write_bytes(image_bytes)
-        manifest[name] = {
-            "file": out_path.name,
-            "prompt": effective_prompt,
-            "model": resolved_model,
-            "width": width,
-            "height": height,
-            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        }
-        with manifest_path.open("w", encoding="utf-8") as handle:
-            json.dump(manifest, handle, indent=2, ensure_ascii=False)
+        entry = manifest_entry(
+            filename=filename,
+            prompt=effective_prompt,
+            model=resolved_model,
+            width=width,
+            height=height,
+        )
+        entry["generated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        manifest[name] = entry
+        write_manifest(manifest_path, manifest)
         if progress_callback is not None:
             progress_callback(f"Wrote {out_path.relative_to(campaign_dir)}")
 

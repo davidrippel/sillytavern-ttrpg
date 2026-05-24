@@ -76,6 +76,8 @@ File names are slugified from each NPC's `name`. Collisions (rare) get `_2`, `_3
 
 `index.json` is updated incrementally after each successful render, so a partial run leaves a usable manifest behind. It stores the effective prompt actually sent to the model for that render pass; if you use `--style-override` or `IMAGE_GEN_STYLE_OVERRIDE`, the original source prompt still remains in `<campaign_dir>/stages/npcs.json`.
 
+`index.json` is also pre-populated by `campaign_generator` itself at the end of the npcs stage (when `IMAGE_GEN_MODEL` is set), so you can inspect or hand-edit prompts before running the renderer. Both tools use the same shared helper (`common.portrait_prompts`) so entries written by either side are interchangeable.
+
 ## Loading into SillyTavern
 
 This iteration produces **plain PNGs** — no character-card metadata is embedded. Attach them in SillyTavern however you prefer (lorebook entry attachments, group chat avatars, expressions folder, manual character-card creation, etc.). A future iteration may automate this.
