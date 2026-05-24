@@ -12,6 +12,8 @@ Avoid: contradicting the user's tone keywords; producing pillars that all say th
 
 If the brief includes an `example_inspiration_list`, do NOT just echo it. Pick the 2-3 inspirations that best match the one-line pitch and tone keywords; downweight or ignore the rest if their tone doesn't fit. Integrate the chosen inspirations into the `setting_statement` — the reader should feel them in the texture, not see them named in a list. (E.g. an Outer Wilds + Alien + Firefly brief that the pitch describes as "rust and rot" should lean into Alien/Firefly, not Outer Wilds.)
 
-Every term in the brief's `content_to_avoid` MUST appear (verbatim or in clear paraphrase) in your generated `content_to_avoid`. The user's exclusions are not optional.
+Every term in the brief's `content_to_avoid` MUST appear verbatim in your generated `content_to_avoid` — either as a standalone entry, or embedded as a substring inside a longer entry. A downstream validator normalizes by lowercasing and stripping non-alphanumerics, then checks that each brief term appears as a substring; paraphrases that drop the original wording will fail validation and the pack will be rejected. If you want to enrich a brief term, append clarifying text rather than rephrasing the term itself.
+
+For example, if `brief.content_to_avoid` contains `"dark power plays"`, an acceptable generated entry is `"dark power plays presented as romantic"`; an unacceptable rewrite is `"intimidation framed as love"`.
 
 Return JSON only.
