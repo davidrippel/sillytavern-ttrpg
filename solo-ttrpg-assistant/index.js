@@ -40,6 +40,8 @@ import {
     appendProvisionalFacts,
     autoCommitStaleProvisional,
     FACT_STATUS,
+    restorePriorTurn,
+    snapshotPriorTurn,
 } from './modules/facts.js';
 import { advanceThread, listLiveThreads, openThread } from './modules/threads.js';
 import { computePressureCue, selectDirectorsNote } from './modules/pacing.js';
@@ -127,6 +129,17 @@ function resolveChatMessage(arg) {
     return chat[chat.length - 1] ?? null;
 }
 
+function resolveMessageIndex(arg) {
+    if (typeof arg === 'number' && Number.isFinite(arg)) return arg;
+    const chat = context.chat;
+    if (!Array.isArray(chat)) return null;
+    if (arg && typeof arg === 'object') {
+        const i = chat.lastIndexOf(arg);
+        if (i >= 0) return i;
+    }
+    return chat.length - 1;
+}
+
 function previousUserMessage() {
     const chat = context.chat;
     if (!Array.isArray(chat)) return '';
@@ -148,16 +161,133 @@ context.eventSource.on(context.eventTypes.MESSAGE_RECEIVED, async (arg) => {
         return;
     }
 
+    const index = resolveMessageIndex(arg);
     try {
-        await runTurnPipeline(String(message.mes ?? ''));
+        await runTurnPipeline(String(message.mes ?? ''), index);
     } catch (error) {
         log('Turn pipeline failed.', 'warn', error?.message ?? String(error));
     }
 });
 
-async function runTurnPipeline(assistantProse) {
+// Roll back when the user swipes (either regenerates a new swipe or
+// navigates ◀▶ to an existing one). For regenerate, the swipe arrives
+// with empty text — we only restore and let the subsequent
+// MESSAGE_RECEIVED re-run the pipeline. For swipe navigation the text
+// is already present, so we restore then re-extract against the
+// now-active swipe to keep state consistent with what the user sees.
+async function onMessageSwiped(arg) {
+    if (!isExtensionEnabled()) return;
+    const message = resolveChatMessage(arg);
+    if (!message || message.is_user) return;
+
+    try {
+        await ensureStoryStateInitialized();
+    } catch {
+        return;
+    }
+
+    const index = resolveMessageIndex(arg);
+    const cur = ensureStoryStateShape(readStoryState() ?? {});
+    if (cur._prevTurn && (cur._prevTurn.messageIndex === index || cur._prevTurn.messageIndex == null)) {
+        try {
+            await restorePriorTurn();
+        } catch (error) {
+            log('Rollback on swipe failed.', 'warn', error?.message ?? String(error));
+            return;
+        }
+    }
+
+    const text = String(message.mes ?? '').trim();
+    if (!text) return; // regenerate in flight; MESSAGE_RECEIVED will follow.
+
+    try {
+        await runTurnPipeline(text, index);
+    } catch (error) {
+        log('Turn pipeline (swipe) failed.', 'warn', error?.message ?? String(error));
+    }
+}
+
+async function onMessageEdited(arg) {
+    if (!isExtensionEnabled()) return;
+    const message = resolveChatMessage(arg);
+    if (!message || message.is_user) return;
+
+    try {
+        await ensureStoryStateInitialized();
+    } catch {
+        return;
+    }
+
+    const index = resolveMessageIndex(arg);
+    const cur = ensureStoryStateShape(readStoryState() ?? {});
+    if (cur._prevTurn?.messageIndex !== index) return;
+
+    try {
+        await restorePriorTurn();
+    } catch (error) {
+        log('Rollback on edit failed.', 'warn', error?.message ?? String(error));
+        return;
+    }
+
+    const text = String(message.mes ?? '').trim();
+    if (!text) return;
+
+    try {
+        await runTurnPipeline(text, index);
+    } catch (error) {
+        log('Turn pipeline (edit) failed.', 'warn', error?.message ?? String(error));
+    }
+}
+
+async function onMessageDeleted() {
+    if (!isExtensionEnabled()) return;
+    try {
+        await ensureStoryStateInitialized();
+    } catch {
+        return;
+    }
+    const cur = ensureStoryStateShape(readStoryState() ?? {});
+    if (!cur._prevTurn) return;
+    const snapIndex = cur._prevTurn.messageIndex;
+    const chat = context.chat;
+    const chatLen = Array.isArray(chat) ? chat.length : 0;
+    // Restore only if the snapshotted message no longer exists in chat.
+    if (snapIndex == null || snapIndex >= chatLen) {
+        try {
+            await restorePriorTurn();
+            await renderAuthorsNoteFromState();
+            refreshAllFactChips();
+            renderThreadsTray();
+        } catch (error) {
+            log('Rollback on delete failed.', 'warn', error?.message ?? String(error));
+        }
+    }
+}
+
+const swipedEvent = context.eventTypes.MESSAGE_SWIPED ?? 'message_swiped';
+const editedEvent = context.eventTypes.MESSAGE_EDITED ?? 'message_edited';
+const deletedEvent = context.eventTypes.MESSAGE_DELETED ?? 'message_deleted';
+context.eventSource.on(swipedEvent, onMessageSwiped);
+context.eventSource.on(editedEvent, onMessageEdited);
+context.eventSource.on(deletedEvent, onMessageDeleted);
+
+async function runTurnPipeline(assistantProse, messageIndex = null) {
     const settings = getSettings();
     const cooldown = Math.max(0, Number(settings.factExtractor?.autoCommitAfterTurns ?? 0));
+
+    // 0. Snapshot prior state so the next swipe / regenerate / delete /
+    //    edit on this message can roll the extractor's effects back. If a
+    //    snapshot already exists for this message index (e.g. ST fired
+    //    MESSAGE_RECEIVED after a regenerate without us seeing
+    //    MESSAGE_SWIPED first), restore it first so we don't stack two
+    //    extractions on top of each other.
+    {
+        const pre = ensureStoryStateShape(readStoryState() ?? {});
+        if (pre._prevTurn && messageIndex != null && pre._prevTurn.messageIndex === messageIndex) {
+            await restorePriorTurn();
+        }
+    }
+    await snapshotPriorTurn(messageIndex);
 
     // 1. Bump turn.
     const state = ensureStoryStateShape(readStoryState() ?? {});

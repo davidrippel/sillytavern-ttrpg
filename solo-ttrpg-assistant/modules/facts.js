@@ -155,6 +155,44 @@ export function listFactsForReview(state) {
  * recorded after the cutoff, otherwise the pacing module would think
  * truths were already paid out.
  */
+/**
+ * Snapshot the current story state into `state._prevTurn` so a subsequent
+ * swipe / regenerate / delete / edit on the message at `messageIndex` can
+ * roll the extractor's effects back. Single-slot — overwrites any prior
+ * snapshot. Called at the very top of the per-turn pipeline, before any
+ * mutation. The snapshot excludes `_prevTurn` itself to avoid recursive
+ * nesting across consecutive turns.
+ */
+export async function snapshotPriorTurn(messageIndex) {
+    const state = ensureStoryStateShape(readStoryState() ?? {});
+    const { _prevTurn: _drop, ...rest } = state;
+    state._prevTurn = {
+        state: structuredClone(rest),
+        messageIndex: Number.isFinite(messageIndex) ? Number(messageIndex) : null,
+    };
+    await writeStoryState(state);
+}
+
+/**
+ * Restore the last snapshot taken by `snapshotPriorTurn`. Returns true if
+ * a snapshot was applied, false if none existed. Clears the slot after
+ * restoring so a subsequent regenerate doesn't double-rewind.
+ */
+export async function restorePriorTurn() {
+    const current = ensureStoryStateShape(readStoryState() ?? {});
+    if (!current._prevTurn || typeof current._prevTurn !== 'object') return false;
+    const snapshot = current._prevTurn.state;
+    if (!snapshot || typeof snapshot !== 'object') {
+        current._prevTurn = null;
+        await writeStoryState(current);
+        return false;
+    }
+    const restored = ensureStoryStateShape(snapshot);
+    restored._prevTurn = null;
+    await writeStoryState(restored);
+    return true;
+}
+
 export async function rewindToTurn(keepThroughTurn) {
     const state = ensureStoryStateShape(readStoryState() ?? {});
     const cutoff = Number(keepThroughTurn);

@@ -82,6 +82,7 @@ When the extension first sees a `chatMetadata` document with `schemaVersion` < 3
 
 On every `MESSAGE_RECEIVED` for a non-user message:
 
+0. **Snapshot.** Before any mutation, the entire story state is deep-cloned into `state._prevTurn = { state, messageIndex }` (single slot — only the latest turn is recoverable). If a snapshot already exists for the incoming `messageIndex` (e.g. `MESSAGE_RECEIVED` fired without a preceding `MESSAGE_SWIPED` on regenerate), the snapshot is restored first so the pipeline never stacks two extractions on the same message.
 1. **Bump turn.** `state.turn += 1`.
 2. **Fact extractor.** One LLM call (`generateRaw`) with the latest assistant prose, the previous player message (for context), recent accepted facts, live threads, scene context, and the campaign's authored truths (top 12). Returns:
 
@@ -105,6 +106,16 @@ Each `source_quote` must appear verbatim in the prose (after smart-punct + white
 6. **Secrets.** Walk every disabled-by-default lorebook entry tagged `secret`; if enough accepted facts or threads name its keywords, enable it.
 7. **AN rebuild.** Re-render the Author's Note from state.
 8. **Inline UI.** Render fact chips under the new message; refresh the threads tray.
+
+### Rollback on swipe / regenerate / delete / edit
+
+`MESSAGE_SWIPED`, `MESSAGE_EDITED`, and `MESSAGE_DELETED` are wired to the same snapshot slot:
+
+- **Swipe / regenerate.** Restore `_prevTurn`, then — if the now-active swipe already has text (swipe navigation or a finished regenerate) — re-run the pipeline against it. If the swipe is empty (regenerate streaming), do nothing and let the subsequent `MESSAGE_RECEIVED` rerun the pipeline.
+- **Edit.** If the edited message is the snapshotted one, restore and re-extract against the edited text.
+- **Delete.** If the snapshotted message no longer exists in `context.chat`, restore and refresh the AN / chips / threads tray. No re-extract.
+
+The snapshot covers every state field — facts, threads, scene, NPCs, truthsRevealed, directorsNotes, pressureCue, turn — so the rollback is exact even for fields with no per-entry turn stamp (NPC attitude, thread status). Only the most recent turn is recoverable.
 
 ---
 

@@ -219,6 +219,11 @@ export async function writeAuthorsNote(text) {
  * pressureCue  — `{ kind: "lean-in"|"let-it-breathe"|"complication"|null,
  *                   reason, setTurn }`. The pacing module manages it.
  * turn         — monotonically increasing count of assistant messages.
+ * _prevTurn    — `{ state, messageIndex } | null`. Snapshot of the entire
+ *                story state taken at the start of the most recent turn,
+ *                used to roll back when the user swipes / regenerates /
+ *                deletes / edits the assistant message that produced it.
+ *                Single-slot; only the latest turn can be rolled back.
  */
 function defaultStoryState() {
     return {
@@ -236,6 +241,7 @@ function defaultStoryState() {
         directorsNotes: { active: null, history: [] },
         pressureCue: { kind: null, reason: null, setTurn: 0 },
         turn: 0,
+        _prevTurn: null,
     };
 }
 
@@ -272,6 +278,9 @@ export function ensureStoryStateShape(state) {
         : [];
     merged.pressureCue = { ...base.pressureCue, ...(merged.pressureCue ?? {}) };
     merged.turn = Number.isFinite(merged.turn) ? Number(merged.turn) : 0;
+    if (merged._prevTurn !== null && typeof merged._prevTurn !== 'object') {
+        merged._prevTurn = null;
+    }
     merged.schemaVersion = STORY_STATE_SCHEMA_VERSION;
     return merged;
 }
