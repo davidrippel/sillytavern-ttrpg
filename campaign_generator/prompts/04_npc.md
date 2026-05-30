@@ -15,6 +15,10 @@ Requirements:
 - in relationships, use only `{{user}}` or names that belong to the campaign's NPC roster
 - whenever referring to the player character, use the exact placeholder `{{user}}` and never invent a protagonist name
 - the relationship `description` should capture the bond as it stands at the moment the campaign begins (including ties not yet formed — "the rival the PC has not yet crossed", "the future ally", "the stranger whose eye catches yours across the room"). A later pipeline stage decides which of these ties the PC actually knew before play started, so you do not need to flag that yourself.
+- `initial_pc_state`: always emit an authored starting baseline for how this NPC regards `{{user}}`, including strangers. Use exactly `{"attitude": "string", "scales": {"trust": 0, "affection": 0, "want_to_help": 0, "fear": 0}}`.
+- base `initial_pc_state` only on authored campaign facts available in this call: the NPC's relationship toward `{{user}}`, motivation, role, and relevant campaign context. Keep strangers and weakly connected NPCs close to zero. Use stronger values only when facts clearly justify them, such as an ex, rival, devoted friend, dependent, or active antagonist.
+- keep `initial_pc_state.attitude` to one short present-tense phrase directly useful as GM context. Use `{{user}}` where needed. Do not depend on any later player-selected name, gender, concept, or custom details.
+- emit all four integer scales. `trust`, `affection`, and `want_to_help` must be in `[-100, 100]`; `fear` must be in `[0, 100]`. Do not emit runtime-only fields such as `last_seen_turn`, `portrait_url`, or accumulated per-turn deltas.
 
 Naming diversity:
 - `diversity_seed.cultural_register` (and `secondary_register`, when present) hints the linguistic flavor for this campaign's roster — draw given names and surnames primarily from that register, with a minority from the secondary register so the city feels mixed rather than monolithic
@@ -34,6 +38,7 @@ Length budgets are HARD CAPS, not targets. Count characters before you submit. T
 - `motivation`: <= 220 characters, what they want and why — one sentence
 - `secret`: <= 320 characters, the hidden truth in 1-2 sentences
 - each `relationships[].description`: <= 160 characters, the relationship in one sentence
+- `initial_pc_state.attitude`: one short present-tense phrase
 - `image_generation_prompt`: <= 600 characters, a self-contained text-to-image prompt for a portrait of this NPC. The image model will not see any other campaign context, so this prompt must stand alone. The first sentence must describe the visible subject completely: full-body framing, gender presentation, age range, hair, face/eyes, body/build or posture, clothing, and setting. Pull visible traits from `physical_description`, then add missing visual basics yourself so the prompt can identify the character without the NPC name. The second sentence may cover expression, lighting, and mood. If `image_style_hint` is present, use that same style language across the entire roster; otherwise default to photorealistic photography language rather than illustration language. End with a negative medium guardrail. Do NOT include aspect ratio, resolution, megapixels, or "--ar" style directives — those are applied at render time. Do NOT include the NPC's name, secrets, or plot information.
 
 Prefer specificity over completeness. The GM will riff; you don't need to spell out every nuance.

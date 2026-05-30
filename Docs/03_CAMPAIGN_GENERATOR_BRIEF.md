@@ -59,7 +59,7 @@ Ten stages, run in order. Each LLM stage validates against a pydantic schema and
 1. **`premise`** — title, paragraphs, central conflict, tone, 3–5 thematic pillars.
 2. **`plot_skeleton`** — 2–4 acts (each with title + goal; **no beats**), main antagonist, driving mystery, hook, escalation arc, 3–5-entry `thematic_spine`. Supporting cast briefs (name + archetype + narrative role).
 3. **`factions`** — 2–4 factions with goals, methods, internal tensions, moral alignment. At least one ambiguous.
-4. **`npcs`** — full NPC roster (6–30, seed-controlled). Each NPC has free-form story-mode `advantages` and optional `discovery_surfaces`. There is no closed ability catalog to validate against. Supporting-cast names from the plot stage are required to appear in the roster.
+4. **`npcs`** — full NPC roster (6–30, seed-controlled). Each NPC has free-form story-mode `advantages`, optional `discovery_surfaces`, and a required authored `initial_pc_state` baseline for how they regard `{{user}}` when a story begins. There is no closed ability catalog to validate against. Supporting-cast names from the plot stage are required to appear in the roster.
 5. **`locations`** — 5–20 locations (seed-controlled). Sensory description (at least two senses), notable features, hidden elements, optional discovery surfaces. References to NPCs are validated.
 6. **`truths`** — the campaign's **atomic truth set** (4–10). Each truth has an id, the truth text (1–2 sentences), an optional `hint` for the GM, and `adjacency_keys` (lowercase tokens the extension's pacing module matches against live threads and recent facts). The GM never sees the whole set; the runtime picks one at a time as a director's note.
 7. **`complications`** — campaign-specific narrative complications (6–15). Layered on top of the pack's universal `complications.md` (which reaches the GM as `__pack_complications`). Vague phrases are rejected.
@@ -81,7 +81,7 @@ After the LLM stages:
 
 - `PremiseDocument`, `Antagonist`, `SupportingCastMember`, `ActOutline`, `PlotSkeleton` (with `thematic_spine` and no `acts[i].beats`).
 - `Faction`, `FactionSet`.
-- `NPCRelationship`, `NPC`, `NPCRoster` (NPCs carry `advantages` and `discovery_surfaces`; no `abilities` field).
+- `NPCRelationship`, `NPCPCScales`, `NPCInitialPCState`, `NPC`, `NPCRoster` (NPCs carry `advantages`, `discovery_surfaces`, and authored starting PC-relationship state; no `abilities` field).
 - `SensoryDescription`, `Location`, `LocationCatalog` (no `plot_beats` field).
 - `Truth`, `TruthSet`.
 - `Complication`, `ComplicationSet`.
@@ -120,6 +120,8 @@ Retired v1 models: `Beat`, `ActOutline.beats`, `Node`, `NodeGraph`, `Clue`, `Clu
 ```
 
 `npc_images/index.json` is built by the shared `common.portrait_prompts` module and consumed by [`image_generator`](../image_generator/README.md) when it renders portraits. The same module is used by both tools so manifests written by either side are interchangeable.
+
+Every NPC in `stages/npcs.json` carries `initial_pc_state.attitude` plus strict integer `initial_pc_state.scales`: `trust`, `affection`, and `want_to_help` in `-100..100`, and `fear` in `0..100`. This is the deterministic new-story baseline consumed by the storyteller runtime; runtime-only fields and per-turn deltas do not belong in campaign output.
 
 ---
 

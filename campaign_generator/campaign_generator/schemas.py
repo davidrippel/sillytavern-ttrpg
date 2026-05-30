@@ -118,6 +118,22 @@ class NPCRelationship(BaseModel):
     description: str = Field(max_length=160)
 
 
+class NPCPCScales(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    trust: int = Field(strict=True, ge=-100, le=100)
+    affection: int = Field(strict=True, ge=-100, le=100)
+    want_to_help: int = Field(strict=True, ge=-100, le=100)
+    fear: int = Field(strict=True, ge=0, le=100)
+
+
+class NPCInitialPCState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    attitude: str = Field(min_length=1)
+    scales: NPCPCScales
+
+
 class NPC(BaseModel):
     name: str
     role: str = Field(max_length=80)
@@ -127,6 +143,7 @@ class NPC(BaseModel):
     motivation: str = Field(max_length=220)
     secret: str = Field(max_length=320)
     relationships: list[NPCRelationship] = Field(default_factory=list)
+    initial_pc_state: NPCInitialPCState
     advantages: list[str] = Field(
         default_factory=list,
         description=(

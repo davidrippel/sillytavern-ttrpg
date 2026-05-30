@@ -74,6 +74,22 @@ A successful run writes:
 
 `stages/npcs.json` includes a per-NPC `image_generation_prompt` field — a self-contained text-to-image prompt suitable for portrait generation. The manifest above is built from this field. See [NPC Portraits](#npc-portraits) below.
 
+Each NPC also includes a required authored `initial_pc_state` baseline for how they regard `{{user}}` when a story begins:
+
+```json
+{
+  "attitude": "Treats {{user}} as a cautious new ally.",
+  "scales": {
+    "trust": 10,
+    "affection": 5,
+    "want_to_help": 15,
+    "fear": 0
+  }
+}
+```
+
+`trust`, `affection`, and `want_to_help` are strict integers in `-100..100`; `fear` is a strict integer in `0..100`. The storyteller runtime copies this authored baseline into new-session state instead of making a startup LLM call.
+
 If `--output` is omitted and `CAMPAIGN_GENERATOR_CAMPAIGNS_BASE_DIR` is set, the generator creates a campaign directory automatically (`<timestamp>_<pack>_<seed-stem>`).
 
 If the target output directory already exists, the generator creates a sibling with a `_1`, `_2`, … suffix. To **resume an interrupted run** into the existing directory, pass `--resume`:
