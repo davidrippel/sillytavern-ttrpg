@@ -8,6 +8,7 @@ remain meaningful:
   - NPC faction affiliations name a real faction (or null).
   - NPC relationships name a real NPC (or `{{user}}`).
   - Location npc_names name real NPCs.
+  - Sample-character names do not duplicate NPC names.
   - Truth ids are unique and snake_case (already enforced by the
     pydantic schema, but we re-check on full state for safety).
   - Branch references resolve to a known NPC / location / faction
@@ -17,7 +18,15 @@ from __future__ import annotations
 
 from common.validation import ValidationLog
 
-from .schemas import BranchPlan, FactionSet, LocationCatalog, NPCRoster, PlotSkeleton, TruthSet
+from .schemas import (
+    BranchPlan,
+    FactionSet,
+    LocationCatalog,
+    NPCRoster,
+    PlotSkeleton,
+    SampleCharacterSet,
+    TruthSet,
+)
 
 __all__ = ["ValidationLog", "validate_cross_stage", "find_phantom_plot_names"]
 
@@ -65,6 +74,7 @@ def validate_cross_stage(
     truths: TruthSet,
     validation_log: ValidationLog | None = None,
     branches: BranchPlan | None = None,
+    sample_characters: SampleCharacterSet | None = None,
 ) -> list[str]:
     """Walk every cross-stage reference and return a list of error
     messages. Empty list = clean. Writes each error to
@@ -95,6 +105,11 @@ def validate_cross_stage(
         for npc_name in location.npc_names:
             if npc_name not in npc_names:
                 errors.append(f"Location {location.name} references unknown NPC {npc_name!r}")
+
+    if sample_characters is not None:
+        for sample in sample_characters.characters:
+            if sample.name in npc_names:
+                errors.append(f"Sample character {sample.name!r} duplicates an NPC name")
 
     if branches is not None:
         known_tokens = set().union(

@@ -64,7 +64,7 @@ Ten stages, run in order. Each LLM stage validates against a pydantic schema and
 6. **`truths`** — the campaign's **atomic truth set** (4–10). Each truth has an id, the truth text (1–2 sentences), an optional `hint` for the GM, and `adjacency_keys` (lowercase tokens the extension's pacing module matches against live threads and recent facts). The GM never sees the whole set; the runtime picks one at a time as a director's note.
 7. **`complications`** — campaign-specific narrative complications (6–15). Layered on top of the pack's universal `complications.md` (which reaches the GM as `__pack_complications`). Vague phrases are rejected.
 8. **`branches`** — 4–10 if/then contingencies referencing NPCs, locations, factions, or truth ids. References that don't resolve are dropped with a warning.
-9. **`sample_characters`** — pregenerated story-mode characters in the v2 character template shape (`name`, `concept`, `advantages`, `disadvantages`, `belongings`, `relationships`, `hook_into_campaign`). No attributes, no abilities.
+9. **`sample_characters`** — pregenerated story-mode characters in the v2 character template shape (`name`, `concept`, `advantages`, `disadvantages`, `belongings`, `relationships`, `hook_into_campaign`). No attributes, no abilities. Names must be distinct from every NPC name in the complete roster; collisions trigger a semantic repair retry.
 10. **Opening hook** — player-facing premise + opening scene + character-creation guidance. Run after cross-stage validation. Has a separate `pc_prior_knowledge` LLM call to render the "What you already know" section grounded in the campaign's NPCs and locations.
 
 After the LLM stages:
@@ -156,6 +156,7 @@ Key-variant generation (drop honorifics, drop articles, strip trailing type toke
 - NPC `faction_affiliation` names a real faction or is null.
 - NPC `relationships[].name` names a real NPC or `{{user}}`.
 - Location `npc_names` resolve to real NPCs.
+- Sample-character names do not duplicate NPC names.
 - Branch `references` resolve to a known NPC / location / faction / truth id.
 
 The v1 validator also checked beat references, clue-graph topology, and ability-catalog membership; all retired.
@@ -187,7 +188,7 @@ cd campaign_generator
 pytest
 ```
 
-The current suite covers schema validation and seed loading. The full LLM-replay end-to-end test from v1 has been retired; its captured responses were v1-shaped. To restore: run the v2 pipeline against the real LLM, copy `stages/*.json` into `tests/fixtures/canned_llm_responses/`, and re-author a `test_pipeline_replays_to_valid_v2_campaign` test that asserts every expected output file is written and that the lorebook contains the five constant `__pack_*` / `__campaign_*` entries.
+The current suite covers schema validation, seed loading, and sample-character name collisions against the full NPC roster. The full LLM-replay end-to-end test from v1 has been retired; its captured responses were v1-shaped. To restore: run the v2 pipeline against the real LLM, copy `stages/*.json` into `tests/fixtures/canned_llm_responses/`, and re-author a `test_pipeline_replays_to_valid_v2_campaign` test that asserts every expected output file is written and that the lorebook contains the five constant `__pack_*` / `__campaign_*` entries.
 
 ---
 

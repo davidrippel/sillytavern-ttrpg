@@ -20,6 +20,25 @@ from ..validation import ValidationLog
 PROMPT_FILE = "10_sample_characters.md"
 
 
+def _sample_character_errors(
+    *,
+    result: SampleCharacterSet,
+    count: int,
+    npc_names: set[str],
+) -> list[str]:
+    errors: list[str] = []
+    if len(result.characters) != count:
+        errors.append(f"expected exactly {count} characters, got {len(result.characters)}")
+    for sample in result.characters:
+        if sample.name in npc_names:
+            errors.append(f"sample character name {sample.name!r} duplicates an NPC name")
+        if len(sample.advantages) < 2:
+            errors.append(f"{sample.name!r} needs at least 2 advantages")
+        if not sample.disadvantages:
+            errors.append(f"{sample.name!r} needs at least 1 disadvantage")
+    return errors
+
+
 def run(
     *,
     client: LLMClient,
@@ -48,6 +67,7 @@ def run(
 
     count = seed.num_sample_characters or 4
 
+    npc_names = {n.name for n in npcs.npcs}
     known_set = set(known_npc_names or ())
     known_npcs = [n for n in npcs.npcs if n.name in known_set]
     if not known_npcs:
@@ -69,6 +89,7 @@ def run(
         "plot": plot.model_dump(),
         "factions": [{"name": f.name} for f in factions.factions],
         "npcs": [{"name": n.name} for n in known_npcs],
+        "forbidden_npc_names": sorted(npc_names),
         "locations": [{"name": loc.name} for loc in locations.locations],
     }
 
@@ -96,14 +117,11 @@ def run(
             validation_log=validation_log,
         )
 
-        errors: list[str] = []
-        if len(result.characters) != count:
-            errors.append(f"expected exactly {count} characters, got {len(result.characters)}")
-        for sample in result.characters:
-            if len(sample.advantages) < 2:
-                errors.append(f"{sample.name!r} needs at least 2 advantages")
-            if not sample.disadvantages:
-                errors.append(f"{sample.name!r} needs at least 1 disadvantage")
+        errors = _sample_character_errors(
+            result=result,
+            count=count,
+            npc_names=npc_names,
+        )
 
         if not errors:
             for sample in result.characters:

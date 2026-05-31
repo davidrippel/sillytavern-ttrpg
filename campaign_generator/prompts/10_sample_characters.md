@@ -7,6 +7,7 @@ You will receive:
 - `pack` — metadata for the active genre pack: `pack_name`, `display_name`, the `character_template` (the v2 story-mode shape), and `advantages_disadvantages` (the markdown vocabulary that lists axes and example phrases for advantages and disadvantages).
 - `protagonist` — optional `archetype` (a phrase describing the kind of protagonist the seed asks for) and `known_facts` (background facts).
 - `premise`, `plot`, `factions`, `npcs`, `locations` — campaign context. `npcs` here is the *known-to-PC* subset; sample-character hooks should reference these, not the full roster.
+- `forbidden_npc_names` — the complete NPC roster. Sample-character names must not reuse any of these names, including NPCs omitted from the known-to-PC subset.
 - `num_sample_characters` — exactly how many sample characters to produce.
 
 For each character produce a story-mode profile in the v2 character template shape:
@@ -22,6 +23,7 @@ For each character produce a story-mode profile in the v2 character template sha
 Hard constraints:
 
 - There is no stats mode. Do NOT emit attribute scores, ability names, resource pools, dice expressions, or any numeric mechanical fields. The runtime has no concept of them.
+- Every sample-character `name` must be distinct from every name in `forbidden_npc_names`.
 - Each character is internally consistent: their advantages, disadvantages, belongings, and hook all support the same concept.
 - Across the set, vary gender, age, social standing, and emotional centre. Two cynics with different clothes is not variety.
 - At least half the sample characters reference a *known* NPC, faction, or location in their `hook_into_campaign` so the opening scene can land them in fiction immediately.

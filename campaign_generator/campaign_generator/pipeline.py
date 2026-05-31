@@ -563,6 +563,7 @@ def run_pipeline(
         locations=locations,
         truths=truths,
         validation_log=validation_log,
+        sample_characters=sample_characters,
     )
     if progress_callback is not None:
         progress_callback("Cross-stage validation passed")

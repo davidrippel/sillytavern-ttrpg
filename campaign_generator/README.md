@@ -58,7 +58,7 @@ python -m campaign_generator \
 A successful run writes:
 
 - `opening_hook.txt` — player-facing premise, tone, character-creation guidance pointing at the pack's `advantages_disadvantages` reference, and the opening scene.
-- `sample_characters.json` — story-mode sample protagonists (same data also embedded in the lorebook); convenient for importing into the extension.
+- `sample_characters.json` — story-mode sample protagonists (same data also embedded in the lorebook); convenient for importing into the extension. Sample-character names are validated against the complete NPC roster and retried if the model reuses an NPC name.
 - `<campaign_title_slug>.json` — the campaign lorebook. Constant entries the runtime reads:
   - `__pack_gm_overlay` (embedded pack overlay)
   - `__pack_complications` (pack universal + campaign-specific complications)
@@ -153,7 +153,7 @@ cd campaign_generator
 pytest
 ```
 
-The current suite covers schema-level validation (`test_pack_validation.py`, `test_seed.py`, `test_seed_template.py`) and the NPC prompt's image-generation contract (`test_npc_prompt_contract.py`).
+The current suite covers schema-level validation (`test_pack_validation.py`, `test_seed.py`, `test_seed_template.py`), the NPC prompt's image-generation contract (`test_npc_prompt_contract.py`), and sample-character name collisions against the full NPC roster (`test_sample_characters.py`).
 
 The full LLM-replay end-to-end test from v1 has been retired; its captured responses were v1-shaped and don't fit the new schema. A new replay fixture set needs to be captured against a real v2 run before that test can be restored — run the pipeline against the real LLM, copy `stages/*.json` into `tests/fixtures/canned_llm_responses/`, and re-author the test.
 
