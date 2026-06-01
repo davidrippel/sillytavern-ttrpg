@@ -6,7 +6,7 @@ You will receive: tone/pillars, the brief's `pressure_flavor` (the genre's signa
 
 Produce JSON with these fields. Each field is a markdown chunk (one or more paragraphs). NO hard line wraps — write each paragraph as a single long line, separated only by blank lines. Total document under 1500 words; hard fail at 1800.
 
-- `setting_and_tone`: 2-3 paragraphs. Sensory texture of the world, mood, the kind of stories told here. Specific — name the smells, sounds, weights. Not "dark and mysterious."
+- `setting_and_tone`: 2-3 paragraphs. Sensory texture of the world, mood, the kind of stories told here. Specific — name the smells, sounds, weights. Not "dark and mysterious." Write it plain and concrete: short declarative sentences, general-audience reading level, one detail per sentence, no comma-spliced run-ons or stacked clauses. This paragraph is the voice template the GM copies every turn, so it must itself be easy to read — clarity over literary density.
 - `thematic_pillars`: a markdown bulleted list, one bullet per pillar. Each bullet: `**Title.** Description.` Reuse the pillars from earlier.
 - `resolving_actions`: 2-3 paragraphs explaining how the GM adjudicates without dice in this genre. Must cover:
   - What success-with-cost looks like when an advantage is in play and the situation is favorable (clean wins are rare and earned).
